@@ -13,17 +13,29 @@ function Invoke-AteraExtensionSync {
         collections are replaced:
 
           AteraCustomer   - the Atera customer record
-          AteraAgents     - every agent (device) for the customer
-          AteraAlerts     - alerts created in the last WindowDays days (newest-first paging stops at the cutoff)
+          AteraAgents     - every agent (device) for the customer, with insights added by
+                            Get-AteraDeviceInsight (UpdateStatus, WindowsSupport, HardwareTier,
+                            HealthStatus and more - worked out across the whole account's devices)
+          AteraAlerts     - alerts created in the last AlertWindowDays days (newest-first paging stops at the cutoff)
           AteraTickets    - tickets created in the last WindowDays days, plus every Open/Pending ticket
           AteraContracts  - every contract for the customer
+          AteraPurchases  - items sold to the customer (product, product/service and expense lines on
+                            Atera invoices) over the last PurchaseWindowDays days. Skipped with a warning
+                            if the API key cannot read billing.
 
         Long free-text fields are truncated to keep rows small. The run summary is stored in the
         AteraSettings table (RowKey 'LastSync') for the Reports and Integrations pages.
 
     .PARAMETER WindowDays
-        How far back to collect alerts and tickets. Default 45, so a full calendar month is always
-        covered when reports run early in the following month.
+        How far back to collect tickets. Default 45, so a full calendar month is always covered when
+        reports run early in the following month.
+
+    .PARAMETER AlertWindowDays
+        How far back to collect alerts. Default 90: long enough to spot devices that are regularly
+        overloaded, not just busy once.
+
+    .PARAMETER PurchaseWindowDays
+        How far back to collect purchases from invoices. Default 400 (a year plus a month).
 
     .PARAMETER TenantFilter
         Optional. Limit the write phase to one tenant (default domain or customer id).
@@ -34,6 +46,8 @@ function Invoke-AteraExtensionSync {
     [CmdletBinding()]
     param(
         [int]$WindowDays = 45,
+        [int]$AlertWindowDays = 90,
+        [int]$PurchaseWindowDays = 400,
         [string]$TenantFilter
     )
 
@@ -58,19 +72,33 @@ function Invoke-AteraExtensionSync {
         }
 
         $Cutoff = (Get-Date).ToUniversalTime().AddDays(-$WindowDays)
+        $AlertCutoff = (Get-Date).ToUniversalTime().AddDays(-$AlertWindowDays)
+        $PurchaseCutoff = (Get-Date).ToUniversalTime().AddDays(-$PurchaseWindowDays)
 
         # --- Account-wide pulls -------------------------------------------------------------
         $Customers = @(Invoke-AteraRequest -Path 'customers' -All)
         $Agents = @(Invoke-AteraRequest -Path 'agents' -All)
         $Contracts = @(Invoke-AteraRequest -Path 'contracts' -All)
-        $Alerts = @(Invoke-AteraRequest -Path 'alerts' -All -StopWhen { $_.Created -and ([datetime]$_.Created).ToUniversalTime() -lt $Cutoff })
+        $Alerts = @(Invoke-AteraRequest -Path 'alerts' -All -StopWhen { $_.Created -and ([datetime]$_.Created).ToUniversalTime() -lt $AlertCutoff } |
+                Where-Object { -not $_.Created -or ([datetime]$_.Created).ToUniversalTime() -ge $AlertCutoff })
         $RecentTickets = @(Invoke-AteraRequest -Path 'tickets' -All -StopWhen { $_.TicketCreatedDate -and ([datetime]$_.TicketCreatedDate).ToUniversalTime() -lt $Cutoff })
         $OpenTickets = @(Invoke-AteraRequest -Path 'tickets' -All -Query @{ ticketStatus = 'Open' })
         $PendingTickets = @(Invoke-AteraRequest -Path 'tickets' -All -Query @{ ticketStatus = 'Pending' })
         $Tickets = @($RecentTickets + $OpenTickets + $PendingTickets | Sort-Object TicketID -Unique)
+        # Invoices are listed roughly newest-first (a few out of order), so paging stops a month past the
+        # cut-off and the rows are filtered exactly afterwards.
+        $Invoices = @()
+        $PurchasesAvailable = $true
+        try {
+            $InvoiceStop = $PurchaseCutoff.AddDays(-31)
+            $Invoices = @(Invoke-AteraRequest -Path 'billing/invoices' -All -StopWhen { $_.InvoiceDate -and ([datetime]$_.InvoiceDate).ToUniversalTime() -lt $InvoiceStop })
+        } catch {
+            $PurchasesAvailable = $false
+            Write-LogMessage -API 'AteraSync' -tenant 'Global' -message "Atera purchases skipped: the API key could not read invoices ($($_.Exception.Message))." -Sev 'Warning'
+        }
 
         # --- Shape rows (Add-CIPPDbItem keys rows on an 'id' property) -------------------------
-        $AgentRows = $Agents | Select-Object *, @{ n = 'id'; e = { "$($_.AgentID)" } }
+        $AgentRows = @(Get-AteraDeviceInsight -Agents $Agents -Alerts $Alerts) | Select-Object *, @{ n = 'id'; e = { "$($_.AgentID)" } }
         $ContractRows = $Contracts | Select-Object *, @{ n = 'id'; e = { "$($_.ContractID)" } }
         $AlertRows = foreach ($Alert in $Alerts) {
             $Row = $Alert | Select-Object * -ExcludeProperty AlertMessage
@@ -113,6 +141,11 @@ function Invoke-AteraExtensionSync {
                 Add-CIPPDbItem -TenantFilter $Domain -Type 'AteraAlerts' -Data $TenantAlerts -AddCount -ClearOnEmpty
                 Add-CIPPDbItem -TenantFilter $Domain -Type 'AteraTickets' -Data $TenantTickets -AddCount -ClearOnEmpty
                 Add-CIPPDbItem -TenantFilter $Domain -Type 'AteraContracts' -Data $TenantContracts -AddCount -ClearOnEmpty
+                $TenantPurchases = @()
+                if ($PurchasesAvailable) {
+                    $TenantPurchases = @(ConvertTo-AteraPurchaseRow -Invoices $Invoices -CustomerName "$($Customer.CustomerName)" -Since $PurchaseCutoff)
+                    Add-CIPPDbItem -TenantFilter $Domain -Type 'AteraPurchases' -Data $TenantPurchases -AddCount -ClearOnEmpty
+                }
 
                 $Summary.Add([pscustomobject]@{
                         Tenant    = $Domain
@@ -121,6 +154,7 @@ function Invoke-AteraExtensionSync {
                         Alerts    = $TenantAlerts.Count
                         Tickets   = $TenantTickets.Count
                         Contracts = $TenantContracts.Count
+                        Purchases = $TenantPurchases.Count
                     })
             } catch {
                 $ErrorMessage = Get-CippException -Exception $_
@@ -129,7 +163,7 @@ function Invoke-AteraExtensionSync {
         }
 
         $Duration = [math]::Round(((Get-Date) - $Started).TotalSeconds)
-        $Message = "Atera sync complete: $($Summary.Count) tenant(s), $($Agents.Count) agents, $($Alerts.Count) alerts and $($Tickets.Count) tickets read in ${Duration}s (window $WindowDays days)."
+        $Message = "Atera sync complete: $($Summary.Count) tenant(s), $($Agents.Count) agents, $($Alerts.Count) alerts and $($Tickets.Count) tickets and $($Invoices.Count) invoices read in ${Duration}s (tickets $WindowDays days, alerts $AlertWindowDays days)."
         Write-LogMessage -API 'AteraSync' -tenant 'Global' -message $Message -Sev 'Info' -LogData @($Summary)
         Add-CIPPAzDataTableEntity @SettingsTable -Force -Entity @{
             PartitionKey    = 'Atera'

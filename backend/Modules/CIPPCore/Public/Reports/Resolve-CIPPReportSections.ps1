@@ -33,7 +33,7 @@ function Resolve-CIPPReportSections {
     $Default = @(ConvertFrom-CIPPReportSectionList $DefaultSections)
     if ($Company.Count -gt 0) { $Sections = $Company; $Source = 'Company' }
     elseif ($Default.Count -gt 0) { $Sections = $Default; $Source = 'Default' }
-    else { $Sections = @((Get-CIPPReportSectionCatalog -BuiltInOnly).value); $Source = 'BuiltIn' }
+    else { $Sections = @((Get-CIPPReportSectionCatalog -BuiltInOnly).value | Where-Object { $_ -ne 'm365-baseline' }); $Source = 'BuiltIn' }
 
     $Extra = @{}
     $Missing = [System.Collections.Generic.List[string]]::new()

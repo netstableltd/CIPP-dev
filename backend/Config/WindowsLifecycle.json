@@ -1,0 +1,29 @@
+{
+  "_about": "When each Windows build stops receiving security updates, used by the Atera device insights (Get-AteraDeviceInsight) to mark devices Supported / Ending soon / Unsupported. Dates are the end of servicing (client) or end of extended support (server) from Microsoft's lifecycle pages (learn.microsoft.com/lifecycle). Keys: homePro = Home/Pro/Pro for Workstations; enterprise = Enterprise/Education; ltsc = Enterprise LTSB/LTSC; iotLtsc = IoT Enterprise LTSC; server = Windows Server. A build newer than every build listed here is treated as supported. Update this file as Microsoft publishes new versions.",
+  "updated": "2026-10-09",
+  "builds": [
+    { "build": 7601, "name": "Windows 7 / Server 2008 R2", "homePro": "2020-01-14", "enterprise": "2020-01-14", "server": "2020-01-14" },
+    { "build": 9200, "name": "Windows 8 / Server 2012", "homePro": "2016-01-12", "enterprise": "2016-01-12", "server": "2023-10-10" },
+    { "build": 9600, "name": "Windows 8.1 / Server 2012 R2", "homePro": "2023-01-10", "enterprise": "2023-01-10", "server": "2023-10-10" },
+    { "build": 10240, "name": "Windows 10 1507", "homePro": "2017-05-09", "enterprise": "2017-05-09", "ltsc": "2025-10-14", "iotLtsc": "2025-10-14" },
+    { "build": 10586, "name": "Windows 10 1511", "homePro": "2017-10-10", "enterprise": "2018-04-10" },
+    { "build": 14393, "name": "Windows 10 1607 / Server 2016", "homePro": "2018-04-10", "enterprise": "2019-04-09", "ltsc": "2026-10-13", "iotLtsc": "2026-10-13", "server": "2027-01-12" },
+    { "build": 15063, "name": "Windows 10 1703", "homePro": "2018-10-09", "enterprise": "2019-10-08" },
+    { "build": 16299, "name": "Windows 10 1709", "homePro": "2019-04-09", "enterprise": "2020-10-13" },
+    { "build": 17134, "name": "Windows 10 1803", "homePro": "2019-11-12", "enterprise": "2021-05-11" },
+    { "build": 17763, "name": "Windows 10 1809 / Server 2019", "homePro": "2020-11-10", "enterprise": "2021-05-11", "ltsc": "2029-01-09", "iotLtsc": "2029-01-09", "server": "2029-01-09" },
+    { "build": 18362, "name": "Windows 10 1903", "homePro": "2020-12-08", "enterprise": "2020-12-08" },
+    { "build": 18363, "name": "Windows 10 1909", "homePro": "2021-05-11", "enterprise": "2022-05-10" },
+    { "build": 19041, "name": "Windows 10 2004", "homePro": "2021-12-14", "enterprise": "2021-12-14" },
+    { "build": 19042, "name": "Windows 10 20H2", "homePro": "2022-05-10", "enterprise": "2023-05-09" },
+    { "build": 19043, "name": "Windows 10 21H1", "homePro": "2022-12-13", "enterprise": "2022-12-13" },
+    { "build": 19044, "name": "Windows 10 21H2", "homePro": "2023-06-13", "enterprise": "2024-06-11", "ltsc": "2027-01-12", "iotLtsc": "2032-01-13" },
+    { "build": 19045, "name": "Windows 10 22H2", "homePro": "2025-10-14", "enterprise": "2025-10-14" },
+    { "build": 20348, "name": "Windows Server 2022", "server": "2031-10-14" },
+    { "build": 22000, "name": "Windows 11 21H2", "homePro": "2023-10-10", "enterprise": "2024-10-08" },
+    { "build": 22621, "name": "Windows 11 22H2", "homePro": "2024-10-08", "enterprise": "2025-10-14" },
+    { "build": 22631, "name": "Windows 11 23H2", "homePro": "2025-11-11", "enterprise": "2026-11-10" },
+    { "build": 26100, "name": "Windows 11 24H2 / Server 2025", "homePro": "2026-10-13", "enterprise": "2027-10-12", "ltsc": "2029-10-09", "iotLtsc": "2034-10-10", "server": "2034-11-14" },
+    { "build": 26200, "name": "Windows 11 25H2", "homePro": "2027-10-12", "enterprise": "2028-10-10" }
+  ]
+}

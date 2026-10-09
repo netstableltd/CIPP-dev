@@ -4,7 +4,6 @@ import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '../../test-utils'
 import {
   BLOCK_PRESETS,
-  DATE_RANGES,
   PRESET_TOPICS,
   StructuredBlockCard,
   isStructuredBlock,
@@ -15,7 +14,7 @@ vi.mock('../../../src/components/CippPdf/useBrandingSettings', async (importOrig
   useBrandingSettings: () => ({ coverImages: [] }),
 }))
 
-const ATERA_TYPES = ['AteraAgents', 'AteraAlerts', 'AteraTickets', 'AteraContracts']
+const ATERA_TYPES = ['AteraAgents', 'AteraAlerts', 'AteraTickets', 'AteraContracts', 'AteraPurchases']
 const ateraTopics = PRESET_TOPICS.filter((t) => t.value.startsWith('atera'))
 const ateraVariants = ateraTopics.flatMap((t) => t.variants)
 
@@ -33,6 +32,7 @@ describe('Atera pre-built blocks', () => {
       'Atera alerts',
       'Atera tickets',
       'Atera contracts',
+      'Atera purchases',
     ])
   })
 
@@ -46,7 +46,7 @@ describe('Atera pre-built blocks', () => {
       for (const collection of collectionsOf(block)) expect(ATERA_TYPES).toContain(collection)
       const filter = (block.chartSource || block.dataSource)?.filter
       if (filter?.op === 'in') {
-        expect(DATE_RANGES.map((r) => r.value)).toContain(filter.value)
+        expect(filter.value).toMatch(/^(period|last-month|this-month|last-\d+-days|older-than-\d+-days)$/)
       }
     }
   )

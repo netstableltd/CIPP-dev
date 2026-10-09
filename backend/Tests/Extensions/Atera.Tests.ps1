@@ -129,6 +129,17 @@ Describe 'Invoke-AteraExtensionSync' {
                 'customers' { @([pscustomobject]@{ CustomerID = 1; CustomerName = 'Contoso' }, [pscustomobject]@{ CustomerID = 2; CustomerName = 'Fabrikam' }) }
                 'agents' { @([pscustomobject]@{ AgentID = 10; CustomerID = 1 }, [pscustomobject]@{ AgentID = 11; CustomerID = 1 }, [pscustomobject]@{ AgentID = 20; CustomerID = 2 }) }
                 'contracts' { @([pscustomobject]@{ ContractID = 100; CustomerID = 2 }) }
+                'billing/invoices' {
+                    @(
+                        [pscustomobject]@{ InvoiceId = 'i1'; InvoiceNumberAsString = '0001'; InvoiceDate = $Recent; Currency = '£'; To = @{ CompanyName = 'contoso ' }; LineItems = @(
+                                @{ Product = 'Labor'; Description = 'Monthly'; Quantity = 2; Rate = 75; Total = 150; LineIdx = 1 }
+                                @{ Product = 'Product'; Description = "Refurbished PC`n16GB RAM"; Quantity = 1; Rate = 300; Total = 300; LineIdx = 2 }
+                            )
+                        }
+                        [pscustomobject]@{ InvoiceId = 'i2'; InvoiceNumberAsString = '0002'; InvoiceDate = '2020-01-01T00:00:00Z'; Currency = '£'; To = @{ CompanyName = 'Contoso' }; LineItems = @(@{ Product = 'Product'; Description = 'Old'; Quantity = 1; Rate = 1; Total = 1; LineIdx = 1 }) }
+                        [pscustomobject]@{ InvoiceId = 'i3'; InvoiceNumberAsString = '0003'; InvoiceDate = $Recent; Currency = '£'; To = @{ CompanyName = 'Fabrikam' }; LineItems = @(@{ Product = 'Product/Service'; Description = 'Monitor'; Quantity = 2; Rate = 99; Total = 198; LineIdx = 1 }) }
+                    )
+                }
                 'alerts' { @([pscustomobject]@{ AlertID = 1000; CustomerID = 1; Created = $Recent; AlertMessage = ('x' * 5000) }) }
                 'tickets' {
                     if ($Query.ticketStatus -eq 'Open') { @([pscustomobject]@{ TicketID = 501; CustomerID = 2; TicketCreatedDate = '2024-01-01T00:00:00Z' }) }
@@ -167,9 +178,35 @@ Describe 'Invoke-AteraExtensionSync' {
         $Other.TimeLoggedMinutes | Should -Be 0
     }
 
-    It 'writes all five collections for each mapped tenant' {
+    It 'writes all six collections for each mapped tenant' {
         $null = Invoke-AteraExtensionSync
-        ($DbWrites | Where-Object Tenant -EQ 'fabrikam.com').Type | Sort-Object | Should -Be @('AteraAgents', 'AteraAlerts', 'AteraContracts', 'AteraCustomer', 'AteraTickets')
+        ($DbWrites | Where-Object Tenant -EQ 'fabrikam.com').Type | Sort-Object | Should -Be @('AteraAgents', 'AteraAlerts', 'AteraContracts', 'AteraCustomer', 'AteraPurchases', 'AteraTickets')
+    }
+
+    It 'writes each customer only its own purchases from the cut-off, items only' {
+        $null = Invoke-AteraExtensionSync
+        $Contoso = ($DbWrites | Where-Object { $_.Tenant -eq 'contoso.co.uk' -and $_.Type -eq 'AteraPurchases' }).Data
+        @($Contoso).Count | Should -Be 1
+        $Contoso[0].Item | Should -Be 'Refurbished PC'
+        $Contoso[0].Details | Should -Be '16GB RAM'
+        $Contoso[0].Total | Should -Be 300
+        $Contoso[0].id | Should -Be 'i1-2'
+        ($DbWrites | Where-Object { $_.Tenant -eq 'fabrikam.com' -and $_.Type -eq 'AteraPurchases' }).Data[0].Item | Should -Be 'Monitor'
+    }
+
+    It 'still syncs everything else when the key cannot read invoices' {
+        Mock Invoke-AteraRequest -ParameterFilter { $Path -eq 'billing/invoices' } { throw 'This api key does not have permissions to perform this action' }
+        $null = Invoke-AteraExtensionSync
+        ($DbWrites | Where-Object Type -EQ 'AteraPurchases') | Should -BeNullOrEmpty
+        ($DbWrites | Where-Object Type -EQ 'AteraAgents').Count | Should -Be 2
+    }
+
+    It 'adds device insights to the agents it writes' {
+        $null = Invoke-AteraExtensionSync
+        $Agent = ($DbWrites | Where-Object { $_.Tenant -eq 'contoso.co.uk' -and $_.Type -eq 'AteraAgents' }).Data[0]
+        $Agent.PSObject.Properties.Name | Should -Contain 'HealthStatus'
+        $Agent.PSObject.Properties.Name | Should -Contain 'UpdateStatus'
+        $Agent.id | Should -Be '10'
     }
 
     It 'does nothing when no tenants are mapped' {

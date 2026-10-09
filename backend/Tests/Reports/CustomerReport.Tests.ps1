@@ -11,7 +11,8 @@ BeforeAll {
     $Modules = Join-Path $RepoRoot 'Modules'
     Get-ChildItem (Get-ChildItem $Modules -Recurse -Directory -Filter 'Reporting' | Select-Object -First 1).FullName -Filter *.ps1 | ForEach-Object { . $_.FullName }
     . (Get-ChildItem $Modules -Recurse -Filter 'ConvertTo-CippReportPdf.ps1' | Select-Object -First 1).FullName
-    foreach ($Name in 'Get-CIPPReportPeriod', 'Get-CIPPCustomerReportData', 'Get-CIPPReportFindings', 'Build-CippCustomerReportTree', 'Build-CippReportPrecheckTree', 'Invoke-CIPPReportGeneration', 'ConvertFrom-CIPPReportSectionList', 'Get-CIPPReportSectionCatalog', 'Resolve-CIPPReportSections') {
+    . (Get-ChildItem $Modules -Recurse -Filter 'Get-AteraDeviceInsight.ps1' | Select-Object -First 1).FullName
+    foreach ($Name in 'Get-CIPPReportBaselineSection', 'Get-CIPPReportPeriod', 'Get-CIPPCustomerReportData', 'Get-CIPPReportFindings', 'Build-CippCustomerReportTree', 'Build-CippReportPrecheckTree', 'Invoke-CIPPReportGeneration', 'ConvertFrom-CIPPReportSectionList', 'Get-CIPPReportSectionCatalog', 'Resolve-CIPPReportSections') {
         . (Get-ChildItem $Modules -Recurse -Filter "$Name.ps1" | Select-Object -First 1).FullName
     }
 
@@ -70,6 +71,20 @@ BeforeAll {
             @{ TicketID = 90; TicketTitle = 'Old urgent'; TicketStatus = 'Open'; TicketCreatedDate = '2026-08-30T09:00:00Z'; TotalDurationSeconds = 600; TicketPriority = 'High' }
         )
         AteraContracts  = @(@{ ContractName = 'Support'; ContractType = 'RetainerFlatFee'; Active = $true; EndDate = '2026-11-01T00:00:00Z' })
+        AteraPurchases  = @(
+            @{ InvoiceDate = '2026-09-24T15:00:00Z'; InvoiceNumber = '2000'; Item = 'Refurbished workstation PC'; Details = ''; Quantity = 1; Rate = 300; Total = 300; Currency = '£' }
+            @{ InvoiceDate = '2026-05-10T10:00:00Z'; InvoiceNumber = '1950'; Item = '16GB RAM'; Details = '2 x 8GB'; Quantity = 2; Rate = 20; Total = 40; Currency = '£' }
+            @{ InvoiceDate = '2024-05-10T10:00:00Z'; InvoiceNumber = '1500'; Item = 'Old purchase'; Details = ''; Quantity = 1; Rate = 999; Total = 999; Currency = '£' }
+        )
+        MailboxUsage    = @(
+            @{ displayName = 'Mark'; userPrincipalName = 'mark@contoso.com'; storageUsedInBytes = 45GB; prohibitSendQuotaInBytes = 50GB; hasArchive = $false }
+            @{ displayName = 'Bob'; userPrincipalName = 'bob@contoso.com'; storageUsedInBytes = 10GB; prohibitSendQuotaInBytes = 100GB; hasArchive = $false }
+        )
+        DomainAnalyser  = @(
+            @{ Domain = 'contoso.com'; SPFPassAll = $true; DMARCPresent = $true; DMARCActionPolicy = 'Reject'; DKIMEnabled = $true; MXPassTest = $true; ScorePercentage = 100 }
+            @{ Domain = 'contoso-old.co.uk'; SPFPassAll = $false; DMARCPresent = $false; DMARCActionPolicy = ''; DKIMEnabled = $false; MXPassTest = $false; ScorePercentage = 0 }
+            @{ Domain = 'contoso.onmicrosoft.com'; SPFPassAll = $true; DMARCPresent = $false; DKIMEnabled = $true; MXPassTest = $true }
+        )
     }
     function New-CIPPDbRequest { param($TenantFilter, $Type, $Fields) if ($script:Db.ContainsKey($Type)) { $script:Db[$Type] | ForEach-Object { [pscustomobject]$_ } } else { @() } }
     $script:Period = Get-CIPPReportPeriod -Period 'LastMonth' -Now $script:Now
@@ -204,7 +219,7 @@ Describe 'Report sections' {
     }
     It 'builds only the chosen sections, in the chosen order' {
         $T = Build-CippCustomerReportTree -Data $Data -Findings $F -Sections @('devices', 'summary')
-        & $PageTitles $T.Blocks | Should -Be @('Devices', 'Summary')
+        & $PageTitles $T.Blocks | Should -Be @('Your Computers', 'Summary')
     }
     It 'builds every built-in section when no list is given' {
         $T = Build-CippCustomerReportTree -Data $Data -Findings $F
@@ -225,7 +240,7 @@ Describe 'Report sections' {
         $D.Sections | Should -Be @('devices')
         $B = Resolve-CIPPReportSections -TenantFilter 'contoso.com'
         $B.Source | Should -Be 'BuiltIn'
-        $B.Sections.Count | Should -Be 7
+        $B.Sections.Count | Should -Be 11
     }
     It 'loads Report Builder templates for the tenant and reports deleted ones' {
         Mock Get-CIPPAzDataTableEntity { if ($Filter -match "RowKey eq 'abc-1'") { $script:TemplateRow } }
@@ -234,6 +249,59 @@ Describe 'Report sections' {
         $R.ExtraSections['template:abc-1'].Blocks[0].content | Should -Match 'for contoso.com'
         $R.ExtraSections.ContainsKey('template:gone-2') | Should -BeFalse
         $R.Missing[0] | Should -Match 'gone-2'
+    }
+}
+
+Describe 'Computers, updates, purchases and email' {
+    BeforeAll {
+        $script:Data = Get-CIPPCustomerReportData -TenantFilter 'contoso.com' -Period $Period -Now $Now
+        $script:F = Get-CIPPReportFindings -Data $Data -AteraEnabled $true
+    }
+    It 'works out device insights for data synced before the sync added them' {
+        $D = $Data.Atera.Devices
+        ($D.List | Where-Object name -EQ 'OLD').support | Should -Be 'Unsupported'
+        ($D.List | Where-Object name -EQ 'PC2').version | Should -Be 'Windows 10 Pro'
+        $D.List[0].health | Should -Be 'Needs attention'
+        @($D.List | ForEach-Object { $_.health }) | Should -Not -Contain $null
+    }
+    It 'keeps purchases to the period and the last 12 months' {
+        $P = $Data.Atera.Purchases
+        @($P.Period).Count | Should -Be 1
+        $P.Period[0].item | Should -Be 'Refurbished workstation PC'
+        @($P.Year).Count | Should -Be 2
+        $P.YearTotal | Should -Be 340
+        $P.Currency | Should -Be '£'
+    }
+    It 'finds nearly full mailboxes and domains that can be spoofed, ignoring onmicrosoft.com' {
+        @($Data.M365.MailboxesNearlyFull).name | Should -Be @('Mark')
+        $Data.M365.MailboxesNearlyFull[0].percent | Should -Be 90
+        @($Data.M365.Domains).domain | Should -Be @('contoso.com', 'contoso-old.co.uk')
+        ($Data.M365.Domains | Where-Object domain -EQ 'contoso-old.co.uk').verdict | Should -Be 'Unused - lock down'
+        ($Data.M365.Domains | Where-Object domain -EQ 'contoso.com').verdict | Should -Be 'Protected'
+    }
+    It 'words customer recommendations for one item and many' {
+        ($F | Where-Object Id -EQ 'mailbox-nearly-full').Customer | Should -Match '^Archive or tidy the mailbox that is nearly full before it stops'
+        ($F | Where-Object Id -EQ 'domain-email-security').Customer | Should -Match 'on the domain listed'
+    }
+    It 'lists only computer names to the customer for update findings' {
+        $Fake = [pscustomobject]@{ Id = 'devices-updates-behind'; Severity = 'Fix'; Area = 'Updates'; Title = 't'; Detail = 'd'; Count = 1; Items = @('PC9 (26200.8457, current 26200.9457)'); Customer = 'Bring the computer that is behind on Windows updates up to date.'; CustomerItems = @('PC9') }
+        $T = Build-CippCustomerReportTree -Data $Data -Findings @($Fake) -Sections @('recommendations')
+        $Json = $T.Blocks | ConvertTo-Json -Depth 10
+        $Json | Should -Match 'Affected: PC9\.'
+        $Json | Should -Not -Match '26200'
+    }
+    It 'renders every default section to a PDF in the default order' {
+        $T = Build-CippCustomerReportTree -Data $Data -Findings $F
+        $Titles = & $PageTitles $T.Blocks
+        $Titles | Should -Be @('Summary', 'Your Computers', 'Windows Updates', 'Computer Health', 'Monitoring', 'Support', 'Purchases', 'Microsoft 365 Security', 'Users & Licences', 'Email & Domains', 'Recommendations')
+        $Bytes = ConvertTo-CippReportPdf -Blocks $T.Blocks -Variables $T.Variables -TenantName 'Contoso' -ReportName 'T'
+        [Text.Encoding]::ASCII.GetString($Bytes[0..4]) | Should -Be '%PDF-'
+    }
+    It 'adds the Microsoft 365 baseline only when asked for, as given' {
+        $Baseline = @{ Blocks = @([ordered]@{ type = 'page'; title = 'Microsoft 365 Baseline' }, [ordered]@{ type = 'blank'; content = '<p>exec</p>' }) }
+        (& $PageTitles (Build-CippCustomerReportTree -Data $Data -Findings $F).Blocks) | Should -Not -Contain 'Microsoft 365 Baseline'
+        $T = Build-CippCustomerReportTree -Data $Data -Findings $F -Sections @('summary', 'm365-baseline') -Baseline $Baseline
+        & $PageTitles $T.Blocks | Should -Be @('Summary', 'Microsoft 365 Baseline')
     }
 }
 

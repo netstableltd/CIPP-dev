@@ -73,7 +73,9 @@ function Invoke-CIPPReportGeneration {
             $CompanySections = (Get-CIPPAzDataTableEntity @CompanyTable -Filter "PartitionKey eq 'Company' and RowKey eq '$($Tenant.customerId)'").Sections
         } catch {}
         $SectionPlan = Resolve-CIPPReportSections -TenantFilter $Domain -CompanySections $CompanySections -DefaultSections $Settings.DefaultSections -Period $PeriodInfo
-        $Tree = Build-CippCustomerReportTree -Data $Data -Findings $Findings -Summary $Summary -Sections $SectionPlan.Sections -ExtraSections $SectionPlan.ExtraSections
+        $Baseline = $null
+        if ($SectionPlan.Sections -contains 'm365-baseline') { $Baseline = Get-CIPPReportBaselineSection -TenantFilter $Domain -TenantName $Data.TenantName }
+        $Tree = Build-CippCustomerReportTree -Data $Data -Findings $Findings -Summary $Summary -Sections $SectionPlan.Sections -ExtraSections $SectionPlan.ExtraSections -Baseline $Baseline
         $ReportName = 'Monthly IT Report'
         $PresetKey = 'customerReport'
     } else {
