@@ -72,7 +72,7 @@ function Invoke-CIPPReportGeneration {
             $CompanyTable = Get-CIPPTable -TableName 'ReportCompanies'
             $CompanySections = (Get-CIPPAzDataTableEntity @CompanyTable -Filter "PartitionKey eq 'Company' and RowKey eq '$($Tenant.customerId)'").Sections
         } catch {}
-        $SectionPlan = Resolve-CIPPReportSections -TenantFilter $Domain -CompanySections $CompanySections -DefaultSections $Settings.DefaultSections
+        $SectionPlan = Resolve-CIPPReportSections -TenantFilter $Domain -CompanySections $CompanySections -DefaultSections $Settings.DefaultSections -Period $PeriodInfo
         $Tree = Build-CippCustomerReportTree -Data $Data -Findings $Findings -Summary $Summary -Sections $SectionPlan.Sections -ExtraSections $SectionPlan.ExtraSections
         $ReportName = 'Monthly IT Report'
         $PresetKey = 'customerReport'

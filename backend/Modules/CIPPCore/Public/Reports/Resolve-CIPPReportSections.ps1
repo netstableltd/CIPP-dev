@@ -24,7 +24,9 @@ function Resolve-CIPPReportSections {
     param(
         [Parameter(Mandatory)][string]$TenantFilter,
         $CompanySections,
-        $DefaultSections
+        $DefaultSections,
+        # The report period, so a template's 'period' date range means this report's month.
+        $Period
     )
 
     $Company = @(ConvertFrom-CIPPReportSectionList $CompanySections)
@@ -45,7 +47,7 @@ function Resolve-CIPPReportSections {
                 $Row = Get-CIPPAzDataTableEntity @Table -Filter "PartitionKey eq 'ReportBuilderTemplate' and RowKey eq '$Guid'"
                 if (-not $Row -or -not $Row.JSON) { throw 'template not found (it may have been deleted)' }
                 $Template = $Row.JSON | ConvertFrom-Json -ErrorAction Stop
-                $Blocks = @(Resolve-CippReportBuilderBlocks -Blocks @($Template.Blocks) -TenantFilter $TenantFilter)
+                $Blocks = @(Resolve-CippReportBuilderBlocks -Blocks @($Template.Blocks) -TenantFilter $TenantFilter -Period $Period)
                 $Extra[$Id] = @{
                     Title    = $(if ($Template.Name) { [string]$Template.Name } else { 'Report Builder section' })
                     Subtitle = $null

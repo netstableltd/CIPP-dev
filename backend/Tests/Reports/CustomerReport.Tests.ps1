@@ -26,7 +26,7 @@ BeforeAll {
     function Get-CIPPReportSettings { [pscustomobject]@{ TimeZone = 'UTC'; CustomerSendEnabled = $false; DefaultSections = @() } }
     # Report Builder block resolution is covered by upstream's tests; here it passes blocks through
     # with a marker so the tests can see the tenant was applied.
-    function Resolve-CippReportBuilderBlocks { param($Blocks, $TenantFilter) @($Blocks | ForEach-Object { $b = [ordered]@{}; foreach ($p in $_.PSObject.Properties) { $b[$p.Name] = $p.Value }; $b.content = "$($b.content)<p>for $TenantFilter</p>"; $b }) }
+    function Resolve-CippReportBuilderBlocks { param($Blocks, $TenantFilter, $Period) @($Blocks | ForEach-Object { $b = [ordered]@{}; foreach ($p in $_.PSObject.Properties) { $b[$p.Name] = $p.Value }; $b.content = "$($b.content)<p>for $TenantFilter</p>"; $b }) }
     $script:TemplateRow = [pscustomobject]@{ PartitionKey = 'ReportBuilderTemplate'; RowKey = 'abc-1'; JSON = (ConvertTo-Json -Depth 10 -InputObject @{ Name = 'Board pack'; Blocks = @(@{ type = 'blank'; title = 'Board notes'; content = '<p>Quarterly board notes</p>' }) }) }
     $script:PageTitles = { param($Blocks) @($Blocks | Where-Object { $_.type -eq 'page' } | ForEach-Object { $_.title }) }
     function Get-Tenants { param([switch]$IncludeErrors) [pscustomobject]@{ customerId = 't1'; displayName = 'Contoso Ltd'; defaultDomainName = 'contoso.com'; LastGraphError = '' } }

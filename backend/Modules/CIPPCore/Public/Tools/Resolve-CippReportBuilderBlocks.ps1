@@ -26,7 +26,10 @@ function Resolve-CippReportBuilderBlocks {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)][object[]]$Blocks,
-        [Parameter(Mandatory = $true)][string]$TenantFilter
+        [Parameter(Mandatory = $true)][string]$TenantFilter,
+        # The report period that a source's 'period' date range means (the Reports area passes the
+        # monthly report's period); without it, 'period' is last month.
+        $Period
     )
 
     $ParsedBlocks = @($Blocks)
@@ -158,7 +161,7 @@ function Resolve-CippReportBuilderBlocks {
     # Data tokens (&Users&, &Devices.complianceState=compliant&, a chart or table's data source)
     # resolve against the reporting database here, on the server, so a scheduled run and a
     # preview read the same data.
-    $EnrichedBlocks = @(Resolve-CippReportDataToken -Blocks $EnrichedBlocks -TenantFilter $TenantFilter)
+    $EnrichedBlocks = @(Resolve-CippReportDataToken -Blocks $EnrichedBlocks -TenantFilter $TenantFilter -Period $Period)
 
     return @($EnrichedBlocks)
 }

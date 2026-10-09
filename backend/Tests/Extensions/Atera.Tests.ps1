@@ -133,7 +133,7 @@ Describe 'Invoke-AteraExtensionSync' {
                 'tickets' {
                     if ($Query.ticketStatus -eq 'Open') { @([pscustomobject]@{ TicketID = 501; CustomerID = 2; TicketCreatedDate = '2024-01-01T00:00:00Z' }) }
                     elseif ($Query.ticketStatus -eq 'Pending') { @() }
-                    else { @([pscustomobject]@{ TicketID = 500; CustomerID = 1; TicketCreatedDate = $Recent; FirstComment = 'hello' }) }
+                    else { @([pscustomobject]@{ TicketID = 500; CustomerID = 1; TicketCreatedDate = $Recent; FirstComment = 'hello'; TotalDurationSeconds = 2703; TotalDurationMinutes = 0 }) }
                 }
             }
         }
@@ -157,6 +157,14 @@ Describe 'Invoke-AteraExtensionSync' {
         $Alert.id | Should -Be '1000'
         $Alert.AlertMessage.Length | Should -BeLessOrEqual 1001
         ($DbWrites | Where-Object Type -EQ 'AteraAgents').Data.id | Should -Contain '10'
+    }
+
+    It 'adds the logged time in minutes, which Atera leaves at 0' {
+        $null = Invoke-AteraExtensionSync
+        $Ticket = ($DbWrites | Where-Object { $_.Tenant -eq 'contoso.co.uk' -and $_.Type -eq 'AteraTickets' }).Data[0]
+        $Ticket.TimeLoggedMinutes | Should -Be 45
+        $Other = ($DbWrites | Where-Object { $_.Tenant -ne 'contoso.co.uk' -and $_.Type -eq 'AteraTickets' }).Data[0]
+        $Other.TimeLoggedMinutes | Should -Be 0
     }
 
     It 'writes all five collections for each mapped tenant' {

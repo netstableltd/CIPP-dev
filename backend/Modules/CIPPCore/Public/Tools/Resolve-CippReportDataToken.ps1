@@ -11,6 +11,13 @@ function Resolve-CippReportDataToken {
           &Devices.complianceState=compliant&  the number of rows whose field has that value (* wildcards; != for the rest)
           &Mailboxes.TotalItemSize:sum&        a numeric field's sum, avg, min, max or count of rows carrying it
 
+          &AteraTickets.TicketCreatedDate@period&  the number of rows whose date field falls in a date range
+
+        Date ranges (the '@' condition in a token, or the 'in' condition a picked source's filter saves):
+        'period' (the report period when a monthly report is being built, otherwise last month),
+        'last-month', 'this-month', 'last-N-days' (e.g. last-30-days) and 'older-than-N-days'. Ranges
+        are worked out in UTC from -Now; a row whose field is not a date never matches.
+
         Collection names are the reporting database's types, the same names the Database Data block
         offers as sources; fields are case-insensitive and may reach into nested objects with dots.
         A chart with a chartSource of &Devices.operatingSystem& gets one slice per value of that field;
@@ -23,16 +30,23 @@ function Resolve-CippReportDataToken {
         The enriched blocks, as objects or hashtables. Returned with the tokens replaced in place.
     .PARAMETER TenantFilter
         The tenant whose reporting database answers.
+    .PARAMETER Now
+        The moment date ranges are measured from (UTC). Defaults to now.
+    .PARAMETER Period
+        The report period ({ Start; End }, End exclusive) that the 'period' date range means. Without
+        it, 'period' is the previous calendar month.
     .FUNCTIONALITY
         Internal
     #>
     [CmdletBinding()]
     param(
         [AllowEmptyCollection()][object[]]$Blocks = @(),
-        [Parameter(Mandatory = $true)][string]$TenantFilter
+        [Parameter(Mandatory = $true)][string]$TenantFilter,
+        [datetime]$Now = (Get-Date).ToUniversalTime(),
+        $Period
     )
 
-    $Pattern = '(?:&amp;|&)(?<type>[A-Za-z0-9_-]+)(?:\.(?<field>[A-Za-z0-9_.-]+))?(?:(?<op>!=|=)(?<value>[^&]*?))?(?::(?<agg>sum|avg|min|max|count))?(?:&amp;|&)'
+    $Pattern = '(?:&amp;|&)(?<type>[A-Za-z0-9_-]+)(?:\.(?<field>[A-Za-z0-9_.-]+))?(?:(?<op>!=|=|@)(?<value>[^&]*?))?(?::(?<agg>sum|avg|min|max|count))?(?:&amp;|&)'
     $MaxListed = 25
     $MaxSlices = 8
     $MaxPoints = 30
@@ -78,11 +92,67 @@ function Resolve-CippReportDataToken {
         @($Current | Where-Object { $null -ne $_ -and "$_" -ne '' })
     }
 
+    # A named date range as { Start; End } (End exclusive, UTC), or $null when the name is not one.
+    $MonthStart = [datetime]::new($Now.Year, $Now.Month, 1, 0, 0, 0, [DateTimeKind]::Utc)
+    $DateWindows = @{}
+    $WindowOf = {
+        param([string]$Name)
+        $Key = $Name.Trim().ToLowerInvariant()
+        if ($DateWindows.ContainsKey($Key)) { return $DateWindows[$Key] }
+        $Window = switch -Regex ($Key) {
+            '^period$' {
+                if ($Period -and $Period.Start -and $Period.End) { @{ Start = [datetime]$Period.Start; End = [datetime]$Period.End } }
+                else { @{ Start = $MonthStart.AddMonths(-1); End = $MonthStart } }
+                break
+            }
+            '^last-month$' { @{ Start = $MonthStart.AddMonths(-1); End = $MonthStart }; break }
+            '^this-month$' { @{ Start = $MonthStart; End = $Now }; break }
+            '^last-(\d{1,4})-days?$' { @{ Start = $Now.AddDays(-[int]$Matches[1]); End = $Now }; break }
+            '^older-than-(\d{1,4})-days?$' { @{ Start = [datetime]::MinValue; End = $Now.AddDays(-[int]$Matches[1]) }; break }
+            default { $null }
+        }
+        $DateWindows[$Key] = $Window
+        $Window
+    }
+    $InWindow = {
+        param($Values, [string]$Name)
+        $Window = & $WindowOf $Name
+        if (-not $Window) { return $false }
+        foreach ($Value in @($Values)) {
+            $Date = $null
+            if ($Value -is [datetime]) { $Date = $Value.ToUniversalTime() }
+            else {
+                $Parsed = [datetime]::MinValue
+                if ([datetime]::TryParse("$Value", [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]'AssumeUniversal, AdjustToUniversal', [ref]$Parsed)) { $Date = $Parsed }
+            }
+            if ($null -ne $Date -and $Date -ge $Window.Start -and $Date -lt $Window.End) { return $true }
+        }
+        $false
+    }
+
     $RowMatches = {
         param($Row, [string]$Field, [string]$Op, [string]$Wanted)
+        if ($Op -eq '@' -or $Op -eq 'in') { return (& $InWindow @(& $ValueOf $Row $Field) $Wanted) }
         $Values = @(& $ValueOf $Row $Field | ForEach-Object { "$_" })
         $Hit = if ($Wanted.Contains('*')) { @($Values | Where-Object { $_ -like $Wanted }).Count -gt 0 } else { @($Values | Where-Object { $_ -ieq $Wanted }).Count -gt 0 }
         if ($Op -eq '!=') { -not $Hit } else { $Hit }
+    }
+
+    # A table cell's text. Dates (parsed from JSON as DateTime, or ISO 8601 strings) read as
+    # '25 Sep 2026 14:05' (UTC), or '25 Sep 2026' at midnight, rather than a culture-dependent
+    # 09/25/2026 that UK and US readers take differently.
+    $CellText = {
+        param($Value)
+        $Date = $null
+        if ($Value -is [datetime]) { $Date = $Value.ToUniversalTime() }
+        elseif ($Value -is [DateTimeOffset]) { $Date = $Value.UtcDateTime }
+        elseif ($Value -is [string] -and $Value -match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}') {
+            $Parsed = [datetime]::MinValue
+            if ([datetime]::TryParse($Value, [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]'AssumeUniversal, AdjustToUniversal', [ref]$Parsed)) { $Date = $Parsed }
+        }
+        if ($null -eq $Date) { return "$Value" }
+        $Format = if ($Date.TimeOfDay -eq [timespan]::Zero) { 'd MMM yyyy' } else { 'd MMM yyyy HH:mm' }
+        $Date.ToString($Format, [cultureinfo]::InvariantCulture)
     }
 
     $FormatNumber = { param([double]$n) if ([math]::Round($n) -eq $n) { "$([long]$n)" } else { "$([math]::Round($n, 2))" } }
@@ -292,7 +362,7 @@ function Resolve-CippReportDataToken {
                         foreach ($Column in $Columns) {
                             $Key = "$($Column.key)"
                             $From = if ($Column.field) { "$($Column.field)" } else { "$($Column.header)" }
-                            $Cells[$Key] = (@(& $ValueOf $Row $From | ForEach-Object { "$_" }) -join ', ')
+                            $Cells[$Key] = (@(& $ValueOf $Row $From | ForEach-Object { & $CellText $_ }) -join ', ')
                         }
                         $Cells
                     })

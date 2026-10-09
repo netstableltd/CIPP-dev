@@ -22,6 +22,13 @@ BeforeAll {
             [PSCustomObject]@{ UPN = 'b@x'; department = 'sales'; TotalItemSize = 5 }
             [PSCustomObject]@{ UPN = 'c@x'; department = 'IT'; TotalItemSize = 40 }
         )
+        Tickets = @(
+            [PSCustomObject]@{ TicketID = 1; TicketCreatedDate = '2026-09-02T09:00:00Z'; Priority = 'High' }
+            [PSCustomObject]@{ TicketID = 2; TicketCreatedDate = '2026-09-30T23:59:00Z'; Priority = 'Low' }
+            [PSCustomObject]@{ TicketID = 3; TicketCreatedDate = '2026-10-03T09:00:00Z'; Priority = 'Low' }
+            [PSCustomObject]@{ TicketID = 4; TicketCreatedDate = '2026-08-31T23:00:00Z'; Priority = 'Low' }
+            [PSCustomObject]@{ TicketID = 5; TicketCreatedDate = 'not a date'; Priority = 'Low' }
+        )
         Devices = @(
             [PSCustomObject]@{ deviceName = 'PC1'; operatingSystem = 'Windows'; complianceState = 'compliant'; storageTotal = 512 }
             [PSCustomObject]@{ deviceName = 'PC2'; operatingSystem = 'Windows'; complianceState = 'noncompliant'; storageTotal = 256 }
@@ -157,5 +164,51 @@ Describe 'Resolve-CippReportDataToken' {
         $Blocks = Resolve-Blocks @(ConvertFrom-Json -InputObject $Json)
         $Blocks[0].stats[0].value | Should -Be 3
         $Blocks[1].title | Should -Be '4 devices'
+    }
+
+    Context 'date ranges' {
+        BeforeAll {
+            $script:Now = [datetime]::new(2026, 10, 9, 12, 0, 0, [DateTimeKind]::Utc)
+            function Resolve-At($Blocks, $Period) {
+                , @(Resolve-CippReportDataToken -Blocks $Blocks -TenantFilter 'contoso.onmicrosoft.com' -Now $script:Now -Period $Period)
+            }
+        }
+
+        It 'counts rows whose date falls in <Window>' -ForEach @(
+            @{ Window = 'last-month'; Expected = 2 }
+            @{ Window = 'period'; Expected = 2 }
+            @{ Window = 'this-month'; Expected = 1 }
+            @{ Window = 'last-7-days'; Expected = 1 }
+            @{ Window = 'last-40-days'; Expected = 4 }
+            @{ Window = 'older-than-30-days'; Expected = 2 }
+            @{ Window = 'nonsense'; Expected = 0 }
+        ) {
+            $Blocks = Resolve-At @(@{ type = 'blank'; content = "&Tickets.TicketCreatedDate@$Window&" })
+            $Blocks[0].content | Should -Be "$Expected"
+        }
+
+        It 'shows dates in tables as d MMM yyyy, whether parsed as dates or left as ISO text' {
+            $Blocks = Resolve-At @(@{ type = 'richtable'; dataSource = @{ type = 'Tickets'; filter = @{ field = 'TicketID'; op = '='; value = '1' } }; columns = @(@{ key = 'd'; field = 'TicketCreatedDate' }) })
+            $Blocks[0].rows[0].d | Should -Be '2 Sep 2026 09:00'
+            $script:Db.Parsed = @([PSCustomObject]@{ When = [datetime]::new(2026, 9, 25, 0, 0, 0, [DateTimeKind]::Utc) })
+            $Blocks = Resolve-At @(@{ type = 'richtable'; dataSource = @{ type = 'Parsed' }; columns = @(@{ key = 'd'; field = 'When' }) })
+            $Blocks[0].rows[0].d | Should -Be '25 Sep 2026'
+        }
+
+        It 'reads "period" as the report period when one is given' {
+            $Period = @{ Start = [datetime]::new(2026, 8, 1, 0, 0, 0, [DateTimeKind]::Utc); End = [datetime]::new(2026, 9, 1, 0, 0, 0, [DateTimeKind]::Utc) }
+            $Blocks = Resolve-At @(@{ type = 'blank'; content = '&Tickets.TicketCreatedDate@period&' }) $Period
+            $Blocks[0].content | Should -Be '1'
+        }
+
+        It 'filters a picked source with the "in" condition' {
+            $Blocks = Resolve-At @(
+                @{ type = 'chart'; chartSource = @{ type = 'Tickets'; field = 'Priority'; filter = @{ field = 'TicketCreatedDate'; op = 'in'; value = 'last-month' } } }
+                @{ type = 'richtable'; dataSource = @{ type = 'Tickets'; filter = @{ field = 'TicketCreatedDate'; op = 'in'; value = 'this-month' } }; columns = @(@{ key = 'id'; field = 'TicketID' }) }
+            )
+            @($Blocks[0].chartData | ForEach-Object { "$($_.label)=$($_.value)" }) | Should -Be @('High=1', 'Low=1')
+            @($Blocks[1].rows).Count | Should -Be 1
+            $Blocks[1].rows[0].id | Should -Be '3'
+        }
     }
 }

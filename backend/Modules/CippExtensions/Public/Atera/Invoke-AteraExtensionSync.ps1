@@ -84,6 +84,9 @@ function Invoke-AteraExtensionSync {
             $Row | Add-Member -NotePropertyName LastEndUserComment -NotePropertyValue (Limit-Text $Ticket.LastEndUserComment 500) -Force
             $Row | Add-Member -NotePropertyName LastTechnicianComment -NotePropertyValue (Limit-Text $Ticket.LastTechnicianComment 500) -Force
             $Row | Add-Member -NotePropertyName id -NotePropertyValue "$($Ticket.TicketID)" -Force
+            # Atera leaves TotalDurationMinutes at 0 and records time in TotalDurationSeconds; a minutes
+            # figure makes the time usable in Report Builder tables and sums.
+            $Row | Add-Member -NotePropertyName TimeLoggedMinutes -NotePropertyValue ([int][math]::Round([double]($Ticket.TotalDurationSeconds ?? 0) / 60)) -Force
             $Row
         }
 

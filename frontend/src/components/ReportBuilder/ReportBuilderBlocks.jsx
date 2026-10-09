@@ -92,6 +92,42 @@ export const PRESET_TOPICS = [
   { label: 'Domains', value: 'domains', variants: [{ label: 'Mail security (table)', preset: 'domainsecurity' }] },
   { label: 'Risky users', value: 'risk', variants: [{ label: 'By risk level (donut)', preset: 'riskyusers' }] },
   { label: 'Tenant', value: 'tenant', variants: [{ label: 'Summary (cards)', preset: 'tenantsummary' }] },
+  // Atera (RMM/PSA) data, written to the reporting database by the Atera integration's nightly sync
+  // (AteraAgents, AteraAlerts, AteraTickets, AteraContracts). 'The report period' is last month in the
+  // builder, and the report's own month when the template is a section of a monthly report.
+  {
+    label: 'Atera devices',
+    value: 'ateradevices',
+    variants: [
+      { label: 'Summary (cards)', preset: 'ateradevicesummary' },
+      { label: 'By operating system (donut)', preset: 'ateradeviceos' },
+      { label: 'By type (donut)', preset: 'ateradevicetype' },
+      { label: 'Not seen for 30+ days (table)', preset: 'ateradevicestale' },
+      { label: 'All devices (table)', preset: 'ateradevicetable' },
+    ],
+  },
+  {
+    label: 'Atera alerts',
+    value: 'ateraalerts',
+    variants: [
+      { label: 'By severity (donut)', preset: 'ateraalertseverity' },
+      { label: 'Most common (bar)', preset: 'ateraalerttop' },
+      { label: 'Devices with most alerts (bar)', preset: 'ateraalertdevices' },
+      { label: 'Alerts this period (table)', preset: 'ateraalerttable' },
+    ],
+  },
+  {
+    label: 'Atera tickets',
+    value: 'ateratickets',
+    variants: [
+      { label: 'Summary (cards)', preset: 'ateraticketsummary' },
+      { label: 'By status (donut)', preset: 'ateraticketstatus' },
+      { label: 'By priority (donut)', preset: 'ateraticketpriority' },
+      { label: 'Opened this period (table)', preset: 'ateratickettable' },
+      { label: 'Open now (table)', preset: 'ateraticketopen' },
+    ],
+  },
+  { label: 'Atera contracts', value: 'ateracontracts', variants: [{ label: 'Contracts (table)', preset: 'ateracontracttable' }] },
 ]
 
 /**
@@ -493,6 +529,211 @@ export const BLOCK_PRESETS = {
     chartMax: '',
   }),
   // Tenant headline counts as score cards, resolved from the reporting database via data tokens.
+  // ── Atera ──────────────────────────────────────────────────────────────────────────────────────
+  // Field names are Atera's own (API v3), as the Atera sync stores them. 'period' is the report period.
+  ateradevicesummary: () => ({
+    type: 'scorecard',
+    static: true,
+    title: 'Devices',
+    stats: [
+      { label: 'Managed devices', value: '&AteraAgents&' },
+      { label: 'Servers', value: '&AteraAgents.DeviceType=Server&' },
+      { label: 'Online now', value: '&AteraAgents.Online=true&' },
+      { label: 'Not seen for 30+ days', value: '&AteraAgents.LastSeen@older-than-30-days&' },
+    ],
+  }),
+  ateradeviceos: () => ({
+    type: 'chart',
+    static: true,
+    title: 'Devices by operating system',
+    chartKind: 'donut',
+    chartSource: source('AteraAgents', { field: 'OS' }),
+    chartCaption: 'Devices managed in Atera, by operating system',
+    chartCentreLabel: 'Devices',
+    chartMax: '',
+  }),
+  ateradevicetype: () => ({
+    type: 'chart',
+    static: true,
+    title: 'Devices by type',
+    chartKind: 'donut',
+    chartSource: source('AteraAgents', { field: 'DeviceType' }),
+    chartCaption: 'Workstations, servers and other devices',
+    chartCentreLabel: 'Devices',
+    chartMax: '',
+  }),
+  ateradevicestale: () => ({
+    type: 'richtable',
+    static: true,
+    title: 'Devices not seen for 30 days or more',
+    dataSource: source('AteraAgents', {
+      filter: { field: 'LastSeen', op: 'in', value: 'older-than-30-days' },
+    }),
+    limit: 50,
+    columns: [
+      { key: 'c1', header: 'Device', field: 'MachineName' },
+      { key: 'c2', header: 'Last seen', field: 'LastSeen' },
+      { key: 'c3', header: 'Last user', field: 'LastLoginUser' },
+      { key: 'c4', header: 'Operating system', field: 'OS' },
+    ],
+    rows: [],
+  }),
+  ateradevicetable: () => ({
+    type: 'richtable',
+    static: true,
+    title: 'Devices',
+    dataSource: source('AteraAgents'),
+    limit: 200,
+    columns: [
+      { key: 'c1', header: 'Device', field: 'MachineName' },
+      { key: 'c2', header: 'Type', field: 'DeviceType' },
+      { key: 'c3', header: 'Operating system', field: 'OS' },
+      { key: 'c4', header: 'Last user', field: 'LastLoginUser' },
+      { key: 'c5', header: 'Last seen', field: 'LastSeen' },
+    ],
+    rows: [],
+  }),
+  ateraalertseverity: () => ({
+    type: 'chart',
+    static: true,
+    title: 'Alerts by severity',
+    chartKind: 'donut',
+    chartSource: source('AteraAlerts', {
+      field: 'Severity',
+      filter: { field: 'Created', op: 'in', value: 'period' },
+    }),
+    chartCaption: 'Monitoring alerts raised in the report period',
+    chartCentreLabel: 'Alerts',
+    chartMax: '',
+  }),
+  ateraalerttop: () => ({
+    type: 'chart',
+    static: true,
+    title: 'Most common alerts',
+    chartKind: 'bar',
+    chartSource: source('AteraAlerts', {
+      field: 'Title',
+      filter: { field: 'Created', op: 'in', value: 'period' },
+    }),
+    chartCaption: 'Alerts raised most often in the report period',
+    chartCentreLabel: '',
+    chartMax: '',
+  }),
+  ateraalertdevices: () => ({
+    type: 'chart',
+    static: true,
+    title: 'Devices with the most alerts',
+    chartKind: 'bar',
+    chartSource: source('AteraAlerts', {
+      field: 'DeviceName',
+      filter: { field: 'Created', op: 'in', value: 'period' },
+    }),
+    chartCaption: 'Alerts per device in the report period',
+    chartCentreLabel: '',
+    chartMax: '',
+  }),
+  ateraalerttable: () => ({
+    type: 'richtable',
+    static: true,
+    title: 'Alerts this period',
+    dataSource: source('AteraAlerts', {
+      filter: { field: 'Created', op: 'in', value: 'period' },
+    }),
+    limit: 50,
+    columns: [
+      { key: 'c1', header: 'Raised', field: 'Created' },
+      { key: 'c2', header: 'Device', field: 'DeviceName' },
+      { key: 'c3', header: 'Severity', field: 'Severity' },
+      { key: 'c4', header: 'Alert', field: 'Title' },
+    ],
+    rows: [],
+  }),
+  ateraticketsummary: () => ({
+    type: 'scorecard',
+    static: true,
+    title: 'Support requests',
+    stats: [
+      { label: 'Opened this period', value: '&AteraTickets.TicketCreatedDate@period&' },
+      { label: 'Resolved this period', value: '&AteraTickets.TicketResolvedDate@period&' },
+      { label: 'Open now', value: '&AteraTickets.TicketStatus=Open&' },
+      { label: 'Waiting (pending)', value: '&AteraTickets.TicketStatus=Pending&' },
+    ],
+  }),
+  ateraticketstatus: () => ({
+    type: 'chart',
+    static: true,
+    title: 'Support requests by status',
+    chartKind: 'donut',
+    chartSource: source('AteraTickets', {
+      field: 'TicketStatus',
+      filter: { field: 'TicketCreatedDate', op: 'in', value: 'period' },
+    }),
+    chartCaption: 'Requests opened in the report period, by current status',
+    chartCentreLabel: 'Requests',
+    chartMax: '',
+  }),
+  ateraticketpriority: () => ({
+    type: 'chart',
+    static: true,
+    title: 'Support requests by priority',
+    chartKind: 'donut',
+    chartSource: source('AteraTickets', {
+      field: 'TicketPriority',
+      filter: { field: 'TicketCreatedDate', op: 'in', value: 'period' },
+    }),
+    chartCaption: 'Requests opened in the report period, by priority',
+    chartCentreLabel: 'Requests',
+    chartMax: '',
+  }),
+  ateratickettable: () => ({
+    type: 'richtable',
+    static: true,
+    title: 'Support requests opened this period',
+    dataSource: source('AteraTickets', {
+      filter: { field: 'TicketCreatedDate', op: 'in', value: 'period' },
+    }),
+    limit: 100,
+    columns: [
+      { key: 'c1', header: 'Ref', field: 'TicketID' },
+      { key: 'c2', header: 'Request', field: 'TicketTitle' },
+      { key: 'c3', header: 'Opened', field: 'TicketCreatedDate' },
+      { key: 'c4', header: 'Status', field: 'TicketStatus' },
+      { key: 'c5', header: 'Minutes', field: 'TimeLoggedMinutes', align: 'right' },
+    ],
+    rows: [],
+  }),
+  ateraticketopen: () => ({
+    type: 'richtable',
+    static: true,
+    title: 'Open support requests',
+    dataSource: source('AteraTickets', {
+      filter: { field: 'TicketStatus', op: '=', value: 'Open' },
+    }),
+    limit: 50,
+    columns: [
+      { key: 'c1', header: 'Ref', field: 'TicketID' },
+      { key: 'c2', header: 'Request', field: 'TicketTitle' },
+      { key: 'c3', header: 'Opened', field: 'TicketCreatedDate' },
+      { key: 'c4', header: 'Priority', field: 'TicketPriority' },
+    ],
+    rows: [],
+  }),
+  ateracontracttable: () => ({
+    type: 'richtable',
+    static: true,
+    title: 'Contracts',
+    dataSource: source('AteraContracts', {
+      filter: { field: 'Active', op: '=', value: 'true' },
+    }),
+    limit: 25,
+    columns: [
+      { key: 'c1', header: 'Contract', field: 'ContractName' },
+      { key: 'c2', header: 'Type', field: 'ContractType' },
+      { key: 'c3', header: 'Starts', field: 'StartDate' },
+      { key: 'c4', header: 'Ends', field: 'EndDate' },
+    ],
+    rows: [],
+  }),
   tenantsummary: () => ({
     type: 'scorecard',
     static: true,
@@ -717,7 +958,61 @@ const SourceSwitch = ({ value, onChange }) => (
 const FILTER_OPS = [
   { label: 'is', value: '=' },
   { label: 'is not', value: '!=' },
+  { label: 'is a date in', value: 'in' },
 ]
+
+// Date ranges for the 'is a date in' condition (Resolve-CippReportDataToken). Others can be typed:
+// last-N-days, older-than-N-days.
+export const DATE_RANGES = [
+  { label: 'The report period', value: 'period' },
+  { label: 'Last month', value: 'last-month' },
+  { label: 'This month', value: 'this-month' },
+  { label: 'Last 7 days', value: 'last-7-days' },
+  { label: 'Last 30 days', value: 'last-30-days' },
+  { label: 'Last 90 days', value: 'last-90-days' },
+  { label: 'Older than 30 days', value: 'older-than-30-days' },
+  { label: 'Older than 90 days', value: 'older-than-90-days' },
+]
+
+/**
+ * The value box of a source's condition: free text for is / is not, a date range for 'is a date in'.
+ * Switching the condition to a date sets a sensible range, and back again clears it.
+ */
+const FilterValueInput = ({ filter, onChange, placeholder }) =>
+  filter?.op === 'in' ? (
+    <Box sx={{ flex: 1 }}>
+      <CippAutoComplete
+        size="small"
+        label="Date range"
+        multiple={false}
+        creatable={true}
+        disableClearable={true}
+        options={DATE_RANGES}
+        value={
+          DATE_RANGES.find((option) => option.value === filter.value) ??
+          (filter.value ? { label: filter.value, value: filter.value } : DATE_RANGES[0])
+        }
+        onChange={(option) => onChange(option?.value ?? 'period')}
+      />
+    </Box>
+  ) : (
+    <TextField
+      size="small"
+      label="Value"
+      placeholder={placeholder}
+      value={filter?.value ?? ''}
+      onChange={(event) => onChange(event.target.value)}
+      sx={{ flex: 1 }}
+    />
+  )
+
+// The filter after its condition changes: entering or leaving a date range resets the value.
+const withOp = (filter, op) => {
+  const wasDate = filter?.op === 'in'
+  const isDate = op === 'in'
+  if (wasDate === isDate) return { ...filter, op }
+  return { ...filter, op, value: isDate ? 'period' : '' }
+}
 
 const COUNT_ROWS = { label: 'Count of rows', value: '__count' }
 
@@ -848,7 +1143,7 @@ export const DataSourcePicker = ({ mode, value, onChange, dataShape = [] }) => {
           </Box>
           {filter?.field ? (
             <>
-              <Box sx={{ minWidth: 130 }}>
+              <Box sx={{ minWidth: 150 }}>
                 <CippAutoComplete
                   size="small"
                   label="Condition"
@@ -857,16 +1152,13 @@ export const DataSourcePicker = ({ mode, value, onChange, dataShape = [] }) => {
                   disableClearable={true}
                   options={FILTER_OPS}
                   value={FILTER_OPS.find((option) => option.value === filter.op) ?? FILTER_OPS[0]}
-                  onChange={(option) => patch({ filter: { ...filter, op: option?.value ?? '=' } })}
+                  onChange={(option) => patch({ filter: withOp(filter, option?.value ?? '=') })}
                 />
               </Box>
-              <TextField
-                size="small"
-                label="Value"
+              <FilterValueInput
+                filter={filter}
                 placeholder="compliant, true, Win*"
-                value={filter.value ?? ''}
-                onChange={(event) => patch({ filter: { ...filter, value: event.target.value } })}
-                sx={{ flex: 1 }}
+                onChange={(value) => patch({ filter: { ...filter, value } })}
               />
             </>
           ) : null}
@@ -1310,7 +1602,7 @@ const SankeySourcePicker = ({ value, onChange, dataShape = [] }) => {
           </Box>
           {filter?.field ? (
             <>
-              <Box sx={{ minWidth: 130 }}>
+              <Box sx={{ minWidth: 150 }}>
                 <CippAutoComplete
                   size="small"
                   label="Condition"
@@ -1319,16 +1611,13 @@ const SankeySourcePicker = ({ value, onChange, dataShape = [] }) => {
                   disableClearable={true}
                   options={FILTER_OPS}
                   value={FILTER_OPS.find((option) => option.value === filter.op) ?? FILTER_OPS[0]}
-                  onChange={(option) => patch({ filter: { ...filter, op: option?.value ?? '=' } })}
+                  onChange={(option) => patch({ filter: withOp(filter, option?.value ?? '=') })}
                 />
               </Box>
-              <TextField
-                size="small"
-                label="Value"
+              <FilterValueInput
+                filter={filter}
                 placeholder="true, compliant, Win*"
-                value={filter.value ?? ''}
-                onChange={(event) => patch({ filter: { ...filter, value: event.target.value } })}
-                sx={{ flex: 1 }}
+                onChange={(value) => patch({ filter: { ...filter, value } })}
               />
             </>
           ) : null}
