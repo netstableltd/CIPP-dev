@@ -7,6 +7,7 @@ import CippFormPage from '../../../components/CippFormPages/CippFormPage'
 import CippFormComponent from '../../../components/CippComponents/CippFormComponent'
 import { CippFormCondition } from '../../../components/CippComponents/CippFormCondition'
 import { ApiGetCall } from '../../../api/ApiCall'
+import { CippReportSectionsPicker } from '../../../components/CippReports/CippReportSectionsPicker'
 
 const reportDayModes = [
   { label: 'First working day of the month', value: 'FirstWorkingDay' },
@@ -45,15 +46,10 @@ const Page = () => {
     url: '/api/ListReportSettings',
     queryKey: 'ListReportSettings',
   })
-  const sections = ApiGetCall({
-    url: '/api/ListReportSections',
-    queryKey: 'ListReportSections',
-  })
 
   useEffect(() => {
-    if (settings.isSuccess && settings.data && !sections.isFetching) {
+    if (settings.isSuccess && settings.data) {
       const s = settings.data
-      const catalog = Array.isArray(sections.data) ? sections.data : []
       formControl.reset({
         PrecheckRecipients: s.PrecheckRecipients,
         PrecheckLeadDays: s.PrecheckLeadDays,
@@ -63,19 +59,17 @@ const Page = () => {
         TimeZone: toOption(timeZones, s.TimeZone),
         DefaultDeliveryMode: toOption(deliveryModes, s.DefaultDeliveryMode),
         CustomerSendEnabled: Boolean(s.CustomerSendEnabled),
-        DefaultSections: (s.DefaultSections || []).map(
-          (id) =>
-            catalog.find((c) => c.value === id) || {
-              label: `${id} (missing)`,
-              value: id,
-            }
-        ),
+        // Labels come from the section catalog inside the picker.
+        DefaultSections: (s.DefaultSections || []).map((id) => ({
+          label: id,
+          value: id,
+        })),
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.isSuccess, settings.dataUpdatedAt, sections.isFetching])
+  }, [settings.isSuccess, settings.dataUpdatedAt])
 
-  const loading = settings.isFetching || sections.isFetching
+  const loading = settings.isFetching
 
   return (
     <CippFormPage
@@ -216,21 +210,12 @@ const Page = () => {
             </Typography>
           </Grid>
           <Grid size={{ xs: 12 }}>
-            <CippFormComponent
-              type="autoComplete"
-              label="Default report sections (in order)"
-              name="DefaultSections"
-              multiple={true}
-              creatable={false}
-              options={(Array.isArray(sections.data) ? sections.data : []).map(
-                (c) => ({
-                  label: c.label,
-                  value: c.value,
-                  description: c.description,
-                })
-              )}
-              disabled={loading}
+            <CippReportSectionsPicker
               formControl={formControl}
+              name="DefaultSections"
+              label="Default report sections (drag to reorder)"
+              emptyText="No default chosen: reports include every built-in section."
+              disabled={loading}
             />
           </Grid>
 

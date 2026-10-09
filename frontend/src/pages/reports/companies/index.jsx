@@ -1,6 +1,7 @@
 import { CippTablePage } from '../../../components/CippComponents/CippTablePage.jsx'
 import { CippIcons } from '../../../utils/icon-registry'
 import { Layout as DashboardLayout } from '../../../layouts/index'
+import { CippReportSectionsPicker } from '../../../components/CippReports/CippReportSectionsPicker'
 
 const deliveryOptions = [
   { label: 'Default (from Reports settings)', value: 'Default' },
@@ -72,20 +73,15 @@ const editFields = [
     },
   },
   {
+    // Rendered by the sortable picker; declared as autoComplete so the edit dialog pre-fills
+    // it from the row's Sections ([{ label, value }]).
     type: 'autoComplete',
     name: 'Sections',
-    label: 'Report sections (in order)',
-    multiple: true,
-    creatable: false,
-    api: {
-      url: '/api/ListReportSections',
-      queryKey: 'ListReportSections',
-      labelField: 'label',
-      valueField: 'value',
-      descriptionField: 'description',
-    },
+    component: CippReportSectionsPicker,
+    label: 'Report sections (drag to reorder)',
     helperText:
-      "Pick the sections for this company's monthly report, in the order they should appear. Includes the built-in sections and any template from the Report Builder. Leave empty to use the default sections from Reports > Settings.",
+      "The sections of this company's monthly report, top to bottom: built-in sections and any template from the Report Builder. Leave empty to use the default sections from Reports > Settings.",
+    emptyText: 'Using the default sections from Reports > Settings.',
   },
   {
     type: 'textField',
@@ -163,7 +159,7 @@ const Page = () => {
       data: { TenantId: 'TenantId' },
       fields: editFields.filter((f) => f.name === 'Sections'),
       confirmText:
-        'Choose the report sections (in order) for the selected companies. Any list they already have is replaced.',
+        'Set the report sections for the selected companies. Any list they already have is replaced; leave it empty to put them back on the default sections.',
       multiPost: false,
     },
     {
