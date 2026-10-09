@@ -1044,6 +1044,12 @@ export const nativeMenuItems = [
     permissions: ['CIPP.Reports.*'],
     items: [
       {
+        title: 'Companies',
+        path: '/reports/companies',
+        permissions: ['CIPP.Reports.*'],
+        scope: 'global',
+      },
+      {
         title: 'Settings',
         path: '/reports/settings',
         roles: ['admin', 'superadmin'],
