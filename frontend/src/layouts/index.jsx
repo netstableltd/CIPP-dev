@@ -22,6 +22,11 @@ import { FailedPaymentDialog } from '../components/CippComponents/FailedPaymentD
 import { CippMaintenanceBanner } from '../components/CippComponents/CippMaintenanceBanner'
 import { CippImpersonationBanner } from '../components/CippComponents/CippImpersonationBanner'
 import { filterMenuItems, getHiddenPages } from '../utils/filter-menu-items'
+import {
+  consolidateReportsMenu,
+  isFeatureFlagEnabled,
+  REPORTS_MENU_FLAG_ID,
+} from '../utils/reports-menu'
 
 import {
   CHROME_TOP_OFFSET,
@@ -134,7 +139,13 @@ export const Layout = (props) => {
       // Get hidden pages from feature flags - only filter if we have valid data.
       const hiddenPages = featureFlags.isSuccess ? getHiddenPages(featureFlags.data) : []
 
-      const filteredMenu = filterMenuItems(nativeMenuItems, {
+      // Reports Menu feature flag: gather report pages under the Reports header.
+      const baseMenu =
+        featureFlags.isSuccess && isFeatureFlagEnabled(featureFlags.data, REPORTS_MENU_FLAG_ID)
+          ? consolidateReportsMenu(nativeMenuItems)
+          : nativeMenuItems
+
+      const filteredMenu = filterMenuItems(baseMenu, {
         permissions: userPermissions,
         hiddenPages,
       })

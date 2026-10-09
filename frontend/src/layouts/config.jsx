@@ -1032,6 +1032,27 @@ export const nativeMenuItems = [
     ],
   },
   {
+    // Reports area. With the ReportsMenu feature flag on, the Reports group from each area
+    // above and Tools > Report Builder are moved in here (see utils/reports-menu.js).
+    title: 'Reports',
+    type: 'header',
+    icon: (
+      <SvgIcon>
+        <CippIcons.Assessment />
+      </SvgIcon>
+    ),
+    permissions: ['CIPP.Reports.*'],
+    items: [
+      {
+        title: 'Settings',
+        path: '/reports/settings',
+        roles: ['admin', 'superadmin'],
+        permissions: ['CIPP.Reports.*'],
+        scope: 'global',
+      },
+    ],
+  },
+  {
     title: 'Tools',
     type: 'header',
     icon: (

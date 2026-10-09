@@ -108,5 +108,16 @@
     "Endpoints": [],
     "Pages": [],
     "Hidden": true
+  },
+  {
+    "Id": "ReportsMenu",
+    "Name": "Reports Menu",
+    "Description": "Groups CIPP's report pages under the top-level Reports menu: the Reports section from each area (Identity, Tenant, Security, Copilot, Intune, Teams & SharePoint, Email) and the Report Builder. Pages keep their addresses; only the menu changes.",
+    "Enabled": false,
+    "AllowUserToggle": true,
+    "Timers": [],
+    "Endpoints": [],
+    "Pages": [],
+    "Hidden": false
   }
 ]
