@@ -37,7 +37,10 @@ function Start-UpdateTokensTimer {
         }
 
         # Check application secret expiration for $env:ApplicationId and generate a new application secret if expiration is within 30 days.
-        try {
+        # Skipped entirely when CIPP_SAM_READONLY is set (instance shares the SAM app with another instance).
+        if (Test-CIPPSAMReadOnly) {
+            Write-Information 'CIPP_SAM_READONLY is set - skipping SAM application secret rotation, expired-secret cleanup and lock configuration.'
+        } else { try {
             $AppId = $env:ApplicationID
             $AppRegistration = New-GraphGetRequest -uri "https://graph.microsoft.com/v1.0/applications(appId='$AppId')?`$select=id,passwordCredentials,servicePrincipalLockConfiguration" -NoAuthCheck $true -AsApp $true -ErrorAction Stop
             # sort by latest expiration date and get the first one
@@ -125,7 +128,7 @@ function Start-UpdateTokensTimer {
             Write-Warning "Error updating application secret $($_.Exception.Message)."
             Write-Information ($_.InvocationInfo.PositionMessage)
             Write-LogMessage -API 'Update Tokens' -message 'Error updating application secret, will try again in 7 days' -sev 'CRITICAL' -LogData (Get-CippException -Exception $_)
-        }
+        } }
 
         # Create or renew the SAM certificate when missing or within 30 days of expiry
         try {

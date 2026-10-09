@@ -44,6 +44,18 @@ function Update-CIPPSAMCertificate {
         $Headers
     )
 
+    # Shared-SAM guard: when this instance borrows the CIPP-SAM app registration from another
+    # instance (e.g. a dev/staging copy of production), it must never create, renew or remove
+    # credentials on that app - the other instance would be left holding stale ones.
+    if (Test-CIPPSAMReadOnly) {
+        Write-Information 'CIPP_SAM_READONLY is set - skipping SAM certificate create/renew/reconcile.'
+        return [PSCustomObject]@{
+            Renewed  = $false
+            Skipped  = $true
+            Reason   = 'CIPP_SAM_READONLY'
+        }
+    }
+
     $AppId = if ($ApplicationId) { $ApplicationId } else { $env:ApplicationID }
     $AppRegistration = New-GraphGetRequest -uri "https://graph.microsoft.com/v1.0/applications(appId='$AppId')?`$select=id,keyCredentials" -NoAuthCheck $true -AsApp $true -Headers $Headers -ErrorAction Stop
 
