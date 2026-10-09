@@ -24,4 +24,15 @@ function Start-ExtensionOrchestrator {
             Invoke-NinjaOneExtensionScheduler
         }
     }
+
+    # Atera Extension (nightly account-wide sync into the Reporting DB)
+    if ($Configuration.Atera.Enabled -eq $true) {
+        if ($PSCmdlet.ShouldProcess('Invoke-AteraExtensionScheduler')) {
+            try {
+                Invoke-AteraExtensionScheduler
+            } catch {
+                Write-LogMessage -API 'AteraSync' -tenant 'Global' -message "Could not queue Atera sync: $($_.Exception.Message)" -Sev 'Error'
+            }
+        }
+    }
 }

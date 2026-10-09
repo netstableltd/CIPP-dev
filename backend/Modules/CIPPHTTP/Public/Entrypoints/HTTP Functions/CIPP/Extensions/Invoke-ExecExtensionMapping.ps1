@@ -34,6 +34,9 @@ Function Invoke-ExecExtensionMapping {
       'Sherweb' {
         $Result = Get-SherwebMapping -CIPPMapping $Table
       }
+      'Atera' {
+        $Result = Get-AteraMapping -CIPPMapping $Table
+      }
       'HaloPSAFields' {
         # Outcomes and priorities are scoped to a ticket type. The settings page sends the
         # ticket type currently selected in the form so the lists follow the dropdown; without
@@ -106,6 +109,9 @@ Function Invoke-ExecExtensionMapping {
           $Result = Set-ExtensionFieldMapping -CIPPMapping $Table -APIName $APIName -Request $Request -Extension 'Hudu'
           Register-CIPPExtensionScheduledTasks
         }
+        'Atera' {
+          $Result = Set-AteraMapping -CIPPMapping $Table -APIName $APIName -Request $Request
+        }
       }
     }
     $StatusCode = [HttpStatusCode]::OK
@@ -138,6 +144,9 @@ Function Invoke-ExecExtensionMapping {
         }
         'HaloPSA' {
           $Result = Invoke-HaloAutoMap -CIPPMapping $Table
+        }
+        'Atera' {
+          $Result = Invoke-AteraAutoMap -CIPPMapping $Table -APIName $APIName -Headers $Headers
         }
       }
     }

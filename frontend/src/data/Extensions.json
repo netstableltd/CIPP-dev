@@ -802,6 +802,45 @@
     "showSyncButton": true
   },
   {
+    "name": "Atera",
+    "id": "Atera",
+    "type": "Atera",
+    "cat": "Documentation & Monitoring",
+    "logo": "/assets/integrations/atera.svg",
+    "logoNeedsLightBacking": true,
+    "forceSyncButton": true,
+    "autoMapSyncApi": true,
+    "description": "Enable the Atera integration to bring device, alert, ticket and contract data from Atera into CIPP reports.",
+    "helpText": "Each night CIPP reads Atera once for the whole account and stores each mapped customer's agents, recent alerts and tickets (last 45 days, plus all open and pending tickets) and contracts in the reporting database as AteraAgents, AteraAlerts, AteraTickets, AteraContracts and AteraCustomer. These can be used in the Report Builder and the Reports area. Create a read-only API key in Atera under Admin > API. Use Automap on the Tenant Mapping tab: it matches on the customer's domain in Atera first, then on name. Always review the result.",
+    "links": [
+      {
+        "name": "Atera API documentation",
+        "url": "https://app.atera.com/apidocs"
+      }
+    ],
+    "SettingOptions": [
+      {
+        "type": "switch",
+        "name": "Atera.Enabled",
+        "label": "Enable Integration"
+      },
+      {
+        "type": "password",
+        "name": "Atera.APIKey",
+        "label": "Atera API Key",
+        "placeholder": "Enter your Atera API key",
+        "required": true,
+        "condition": {
+          "field": "Atera.Enabled",
+          "compareType": "is",
+          "compareValue": true,
+          "action": "disable"
+        }
+      }
+    ],
+    "mappingRequired": true
+  },
+  {
     "name": "PasswordPusher",
     "id": "PWPush",
     "type": "PWPush",

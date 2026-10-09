@@ -5,7 +5,7 @@ Function Invoke-ExecExtensionTest {
     .ROLE
         CIPP.Extension.Read
     .DESCRIPTION
-        Tests the stored credentials for a configured third-party integration and reports whether CIPP can connect. extensionName selects which one: HaloPSA, Gradient, NinjaOne, PWPush, Hudu, Sherweb, HIBP or GitHub.
+        Tests the stored credentials for a configured third-party integration and reports whether CIPP can connect. extensionName selects which one: HaloPSA, Gradient, NinjaOne, PWPush, Hudu, Sherweb, Atera, HIBP or GitHub.
     #>
     [CmdletBinding()]
     param($Request, $TriggerMetadata)
@@ -86,6 +86,14 @@ Function Invoke-ExecExtensionTest {
                     $Results = [pscustomobject]@{'Results' = 'Successfully Connected to Sherweb' }
                 } else {
                     $Results = [pscustomobject]@{'Results' = 'Failed to connect to Sherweb, check your API credentials and try again.' }
+                }
+            }
+            'Atera' {
+                try {
+                    $Probe = Invoke-AteraRequest -Path 'customers' -Query @{ page = 1; itemsInPage = 1 }
+                    $Results = [pscustomobject]@{'Results' = "Successfully connected to Atera ($($Probe.totalItemCount) customers visible)." }
+                } catch {
+                    $Results = [pscustomobject]@{'Results' = "Failed to connect to Atera: $($_.Exception.Message)" }
                 }
             }
             'HIBP' {

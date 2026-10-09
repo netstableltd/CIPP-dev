@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40" role="img" aria-label="Atera integration">
+  <title>Atera integration</title>
+  <rect x="2" y="6" width="34" height="22" rx="3" fill="none" stroke="#3B4A5A" stroke-width="3"/>
+  <path d="M13 34h12M19 28v6" stroke="#3B4A5A" stroke-width="3" stroke-linecap="round"/>
+  <path d="M8 21l6-6 5 4 7-8" fill="none" stroke="#2E7D6B" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="44" y="27" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="17" font-weight="600" fill="#3B4A5A">Atera</text>
+</svg>

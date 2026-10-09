@@ -113,6 +113,18 @@ Function Invoke-ExecExtensionSync {
                 Write-LogMessage -API 'HuduSync' -tenant 'none' -message "Could not start Hudu Sync $($_.Exception.Message)" -sev Error
             }
         }
+        'Atera' {
+            # Atera syncs account-wide (one pull for all mapped tenants), so a per-tenant request
+            # also queues the full run.
+            try {
+                $null = Invoke-AteraExtensionScheduler -Force
+                Write-LogMessage -API 'AteraSync' -tenant 'Global' -message 'On-demand Atera synchronisation queued' -Sev 'Info' -Headers $Request.Headers
+                $Results = [pscustomobject]@{'Results' = 'Atera synchronisation queued for all mapped tenants. Check the Logbook for the result in a few minutes.' }
+            } catch {
+                $Results = [pscustomobject]@{'Results' = "Could not start Atera Sync: $($_.Exception.Message)" }
+                Write-LogMessage -API 'AteraSync' -tenant 'none' -message "Could not start Atera Sync $($_.Exception.Message)" -sev Error
+            }
+        }
 
     }
 
