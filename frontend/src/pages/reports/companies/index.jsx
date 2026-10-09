@@ -72,6 +72,22 @@ const editFields = [
     },
   },
   {
+    type: 'autoComplete',
+    name: 'Sections',
+    label: 'Report sections (in order)',
+    multiple: true,
+    creatable: false,
+    api: {
+      url: '/api/ListReportSections',
+      queryKey: 'ListReportSections',
+      labelField: 'label',
+      valueField: 'value',
+      descriptionField: 'description',
+    },
+    helperText:
+      "Pick the sections for this company's monthly report, in the order they should appear. Includes the built-in sections and any template from the Report Builder. Leave empty to use the default sections from Reports > Settings.",
+  },
+  {
     type: 'textField',
     name: 'Notes',
     label: 'Internal notes',
@@ -140,6 +156,17 @@ const Page = () => {
       multiPost: false,
     },
     {
+      label: 'Set report sections',
+      type: 'POST',
+      url: '/api/ExecReportCompany',
+      icon: <CippIcons.ViewList />,
+      data: { TenantId: 'TenantId' },
+      fields: editFields.filter((f) => f.name === 'Sections'),
+      confirmText:
+        'Choose the report sections (in order) for the selected companies. Any list they already have is replaced.',
+      multiPost: false,
+    },
+    {
       label: 'Turn reporting on',
       type: 'POST',
       url: '/api/ExecReportCompany',
@@ -170,6 +197,7 @@ const Page = () => {
       'ScheduleMode',
       'ReportDay',
       'PausedUntil',
+      'SectionsSummary',
       'AteraCustomer',
       'DataStatus',
       'Notes',
@@ -190,6 +218,7 @@ const Page = () => {
         'EffectiveDeliveryMode',
         'ScheduleMode',
         'Recipients',
+        'SectionsSummary',
         'AteraCustomer',
         'DataStatus',
       ]}

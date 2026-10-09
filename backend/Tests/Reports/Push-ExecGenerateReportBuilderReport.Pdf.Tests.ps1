@@ -16,6 +16,7 @@ BeforeAll {
     . (Find-Module1 'ConvertTo-CippReportPdf.ps1')
     . (Find-Module1 'Get-CippReportTenantName.ps1')
     . (Find-Module1 'Resolve-CippReportDataToken.ps1')
+    . (Find-Module1 'Resolve-CippReportBuilderBlocks.ps1')
     . (Find-Module1 'Push-ExecGenerateReportBuilderReport.ps1')
 
     # Static stubs for the storage/data helpers the generator calls. The Add stub captures the stored

@@ -20,10 +20,21 @@ BeforeAll {
     function Add-CIPPAzDataTableEntity { param($TableName, $Entity, [switch]$Force) }
     function Get-ExtensionMapping { param($Extension) }
     function Get-Tenants { param([switch]$IncludeErrors) }
-    function Get-CIPPReportSettings { [pscustomobject]@{ DefaultDeliveryMode = 'Review'; PrecheckRecipients = 'ops@msp.com' } }
+    function Get-CIPPReportSettings { [pscustomobject]@{ DefaultDeliveryMode = 'Review'; PrecheckRecipients = 'ops@msp.com'; DefaultSections = @() } }
+    function Get-CIPPReportSectionCatalog {
+        param([switch]$BuiltInOnly)
+        $BuiltIn = @(
+            [pscustomobject]@{ value = 'summary'; label = 'Summary' }
+            [pscustomobject]@{ value = 'devices'; label = 'Devices (Atera)' }
+        )
+        if ($BuiltInOnly) { return $BuiltIn }
+        $BuiltIn + @([pscustomobject]@{ value = 'template:abc-1'; label = 'Board pack (Report Builder)' })
+    }
     function Write-LogMessage { param($headers, $API, $tenant, $tenantId, $message, $Sev, $LogData) }
     function Get-CippException { param($Exception) @{ NormalizedError = "$Exception" } }
 
+    . (& $Find 'ConvertFrom-CIPPReportSectionList.ps1')
+    . (& $Find 'Test-CIPPReportSectionId.ps1')
     . (& $Find 'Get-CIPPReportCompanies.ps1')
     . (& $Find 'Invoke-ExecReportCompany.ps1')
 
@@ -47,8 +58,22 @@ Describe 'Get-CIPPReportCompanies' {
         }
         Mock Get-ExtensionMapping { @([pscustomobject]@{ RowKey = 't1'; IntegrationId = '5'; IntegrationName = 'Contoso Ltd' }) }
         Mock Get-CIPPAzDataTableEntity {
-            @([pscustomobject]@{ RowKey = 't1'; Enabled = $true; DeliveryMode = 'Auto'; Recipients = 'boss@contoso.com'; PrecheckRecipients = '' })
+            @([pscustomobject]@{ RowKey = 't1'; Enabled = $true; DeliveryMode = 'Auto'; Recipients = 'boss@contoso.com'; PrecheckRecipients = ''; Sections = '["template:abc-1","summary","template:gone-2"]' })
         }
+    }
+
+    It 'returns a company''s sections in order as label/value pairs, flagging deleted templates' {
+        $Con = @(Get-CIPPReportCompanies) | Where-Object TenantId -EQ 't1'
+        @($Con.Sections).value | Should -Be @('template:abc-1', 'summary', 'template:gone-2')
+        @($Con.Sections)[0].label | Should -Be 'Board pack (Report Builder)'
+        @($Con.Sections)[2].label | Should -Match 'missing'
+        $Con.SectionsSummary | Should -Match '^Board pack'
+    }
+
+    It 'shows the default sections for a company with no list of its own' {
+        $Fab = @(Get-CIPPReportCompanies) | Where-Object TenantId -EQ 't2'
+        @($Fab.Sections).Count | Should -Be 0
+        $Fab.SectionsSummary | Should -Be 'Default (All built-in sections)'
     }
 
     It 'lists every tenant, with defaults for tenants that have no settings' {
@@ -115,7 +140,24 @@ Describe 'Invoke-ExecReportCompany' {
         $Saved.PausedUntil | Should -Be '2027-01-01'
     }
 
+    It 'saves report sections in the order chosen, keeping other fields' {
+        $r = Invoke-ExecReportCompany -Request (New-CompanyRequest @{
+                TenantId = 't1'
+                Sections = @(@{ label = 'Board pack'; value = 'template:abc-1' }, @{ label = 'Summary'; value = 'summary' })
+            })
+        $r.StatusCode | Should -Be 200
+        $Saved.Sections | Should -Be '["template:abc-1","summary"]'
+        $Saved.Recipients | Should -Be 'boss@contoso.com'
+    }
+
+    It 'clears report sections (back to default) when an empty list is sent' {
+        $r = Invoke-ExecReportCompany -Request (New-CompanyRequest @{ TenantId = 't1'; Sections = @() })
+        $r.StatusCode | Should -Be 200
+        $Saved.Sections | Should -Be ''
+    }
+
     It 'rejects <Case>' -ForEach @(
+        @{ Case = 'an unknown section'; Body = @{ TenantId = 't1'; Sections = @('nonsense') } }
         @{ Case = 'an unknown tenant'; Body = @{ TenantId = 'nope'; Action = 'Enable' } }
         @{ Case = 'a bad recipient'; Body = @{ TenantId = 't1'; Recipients = 'not-an-email' } }
         @{ Case = 'a custom schedule without a day'; Body = @{ TenantId = 't1'; ScheduleMode = 'Custom'; ReportDay = '' } }

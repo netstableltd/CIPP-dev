@@ -23,6 +23,7 @@ function Get-CIPPReportSettings {
         TimeZone              = 'Europe/London'  # IANA or Windows time zone id
         DefaultDeliveryMode   = 'Review'         # Review | Auto | Manual
         CustomerSendEnabled   = $false           # master switch: when off, nothing is ever sent to customer recipients
+        DefaultSections       = ''               # JSON array of section ids (Get-CIPPReportSectionCatalog); blank = all built-in sections
     }
 
     $Table = Get-CIPPTable -TableName 'ReportSettings'
@@ -36,6 +37,7 @@ function Get-CIPPReportSettings {
     $Settings.ReportDay = [int]$Settings.ReportDay
     $Settings.PrecheckLeadDays = [int]$Settings.PrecheckLeadDays
     $Settings.CustomerSendEnabled = [System.Convert]::ToBoolean($Settings.CustomerSendEnabled)
+    $Settings.DefaultSections = @(ConvertFrom-CIPPReportSectionList $Settings.DefaultSections)
     $Settings.LastModified = if ($Row) { $Row.Timestamp } else { $null }
     $Settings.LastModifiedBy = if ($Row) { $Row.ModifiedBy } else { $null }
 

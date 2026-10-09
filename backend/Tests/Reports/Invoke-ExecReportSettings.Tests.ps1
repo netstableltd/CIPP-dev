@@ -23,6 +23,9 @@ BeforeAll {
     function Write-LogMessage { param($headers, $API, $tenant, $message, $Sev, $LogData) }
     function Get-CippException { param($Exception) @{ NormalizedError = "$Exception" } }
 
+    . (& $Find 'ConvertFrom-CIPPReportSectionList.ps1')
+    . (& $Find 'Get-CIPPReportSectionCatalog.ps1')
+    . (& $Find 'Test-CIPPReportSectionId.ps1')
     . (& $Find 'Get-CIPPReportSettings.ps1')
     . (& $Find 'Invoke-ListReportSettings.ps1')
     . (& $Find 'Invoke-ExecReportSettings.ps1')
@@ -67,6 +70,13 @@ Describe 'Get-CIPPReportSettings' {
         $s.CustomerSendEnabled | Should -BeTrue
         $s.ReportDayMode | Should -Be 'FirstWorkingDay'
     }
+
+    It 'returns default sections as an ordered id array (empty when not set)' {
+        Mock Get-CIPPAzDataTableEntity { $null }
+        @((Get-CIPPReportSettings).DefaultSections).Count | Should -Be 0
+        Mock Get-CIPPAzDataTableEntity { [pscustomobject]@{ DefaultSections = '["devices","template:abc-1","summary"]' } }
+        (Get-CIPPReportSettings).DefaultSections | Should -Be @('devices', 'template:abc-1', 'summary')
+    }
 }
 
 Describe 'Invoke-ExecReportSettings' {
@@ -94,7 +104,26 @@ Describe 'Invoke-ExecReportSettings' {
         $r.Body.Results | Should -Match 'ENABLED'
     }
 
+    It 'saves default sections in the order given, as JSON' {
+        $Sections = @(
+            [pscustomobject]@{ label = 'Devices (Atera)'; value = 'devices' }
+            [pscustomobject]@{ label = 'Board pack (Report Builder)'; value = 'template:0b6c-44aa' }
+            [pscustomobject]@{ label = 'Summary'; value = 'summary' }
+            [pscustomobject]@{ label = 'Devices (Atera)'; value = 'devices' }
+        )
+        $r = Invoke-ExecReportSettings -Request (New-SettingsRequest @{ DefaultSections = $Sections })
+        $r.StatusCode | Should -Be 200
+        $Saved.DefaultSections | Should -Be '["devices","template:0b6c-44aa","summary"]'
+    }
+
+    It 'saves an empty default section list as blank (all built-in sections)' {
+        $null = Invoke-ExecReportSettings -Request (New-SettingsRequest @{ DefaultSections = @() })
+        $Saved.DefaultSections | Should -Be ''
+    }
+
     It 'rejects <Case> with 400 and writes nothing' -ForEach @(
+        @{ Case = 'an unknown section'; Overrides = @{ DefaultSections = @(@{ label = 'x'; value = 'bogus' }) } }
+        @{ Case = 'a malformed template section'; Overrides = @{ DefaultSections = @('template:../../etc') } }
         @{ Case = 'a bad email'; Overrides = @{ PrecheckRecipients = 'not-an-email' } }
         @{ Case = 'a bad time'; Overrides = @{ SendTime = '25:00' } }
         @{ Case = 'an unknown delivery mode'; Overrides = @{ DefaultDeliveryMode = @{ value = 'Sometimes' } } }

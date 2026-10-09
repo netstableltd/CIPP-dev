@@ -89,6 +89,13 @@ function Invoke-ExecReportCompany {
 
     if (Test-Field 'Notes') { $Changes.Notes = "$(Get-FieldValue $Body.Notes)".Trim() }
 
+    # Ordered sections for this company's main report; an empty list means "use the default sections".
+    if (Test-Field 'Sections') {
+        $SectionIds = @(ConvertFrom-CIPPReportSectionList $Body.Sections)
+        foreach ($Id in $SectionIds) { if (-not (Test-CIPPReportSectionId $Id)) { $Errors.Add("'$Id' is not a known report section.") } }
+        $Changes.Sections = if ($SectionIds.Count -gt 0) { ConvertTo-Json -InputObject @($SectionIds) -Compress } else { '' }
+    }
+
     if ($Errors.Count -gt 0) {
         return ([HttpResponseContext]@{ StatusCode = [HttpStatusCode]::BadRequest; Body = @{ Results = "$($Tenant.displayName): $($Errors -join ' ')" } })
     }

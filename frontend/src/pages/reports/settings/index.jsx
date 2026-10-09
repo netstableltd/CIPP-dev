@@ -45,10 +45,15 @@ const Page = () => {
     url: '/api/ListReportSettings',
     queryKey: 'ListReportSettings',
   })
+  const sections = ApiGetCall({
+    url: '/api/ListReportSections',
+    queryKey: 'ListReportSections',
+  })
 
   useEffect(() => {
-    if (settings.isSuccess && settings.data) {
+    if (settings.isSuccess && settings.data && !sections.isFetching) {
       const s = settings.data
+      const catalog = Array.isArray(sections.data) ? sections.data : []
       formControl.reset({
         PrecheckRecipients: s.PrecheckRecipients,
         PrecheckLeadDays: s.PrecheckLeadDays,
@@ -58,12 +63,19 @@ const Page = () => {
         TimeZone: toOption(timeZones, s.TimeZone),
         DefaultDeliveryMode: toOption(deliveryModes, s.DefaultDeliveryMode),
         CustomerSendEnabled: Boolean(s.CustomerSendEnabled),
+        DefaultSections: (s.DefaultSections || []).map(
+          (id) =>
+            catalog.find((c) => c.value === id) || {
+              label: `${id} (missing)`,
+              value: id,
+            }
+        ),
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.isSuccess, settings.dataUpdatedAt])
+  }, [settings.isSuccess, settings.dataUpdatedAt, sections.isFetching])
 
-  const loading = settings.isFetching
+  const loading = settings.isFetching || sections.isFetching
 
   return (
     <CippFormPage
@@ -186,6 +198,37 @@ const Page = () => {
               multiple={false}
               creatable={false}
               options={deliveryModes}
+              disabled={loading}
+              formControl={formControl}
+            />
+          </Grid>
+
+          <Grid size={{ xs: 12 }}>
+            <Typography variant="h6" sx={{ mt: 2 }}>
+              Report sections (default)
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              The sections in each company&apos;s monthly report, in order. Use
+              the built-in sections and any template designed in the Report
+              Builder (Reports &gt; Report Builder). A company can choose its
+              own list under Reports &gt; Companies. Leave empty for all
+              built-in sections.
+            </Typography>
+          </Grid>
+          <Grid size={{ xs: 12 }}>
+            <CippFormComponent
+              type="autoComplete"
+              label="Default report sections (in order)"
+              name="DefaultSections"
+              multiple={true}
+              creatable={false}
+              options={(Array.isArray(sections.data) ? sections.data : []).map(
+                (c) => ({
+                  label: c.label,
+                  value: c.value,
+                  description: c.description,
+                })
+              )}
               disabled={loading}
               formControl={formControl}
             />

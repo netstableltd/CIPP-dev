@@ -1050,6 +1050,15 @@ export const nativeMenuItems = [
         scope: 'global',
       },
       {
+        // Same page as Tools > Report Builder: design templates here, then add them as
+        // sections of a company's monthly report (Companies > Report sections).
+        title: 'Report Builder',
+        path: '/tools/report-builder/generated',
+        roles: ['admin', 'superadmin'],
+        permissions: ['CIPP.ReportBuilder.*'],
+        scope: 'global',
+      },
+      {
         title: 'Settings',
         path: '/reports/settings',
         roles: ['admin', 'superadmin'],

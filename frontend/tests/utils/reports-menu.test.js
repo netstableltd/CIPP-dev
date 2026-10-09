@@ -84,6 +84,37 @@ describe('consolidateReportsMenu', () => {
     ])
   })
 
+  it('drops Tools > Report Builder when Reports already links to it', () => {
+    const withBuilder = menu.map((h) =>
+      h.title === 'Reports'
+        ? {
+            ...h,
+            items: [
+              {
+                title: 'Report Builder',
+                path: '/tools/report-builder/generated',
+              },
+              ...h.items,
+            ],
+          }
+        : h
+    )
+    expect(pagePaths(consolidateReportsMenu(withBuilder))).toEqual([
+      'Identity Management > Administration > Users',
+      'Reports > Report Builder',
+      'Reports > Identity Reports > MFA Report',
+      'Reports > Settings',
+      'Tools > Scheduler',
+    ])
+  })
+
+  it('links Report Builder from the Reports header in the native menu', () => {
+    const reports = nativeMenuItems.find((h) => h.title === 'Reports')
+    expect(leafPaths(reports.items)).toContain(
+      '/tools/report-builder/generated'
+    )
+  })
+
   it('does not mutate the input', () => {
     const before = JSON.stringify(menu)
     consolidateReportsMenu(menu)
@@ -96,7 +127,8 @@ describe('consolidateReportsMenu', () => {
   })
 
   it('keeps every page from the real menu exactly once (nothing lost or duplicated)', () => {
-    const before = leafPaths(nativeMenuItems).sort()
+    // Report Builder is linked from both Reports and Tools in the native menu; once.
+    const before = [...new Set(leafPaths(nativeMenuItems))].sort()
     const after = leafPaths(consolidateReportsMenu(nativeMenuItems)).sort()
     expect(after).toEqual(before)
   })

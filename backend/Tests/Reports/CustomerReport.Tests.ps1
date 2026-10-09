@@ -11,7 +11,7 @@ BeforeAll {
     $Modules = Join-Path $RepoRoot 'Modules'
     Get-ChildItem (Get-ChildItem $Modules -Recurse -Directory -Filter 'Reporting' | Select-Object -First 1).FullName -Filter *.ps1 | ForEach-Object { . $_.FullName }
     . (Get-ChildItem $Modules -Recurse -Filter 'ConvertTo-CippReportPdf.ps1' | Select-Object -First 1).FullName
-    foreach ($Name in 'Get-CIPPReportPeriod', 'Get-CIPPCustomerReportData', 'Get-CIPPReportFindings', 'Build-CippCustomerReportTree', 'Build-CippReportPrecheckTree', 'Invoke-CIPPReportGeneration') {
+    foreach ($Name in 'Get-CIPPReportPeriod', 'Get-CIPPCustomerReportData', 'Get-CIPPReportFindings', 'Build-CippCustomerReportTree', 'Build-CippReportPrecheckTree', 'Invoke-CIPPReportGeneration', 'ConvertFrom-CIPPReportSectionList', 'Get-CIPPReportSectionCatalog', 'Resolve-CIPPReportSections') {
         . (Get-ChildItem $Modules -Recurse -Filter "$Name.ps1" | Select-Object -First 1).FullName
     }
 
@@ -23,7 +23,12 @@ BeforeAll {
     function Add-CIPPAzDataTableEntity { param($TableName, $Entity, [switch]$Force) }
     function Send-CIPPAlert { param($Type, $Title, $HTMLContent, $TenantFilter, $altEmail, $Attachments, $APIName) }
     function Write-LogMessage { param($headers, $API, $tenant, $tenantId, $message, $Sev, $LogData) }
-    function Get-CIPPReportSettings { [pscustomobject]@{ TimeZone = 'UTC'; CustomerSendEnabled = $false } }
+    function Get-CIPPReportSettings { [pscustomobject]@{ TimeZone = 'UTC'; CustomerSendEnabled = $false; DefaultSections = @() } }
+    # Report Builder block resolution is covered by upstream's tests; here it passes blocks through
+    # with a marker so the tests can see the tenant was applied.
+    function Resolve-CippReportBuilderBlocks { param($Blocks, $TenantFilter) @($Blocks | ForEach-Object { $b = [ordered]@{}; foreach ($p in $_.PSObject.Properties) { $b[$p.Name] = $p.Value }; $b.content = "$($b.content)<p>for $TenantFilter</p>"; $b }) }
+    $script:TemplateRow = [pscustomobject]@{ PartitionKey = 'ReportBuilderTemplate'; RowKey = 'abc-1'; JSON = (ConvertTo-Json -Depth 10 -InputObject @{ Name = 'Board pack'; Blocks = @(@{ type = 'blank'; title = 'Board notes'; content = '<p>Quarterly board notes</p>' }) }) }
+    $script:PageTitles = { param($Blocks) @($Blocks | Where-Object { $_.type -eq 'page' } | ForEach-Object { $_.title }) }
     function Get-Tenants { param([switch]$IncludeErrors) [pscustomobject]@{ customerId = 't1'; displayName = 'Contoso Ltd'; defaultDomainName = 'contoso.com'; LastGraphError = '' } }
 
     $script:Now = [datetime]'2026-10-09T12:00:00Z'
@@ -186,6 +191,52 @@ Describe 'Report trees' {
     }
 }
 
+Describe 'Report sections' {
+    BeforeAll {
+        $script:Data = Get-CIPPCustomerReportData -TenantFilter 'contoso.com' -Period $Period -Now $Now
+        $script:F = Get-CIPPReportFindings -Data $Data -AteraEnabled $true
+    }
+    It 'normalises stored, posted and plain section lists (order kept, duplicates dropped)' {
+        ConvertFrom-CIPPReportSectionList '["devices","summary","devices"]' | Should -Be @('devices', 'summary')
+        ConvertFrom-CIPPReportSectionList @(@{ label = 'S'; value = 'summary' }, [pscustomobject]@{ label = 'D'; value = 'devices' }) | Should -Be @('summary', 'devices')
+        @(ConvertFrom-CIPPReportSectionList '').Count | Should -Be 0
+        @(ConvertFrom-CIPPReportSectionList $null).Count | Should -Be 0
+    }
+    It 'builds only the chosen sections, in the chosen order' {
+        $T = Build-CippCustomerReportTree -Data $Data -Findings $F -Sections @('devices', 'summary')
+        & $PageTitles $T.Blocks | Should -Be @('Devices', 'Summary')
+    }
+    It 'builds every built-in section when no list is given' {
+        $T = Build-CippCustomerReportTree -Data $Data -Findings $F
+        (& $PageTitles $T.Blocks)[0] | Should -Be 'Summary'
+        (& $PageTitles $T.Blocks)[-1] | Should -Be 'Recommendations'
+    }
+    It 'adds a Report Builder section as its own page and still renders a PDF' {
+        $Extra = @{ 'template:abc-1' = @{ Title = 'Board pack'; Blocks = @(@{ type = 'blank'; title = 'Board notes'; content = '<p>Quarterly</p>' }) } }
+        $T = Build-CippCustomerReportTree -Data $Data -Findings $F -Sections @('summary', 'template:abc-1', 'template:unknown') -ExtraSections $Extra
+        & $PageTitles $T.Blocks | Should -Be @('Summary', 'Board pack')
+        $Bytes = ConvertTo-CippReportPdf -Blocks $T.Blocks -Variables $T.Variables -TenantName 'Contoso' -ReportName 'T'
+        [Text.Encoding]::ASCII.GetString($Bytes[0..4]) | Should -Be '%PDF-'
+    }
+    It 'uses the company list, then the default list, then all built-ins' {
+        (Resolve-CIPPReportSections -TenantFilter 'contoso.com' -CompanySections '["support"]' -DefaultSections @('devices')).Source | Should -Be 'Company'
+        $D = Resolve-CIPPReportSections -TenantFilter 'contoso.com' -CompanySections '' -DefaultSections @('devices')
+        $D.Source | Should -Be 'Default'
+        $D.Sections | Should -Be @('devices')
+        $B = Resolve-CIPPReportSections -TenantFilter 'contoso.com'
+        $B.Source | Should -Be 'BuiltIn'
+        $B.Sections.Count | Should -Be 7
+    }
+    It 'loads Report Builder templates for the tenant and reports deleted ones' {
+        Mock Get-CIPPAzDataTableEntity { if ($Filter -match "RowKey eq 'abc-1'") { $script:TemplateRow } }
+        $R = Resolve-CIPPReportSections -TenantFilter 'contoso.com' -CompanySections '["template:abc-1","template:gone-2","summary"]'
+        $R.ExtraSections['template:abc-1'].Title | Should -Be 'Board pack'
+        $R.ExtraSections['template:abc-1'].Blocks[0].content | Should -Match 'for contoso.com'
+        $R.ExtraSections.ContainsKey('template:gone-2') | Should -BeFalse
+        $R.Missing[0] | Should -Match 'gone-2'
+    }
+}
+
 Describe 'Invoke-CIPPReportGeneration' {
     BeforeEach {
         $script:Stored = @{}
@@ -211,6 +262,19 @@ Describe 'Invoke-CIPPReportGeneration' {
         $Mails[0].Title | Should -Match 'TEST'
         $Mails[0].Html | Should -Match 'TEST'
         $Mails[0].Attachments[0].ContentType | Should -Be 'application/pdf'
+    }
+
+    It 'builds the company''s chosen sections, including a Report Builder template' {
+        Mock Get-CIPPAzDataTableEntity {
+            if ($TableName -eq 'ReportCompanies') { [pscustomobject]@{ RowKey = 't1'; Sections = '["template:abc-1","summary","template:gone-2"]' } }
+            elseif ($TableName -eq 'templates' -and $Filter -match "RowKey eq 'abc-1'") { $script:TemplateRow }
+        }
+        $R = Invoke-CIPPReportGeneration -TenantFilter 'contoso.com' -ReportType Customer -Test
+        $Blocks = $Stored['ReportBuilderReports'].Blocks | ConvertFrom-Json
+        & $PageTitles $Blocks | Should -Be @('Board pack', 'Summary')
+        $Stored['ReportBuilderReports'].Blocks | Should -Match 'Quarterly board notes'
+        $Stored['ReportRuns'].Sections | Should -Be '["template:abc-1","summary","template:gone-2"]'
+        $R.Results | Should -Match 'Skipped Report Builder section.*gone-2'
     }
 
     It 'generates a pre-check' {

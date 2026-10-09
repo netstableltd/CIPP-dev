@@ -11,7 +11,9 @@
  *   - every group titled "Reports" directly under an area header (Identity Management, Tenant
  *     Administration, ...) becomes a group under Reports, named after its area
  *     (e.g. "Identity Reports")
- *   - Tools > Report Builder moves into a "Designer" group under Reports
+ *   - Tools > Report Builder moves into a "Designer" group under Reports, unless Reports already
+ *     links to it (it does in config.jsx), in which case the Tools entry is simply dropped so the
+ *     page is not listed twice
  */
 
 export const REPORTS_MENU_FLAG_ID = 'ReportsMenu'
@@ -59,6 +61,16 @@ export const consolidateReportsMenu = (items) => {
   const movedGroups = []
   const designerPages = []
 
+  // Paths the Reports header already links to (at any depth).
+  const ownPaths = new Set()
+  const collectPaths = (list) => {
+    for (const i of list || []) {
+      if (i.path) ownPaths.add(i.path)
+      if (Array.isArray(i.items)) collectPaths(i.items)
+    }
+  }
+  collectPaths(items[reportsIndex].items)
+
   const reshaped = items.map((header, index) => {
     if (index === reportsIndex || !Array.isArray(header.items)) return header
 
@@ -75,7 +87,9 @@ export const consolidateReportsMenu = (items) => {
         continue
       }
       if (child.path && DESIGNER_PATHS.includes(child.path)) {
-        designerPages.push({ ...child, movedFrom: header.title })
+        if (!ownPaths.has(child.path)) {
+          designerPages.push({ ...child, movedFrom: header.title })
+        }
         continue
       }
       keptItems.push(child)

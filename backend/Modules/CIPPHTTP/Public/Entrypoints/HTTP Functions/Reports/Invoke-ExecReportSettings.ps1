@@ -55,6 +55,12 @@ function Invoke-ExecReportSettings {
     $DeliveryMode = "$(Get-FieldValue $Body.DefaultDeliveryMode)"
     if ($DeliveryMode -notin @('Review', 'Auto', 'Manual')) { $Errors.Add('Default delivery must be Review, Auto or Manual.') }
 
+    # Ordered list of sections for the main report; blank = all built-in sections.
+    $DefaultSections = @(ConvertFrom-CIPPReportSectionList $Body.DefaultSections)
+    foreach ($Id in $DefaultSections) {
+        if (-not (Test-CIPPReportSectionId $Id)) { $Errors.Add("'$Id' is not a known report section.") }
+    }
+
     if ($Errors.Count -gt 0) {
         return ([HttpResponseContext]@{
                 StatusCode = [HttpStatusCode]::BadRequest
@@ -77,6 +83,7 @@ function Invoke-ExecReportSettings {
         TimeZone            = $TimeZone
         DefaultDeliveryMode = $DeliveryMode
         CustomerSendEnabled = [bool]$Body.CustomerSendEnabled
+        DefaultSections     = if ($DefaultSections.Count -gt 0) { ConvertTo-Json -InputObject @($DefaultSections) -Compress } else { '' }
         ModifiedBy          = "$User"
     }
 

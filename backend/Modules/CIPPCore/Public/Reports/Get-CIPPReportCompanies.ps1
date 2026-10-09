@@ -35,6 +35,13 @@ function Get-CIPPReportCompanies {
         Write-Information "Could not read Atera mappings: $($_.Exception.Message)"
     }
 
+    # Section labels for the picker (built-ins + Report Builder templates). A section whose template
+    # has been deleted keeps its id and is labelled as missing, so the user can see and remove it.
+    $SectionLabels = @{}
+    foreach ($Section in @(Get-CIPPReportSectionCatalog)) { $SectionLabels[$Section.value] = $Section.label }
+    $ToSectionOption = { param($Id) [pscustomobject]@{ label = $(if ($SectionLabels[$Id]) { $SectionLabels[$Id] } else { "$Id (missing)" }); value = $Id } }
+    $DefaultSectionNames = if (@($Global.DefaultSections).Count -gt 0) { (@($Global.DefaultSections) | ForEach-Object { (& $ToSectionOption $_).label }) -join ', ' } else { 'All built-in sections' }
+
     $Tenants = @(Get-Tenants -IncludeErrors)
     if ($TenantId) {
         $Tenants = @($Tenants | Where-Object { $_.customerId -eq $TenantId -or $_.defaultDomainName -eq $TenantId })
@@ -49,6 +56,8 @@ function Get-CIPPReportCompanies {
         $ScheduleMode = & $Get 'ScheduleMode' 'Default'
         $PrecheckRecipients = & $Get 'PrecheckRecipients' ''
         $Mapping = $Mappings[$Tenant.customerId]
+        $SectionIds = @(ConvertFrom-CIPPReportSectionList (& $Get 'Sections' ''))
+        $Sections = @($SectionIds | ForEach-Object { & $ToSectionOption $_ })
 
         $DataIssues = [System.Collections.Generic.List[string]]::new()
         if ($Tenant.LastGraphError) { $DataIssues.Add('Microsoft 365 connection error') }
@@ -67,6 +76,8 @@ function Get-CIPPReportCompanies {
             ReportDay                   = $(if ([int](& $Get 'ReportDay' 0) -gt 0) { "$([int](& $Get 'ReportDay' 0))" } else { '' })
             PausedUntil                 = & $Get 'PausedUntil' ''
             Notes                       = & $Get 'Notes' ''
+            Sections                    = $Sections
+            SectionsSummary             = if ($Sections.Count -gt 0) { ($Sections.label -join ', ') } else { "Default ($DefaultSectionNames)" }
             EffectiveDeliveryMode       = if ($DeliveryMode -eq 'Default') { $Global.DefaultDeliveryMode } else { $DeliveryMode }
             EffectivePrecheckRecipients = if ($PrecheckRecipients) { $PrecheckRecipients } else { $Global.PrecheckRecipients }
             AteraCustomerId             = if ($Mapping) { $Mapping.IntegrationId } else { '' }

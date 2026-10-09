@@ -64,8 +64,16 @@ function Invoke-CIPPReportGeneration {
     } catch {}
     $Findings = @(Get-CIPPReportFindings -Data $Data -AteraEnabled $AteraEnabled)
 
+    $SectionPlan = $null
     if ($ReportType -eq 'Customer') {
-        $Tree = Build-CippCustomerReportTree -Data $Data -Findings $Findings -Summary $Summary
+        # Sections: the company's own list, else the default list, else all built-ins.
+        $CompanySections = $null
+        try {
+            $CompanyTable = Get-CIPPTable -TableName 'ReportCompanies'
+            $CompanySections = (Get-CIPPAzDataTableEntity @CompanyTable -Filter "PartitionKey eq 'Company' and RowKey eq '$($Tenant.customerId)'").Sections
+        } catch {}
+        $SectionPlan = Resolve-CIPPReportSections -TenantFilter $Domain -CompanySections $CompanySections -DefaultSections $Settings.DefaultSections
+        $Tree = Build-CippCustomerReportTree -Data $Data -Findings $Findings -Summary $Summary -Sections $SectionPlan.Sections -ExtraSections $SectionPlan.ExtraSections
         $ReportName = 'Monthly IT Report'
         $PresetKey = 'customerReport'
     } else {
@@ -163,6 +171,7 @@ function Invoke-CIPPReportGeneration {
             Fix          = @($Findings | Where-Object Severity -EQ 'Fix').Count
             Info         = @($Findings | Where-Object Severity -EQ 'Info').Count
             FileName     = $FileName
+            Sections     = $(if ($SectionPlan) { ConvertTo-Json -InputObject @($SectionPlan.Sections) -Compress } else { '' })
             RequestedBy  = [string]$RequestedBy
             GeneratedAt  = (Get-Date).ToUniversalTime().ToString('o')
         }
@@ -174,6 +183,7 @@ function Invoke-CIPPReportGeneration {
     if ($Sent.Count -gt 0) { $Message += " and emailed to $($Sent -join ', ')" }
     if ($SendErrors.Count -gt 0) { $Message += ". Email failed for: $($SendErrors -join '; ')" }
     $Message += '.'
+    if ($SectionPlan -and @($SectionPlan.Missing).Count -gt 0) { $Message += " Skipped Report Builder section(s): $(@($SectionPlan.Missing) -join '; ')." }
     if ($Link) { $Message += " Open it in CIPP: $Link" }
     Write-LogMessage -headers $Headers -API 'Reports' -tenant $Domain -tenantId $Tenant.customerId -message $Message -Sev $(if ($SendErrors.Count -gt 0) { 'Warning' } else { 'Info' })
 
