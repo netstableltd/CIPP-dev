@@ -54,6 +54,7 @@ function Build-CippCustomerReportTree {
     $M = $Data.M365
     $A = $Data.Atera
     $Actions = @($Findings | Where-Object { $_.Customer -and $_.Severity -ne 'Info' })
+    $Planned = @($Findings | Where-Object { $_.Customer -and $_.Severity -eq 'Info' })
 
     $blocks = [System.Collections.Generic.List[object]]::new()
 
@@ -107,6 +108,9 @@ function Build-CippCustomerReportTree {
                 if ($F.Unprotected -gt 0) {
                     $blocks.Add((New-CippReportNote -Text "$(& $plural $F.Unprotected 'account') can still sign in with just a password. See Recommendations."))
                 }
+                if ($F.ViaSecurityDefaults -gt 0) {
+                    $blocks.Add((New-CippReportNote -Text "$(if ($F.ViaSecurityDefaults -eq $F.Protected) { 'All of these are' } else { "$($F.ViaSecurityDefaults) of these are" }) covered by Microsoft's Security Defaults, which make everyone set up MFA and ask for it when a sign-in looks risky. Conditional Access (included in Microsoft 365 Business Premium) gives finer control, such as always requiring MFA away from the office."))
+                }
             }
         }
         }
@@ -114,8 +118,8 @@ function Build-CippCustomerReportTree {
         if ($M) {
             $blocks.Add((New-CippReportPage -Title 'Users & Licences' -Subtitle 'Who has access, and what you are paying for'))
             $blocks.Add((New-CippReportStatRow -Stats @(
-                        @{ value = "$($M.Users)"; label = 'Active user accounts' }
-                        @{ value = "$($M.Licensed)"; label = 'Licensed users' }
+                        @{ value = "$($M.Users)"; label = 'People with accounts' }
+                        @{ value = "$($M.Licensed)"; label = 'With a paid licence' }
                         @{ value = "$($M.Guests)"; label = 'Guest accounts' }
                         @{ value = "$($M.Unassigned)"; label = 'Spare licences'; colour = $(if ($M.Unassigned -gt 0) { $warnC }) }
                     )))
@@ -462,7 +466,7 @@ function Build-CippCustomerReportTree {
     $Meta = @()
     if ($A) { $Meta += (& $plural $A.Devices.Active 'device') }
     if ($M) { $Meta += (& $plural $M.Users 'user') }
-    $Meta += $(if ($Actions.Count -gt 0) { & $plural $Actions.Count 'recommendation' } else { 'no actions needed' })
+    $Meta += $(if (($Actions.Count + $Planned.Count) -gt 0) { & $plural ($Actions.Count + $Planned.Count) 'recommendation' } else { 'no actions needed' })
 
     @{
         Blocks    = @($blocks)

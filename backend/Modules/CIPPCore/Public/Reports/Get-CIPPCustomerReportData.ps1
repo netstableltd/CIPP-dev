@@ -63,14 +63,22 @@ function Get-CIPPCustomerReportData {
     $Users = @(Read-Db 'Users')
     $M365 = $null
     if ($Users.Count -gt 0) {
-        $Members = @($Users | Where-Object { $_.accountEnabled -eq $true -and $_.userType -ne 'Guest' -and $_.isResourceAccount -ne $true })
-        $Licensed = @($Members | Where-Object { @($_.assignedLicenses).Count -gt 0 })
+        # People, not mailboxes: shared, room and other non-user mailboxes have enabled accounts too.
+        $NonPersonUpns = @{}
+        foreach ($Mbx in @(Read-Db 'Mailboxes' | Where-Object { "$($_.recipientTypeDetails)" -match 'Shared|Room|Equipment|Scheduling|Discovery' })) {
+            if ($Mbx.UPN) { $NonPersonUpns["$($Mbx.UPN)".ToLowerInvariant()] = $true }
+        }
+        $Members = @($Users | Where-Object { $_.accountEnabled -eq $true -and $_.userType -ne 'Guest' -and $_.isResourceAccount -ne $true -and -not $NonPersonUpns.ContainsKey("$($_.userPrincipalName)".ToLowerInvariant()) })
+        # Licensed = holds a paid licence (the SKUs in the licence table); free ones like Power Automate Free don't count.
+        $PaidSkus = @{}
+        foreach ($Sku in @(Read-Db 'LicenseOverview' | Where-Object { [int]$_.TotalLicenses -gt 0 -and [int]$_.TotalLicenses -lt 10000 })) { if ($Sku.skuId) { $PaidSkus["$($Sku.skuId)"] = $true } }
+        $Licensed = @($Members | Where-Object { $u = $_; if ($PaidSkus.Count -gt 0) { @($u.assignedLicenses | Where-Object { $PaidSkus.ContainsKey("$($_.skuId)") }).Count -gt 0 } else { @($u.assignedLicenses).Count -gt 0 } })
         $Guests = @(Read-Db 'Guests')
 
         # MFA - same definition CIPP's SMB1001 test uses: protected when enforced by Conditional
         # Access, Security Defaults or per-user MFA.
         $Mfa = $null
-        $MfaRows = @(Read-Db 'MFAState' | Where-Object { $_.AccountEnabled -eq $true -and $_.UserType -ne 'Guest' })
+        $MfaRows = @(Read-Db 'MFAState' | Where-Object { $_.AccountEnabled -eq $true -and $_.UserType -ne 'Guest' -and -not $NonPersonUpns.ContainsKey("$($_.UPN)".ToLowerInvariant()) })
         if ($MfaRows.Count -gt 0) {
             $Unprotected = @($MfaRows | Where-Object { "$($_.CoveredByCA)" -notlike 'Enforced*' -and $_.CoveredBySD -ne $true -and $_.PerUser -notin @('Enforced', 'Enabled') })
             $UnprotectedLicensed = @($Unprotected | Where-Object { $_.isLicensed -eq $true })
@@ -79,6 +87,8 @@ function Get-CIPPCustomerReportData {
                 Protected           = $MfaRows.Count - $Unprotected.Count
                 Unprotected         = $Unprotected.Count
                 Registered          = @($MfaRows | Where-Object { $_.MFARegistration -eq $true }).Count
+                # Protected only because Microsoft's Security Defaults are on (no Conditional Access or per-user MFA).
+                ViaSecurityDefaults = @($MfaRows | Where-Object { $_.CoveredBySD -eq $true -and "$($_.CoveredByCA)" -notlike 'Enforced*' -and $_.PerUser -notin @('Enforced', 'Enabled') }).Count
                 UnprotectedAdmins   = @($Unprotected | Where-Object { $_.IsAdmin -eq $true } | ForEach-Object { $_.DisplayName })
                 UnprotectedLicensed = @($UnprotectedLicensed | Sort-Object DisplayName | ForEach-Object { @{ name = $_.DisplayName; upn = $_.UPN } })
             }
@@ -124,7 +134,7 @@ function Get-CIPPCustomerReportData {
         # Mailboxes close to the size at which they stop sending.
         $Mailboxes = @(Read-Db 'MailboxUsage' | Where-Object { [double]($_.prohibitSendQuotaInBytes ?? 0) -gt 0 -and $_.isDeleted -ne $true } | ForEach-Object {
                 $Used = [double]($_.storageUsedInBytes ?? 0); $Quota = [double]$_.prohibitSendQuotaInBytes
-                @{ name = "$(if ($_.displayName) { $_.displayName } else { $_.userPrincipalName })"; upn = "$($_.userPrincipalName)"; usedGB = [math]::Round($Used / 1GB, 1); quotaGB = [math]::Round($Quota / 1GB); percent = [int][math]::Round(100 * $Used / $Quota); archive = [bool]$_.hasArchive }
+                @{ name = "$(if ($_.displayName) { $_.displayName } else { $_.userPrincipalName })"; upn = "$($_.userPrincipalName)"; usedGB = [math]::Round($Used / 1GB, 1); quotaGB = [math]::Round($Quota / 1GB); percent = [int][math]::Round(100 * $Used / $Quota); archive = [bool]$_.hasArchive; shared = ("$($_.recipientType)" -eq 'Shared') }
             } | Sort-Object { $_.percent } -Descending)
 
         # Email security per domain (CIPP's domain analyser), customer wording.
@@ -262,6 +272,7 @@ function Get-CIPPCustomerReportData {
             }
             Alerts           = @{
                 Total      = $Alerts.Count
+                Last90     = $AlertsAll.Count
                 BySeverity = @($Alerts | Group-Object Severity | Sort-Object Count -Descending | ForEach-Object { @{ label = $(if ($_.Name) { $_.Name } else { 'Unknown' }); value = $_.Count } })
                 TopTitles  = @($Alerts | Group-Object Title | Sort-Object Count -Descending | Select-Object -First 6 | ForEach-Object { @{ title = $_.Name; count = $_.Count; devices = @($_.Group.DeviceName | Select-Object -Unique).Count } })
             }

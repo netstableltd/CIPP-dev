@@ -23,7 +23,8 @@
     { "build": 22000, "name": "Windows 11 21H2", "homePro": "2023-10-10", "enterprise": "2024-10-08" },
     { "build": 22621, "name": "Windows 11 22H2", "homePro": "2024-10-08", "enterprise": "2025-10-14" },
     { "build": 22631, "name": "Windows 11 23H2", "homePro": "2025-11-11", "enterprise": "2026-11-10" },
-    { "build": 26100, "name": "Windows 11 24H2 / Server 2025", "homePro": "2026-10-13", "enterprise": "2027-10-12", "ltsc": "2029-10-09", "iotLtsc": "2034-10-10", "server": "2034-11-14" },
-    { "build": 26200, "name": "Windows 11 25H2", "homePro": "2027-10-12", "enterprise": "2028-10-10" }
+    { "build": 26100, "name": "Windows 11 24H2 / Server 2025", "homePro": "2026-10-13", "enterprise": "2027-10-12", "ltsc": "2029-10-09", "iotLtsc": "2034-10-10", "server": "2034-10-10" },
+    { "build": 26200, "name": "Windows 11 25H2", "homePro": "2027-10-12", "enterprise": "2028-10-10" },
+    { "build": 26300, "name": "Windows 11 26H2", "homePro": "2028-10-10", "enterprise": "2029-10-09" }
   ]
 }

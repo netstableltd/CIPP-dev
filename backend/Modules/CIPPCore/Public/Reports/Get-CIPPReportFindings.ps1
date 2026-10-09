@@ -79,7 +79,7 @@ function Get-CIPPReportFindings {
         $Full = @($Data.M365.MailboxesNearlyFull)
         if ($Full.Count -gt 0) {
             Add-Finding 'mailbox-nearly-full' 'Fix' 'Microsoft 365' 'Mailboxes nearly full' "$(& $Plural $Full.Count 'mailbox') are at 80% or more of the size at which they stop sending." @($Full | ForEach-Object { "$($_.name) ($($_.percent)%, $($_.usedGB) of $($_.quotaGB) GB)" }) `
-                "Archive or tidy $(& $The $Full.Count 'mailbox') that $(& $Are $Full.Count) nearly full before $(if ($Full.Count -eq 1) { 'it stops' } else { 'they stop' }) sending email. Turning on the free online archive usually solves it." @($Full | ForEach-Object { "$($_.name) ($($_.percent)% full)" })
+                "Archive or tidy $(& $The $Full.Count 'mailbox') that $(& $Are $Full.Count) nearly full before $(if ($Full.Count -eq 1) { 'it stops' } else { 'they stop' }) sending email. $(if (@($Full | Where-Object shared).Count -gt 0) { 'Turning on the online archive usually solves it; a shared mailbox needs a licence for its archive.' } else { 'Turning on the online archive, included in your licence, usually solves it.' })" @($Full | ForEach-Object { "$($_.name) ($($_.percent)% full$(if ($_.shared) { ', shared mailbox' }))" })
         }
         $WeakDomains = @($Data.M365.Domains | Where-Object { @($_.issues).Count -gt 0 })
         if ($WeakDomains.Count -gt 0) {
@@ -132,6 +132,10 @@ function Get-CIPPReportFindings {
         if ($D.NotRebooted30.Count -gt 0) {
             Add-Finding 'devices-no-reboot' 'Fix' 'Devices' 'Online but not restarted for 30+ days' "$(& $Plural $D.NotRebooted30.Count 'device') have pending updates that need a restart." @($D.NotRebooted30 | ForEach-Object { "$($_.name) ($($_.daysSinceReboot) days)" }) `
                 "Restart $(& $The $D.NotRebooted30.Count 'computer') that $(if ($D.NotRebooted30.Count -eq 1) { 'has' } else { 'have' }) not been restarted for over a month so updates can finish installing."
+        }
+
+        if ($D.Total -gt 0 -and $null -ne $Data.Atera.Alerts.Last90 -and $Data.Atera.Alerts.Last90 -eq 0) {
+            Add-Finding 'monitoring-silent' 'Info' 'Monitoring' 'No monitoring alerts in 90 days' 'Not one alert in three months is unusual. Check the customer has a monitoring profile/threshold policy applied in Atera before the report says we monitor around the clock.'
         }
 
         $T = $Data.Atera.Tickets

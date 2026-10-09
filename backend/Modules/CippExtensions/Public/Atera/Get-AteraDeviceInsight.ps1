@@ -11,11 +11,16 @@ function Get-AteraDeviceInsight {
         Builder column, filter or chart field.
 
         UpdateStatus      'Up to date' | 'Behind' | 'Unknown'. Compares the device's Windows build revision
-                          (26200.9457 -> 9457) with the newest revision that is common among recently seen
-                          devices on the same build across the WHOLE Atera account (the fleet). "Common" means
-                          at least 2 devices and 10% of that build's devices, so one preview build doesn't
-                          mark everyone else as behind. Needs 2+ recently seen devices on the build.
-        LatestBuild       That fleet reference, e.g. '26200.9457'.
+                          (26200.9457 -> 9457) with the newest revision that at least 40% of recently seen
+                          devices (last 14 days) in the same servicing family have reached, across the WHOLE
+                          Atera account (the fleet). Builds that receive the same monthly updates are pooled
+                          (24H2/25H2/26H2 = 26100/26200/26300; 22H2/23H2; Windows 10 2004-22H2). The 40% rule
+                          means an optional preview update a few devices installed early does not mark the
+                          rest as behind, and the reference moves once most devices take a new month's update.
+                          A device within 50 revisions of the reference counts as up to date (out-of-band
+                          fixes and previews are small steps; a missed month is a bigger jump).
+                          Needs 2+ recently seen devices in the family.
+        LatestBuild       That fleet reference on the device's own build, e.g. '26200.9457'.
         WindowsSupport    'Supported' | 'Ending soon' (within 90 days) | 'Unsupported' | 'Unknown', from
                           Config/WindowsLifecycle.json by build and edition (Home/Pro, Enterprise, LTSC, Server).
         WindowsSupportEnds yyyy-MM-dd, or '' when not known.
@@ -79,7 +84,14 @@ function Get-AteraDeviceInsight {
         @($null, $null)
     }
 
-    # --- Fleet reference: the newest common revision per build among recently seen devices -------------
+    # --- Fleet reference: per servicing family, the newest revision 40% of recent devices have reached ---
+    $FamilyOf = {
+        param([int]$Build)
+        if ($Build -in @(26100, 26200, 26300)) { return 'w11-ge' }
+        if ($Build -in @(22621, 22631)) { return 'w11-ni' }
+        if ($Build -ge 19041 -and $Build -le 19045) { return 'w10-vb' }
+        "$Build"
+    }
     $Recent = @($Agents | Where-Object {
             $Seen = & $ToDate $_.LastSeen
             $Seen -and ($Now - $Seen).TotalDays -le 14
@@ -87,13 +99,14 @@ function Get-AteraDeviceInsight {
     $Reference = @{}
     foreach ($Group in ($Recent | ForEach-Object {
                 $Parts = & $SplitBuild $_.OSBuild
-                if ($null -ne $Parts[0] -and $null -ne $Parts[1]) { [pscustomobject]@{ Build = $Parts[0]; Revision = $Parts[1] } }
-            } | Group-Object Build)) {
+                if ($null -ne $Parts[0] -and $null -ne $Parts[1]) { [pscustomobject]@{ Family = (& $FamilyOf $Parts[0]); Revision = $Parts[1] } }
+            } | Group-Object Family)) {
         $Total = $Group.Count
         if ($Total -lt 2) { continue }
-        $Needed = [math]::Max(2, [math]::Ceiling($Total * 0.1))
-        $Common = @($Group.Group | Group-Object Revision | Where-Object { $_.Count -ge $Needed } | ForEach-Object { [int]$_.Name })
-        if ($Common.Count -gt 0) { $Reference[[int]$Group.Name] = ($Common | Measure-Object -Maximum).Maximum }
+        $Needed = [math]::Max(2, [math]::Ceiling($Total * 0.4))
+        $Revisions = @($Group.Group | ForEach-Object { $_.Revision } | Sort-Object -Descending)
+        # The newest revision R with at least $Needed devices on R or later.
+        $Reference[$Group.Name] = $Revisions[$Needed - 1]
     }
 
     # --- Alerts per device --------------------------------------------------------------------------
@@ -106,7 +119,7 @@ function Get-AteraDeviceInsight {
     }
 
     $IntelYear = @{ 1 = 2010; 2 = 2011; 3 = 2012; 4 = 2013; 5 = 2015; 6 = 2015; 7 = 2017; 8 = 2018; 9 = 2019; 10 = 2020; 11 = 2021; 12 = 2022; 13 = 2023; 14 = 2024 }
-    $AmdYear = @{ 1 = 2017; 2 = 2018; 3 = 2019; 4 = 2020; 5 = 2021; 6 = 2022; 7 = 2023; 8 = 2024; 9 = 2025 }
+    $AmdYear = @{ 1 = 2017; 2 = 2018; 3 = 2019; 4 = 2020; 5 = 2021; 6 = 2022; 7 = 2023; 8 = 2024; 9 = 2024 }
 
     foreach ($Agent in $Agents) {
         $Os = "$($Agent.OS)"
@@ -147,8 +160,11 @@ function Get-AteraDeviceInsight {
         if ($Edition -in @('ltsc', 'iotLtsc')) { $VersionName = "$VersionName LTSC" }
 
         # Updates
-        $Latest = if ($Build -and $Reference.ContainsKey($Build)) { $Reference[$Build] } else { $null }
-        $UpdateStatus = if ($null -eq $Latest -or $null -eq $Revision) { 'Unknown' } elseif ($Revision -ge $Latest) { 'Up to date' } else { 'Behind' }
+        $Family = if ($Build) { & $FamilyOf $Build } else { $null }
+        $Latest = if ($Family -and $Reference.ContainsKey($Family)) { $Reference[$Family] } else { $null }
+        # Within 50 revisions of the reference counts as the same month's patch level: out-of-band fixes and
+        # optional previews are small steps (tens of revisions); a missed month is a bigger jump.
+        $UpdateStatus = if ($null -eq $Latest -or $null -eq $Revision) { 'Unknown' } elseif ($Revision -ge ($Latest - 50)) { 'Up to date' } else { 'Behind' }
 
         # Hardware
         $MemoryGB = if ($Agent.Memory) { [int][math]::Round([double]$Agent.Memory / 1024) } else { $null }
@@ -173,10 +189,12 @@ function Get-AteraDeviceInsight {
             $Win11 = if ($Gen -ge 8) { 'Yes' } else { 'No' }
             $CpuSummary = "Intel Core $Family, $Gen$(switch ($Gen) { 1 { 'st' } 2 { 'nd' } 3 { 'rd' } default { 'th' } }) gen"
             if ($Family -eq 'i3') { $Entry_Level = $true }
-        } elseif ($Cpu -match 'Ryzen (\d)( PRO)? (\d)(\d{3})') {
-            $Tier = [int]$Matches[1]; $Series = [int]$Matches[3]
+        } elseif ($Cpu -match 'Ryzen (\d)( PRO)? (\d)(\d{3})([A-Z]*)') {
+            $Tier = [int]$Matches[1]; $Series = [int]$Matches[3]; $AmdSuffix = "$($Matches[5])"
             $CpuYear = $AmdYear[$Series]
-            $Win11 = if ($Series -ge 2) { 'Yes' } else { 'No' }
+            # Ryzen 1000 and the 2000-series APUs (2200G/2400G, 2x00U/H - first-generation Zen) are not on
+            # Microsoft's Windows 11 list; 2000-series desktop CPUs (Zen+) and later are.
+            $Win11 = if ($Series -ge 3 -or ($Series -eq 2 -and $AmdSuffix -notmatch '^(G|GE|U|H|HS)$')) { 'Yes' } else { 'No' }
             $CpuSummary = "AMD Ryzen $Tier $($Series)000 series"
             if ($Tier -le 3) { $Entry_Level = $true }
         } elseif ($Cpu -match 'Xeon.*\bE[357]-\d{4}\w?\s*v(\d)') {
@@ -208,6 +226,10 @@ function Get-AteraDeviceInsight {
         # One hard limit, or two lesser ones together (e.g. 8 GB RAM on an 8-year-old CPU), makes it weak.
         $HardwareTier = if ($Weak.Count -gt 0 -or $Limited.Count -ge 2) { 'Weak' } elseif ($Limited.Count -gt 0) { 'Limited' } else { 'Good' }
         $HardwareNotes = (@($Weak) + @($Limited)) -join '; '
+        if ($Os -match 'IoT') {
+            # IoT editions run machines and kiosks, sized for one job: not rated like office computers.
+            $HardwareTier = 'Special purpose'; $HardwareNotes = ''
+        }
 
         # Disk (system drive, sizes in MB)
         $SystemDrive = if ($Agent.SystemDrive) { "$($Agent.SystemDrive)".TrimEnd('\') } else { 'C:' }
@@ -221,7 +243,8 @@ function Get-AteraDeviceInsight {
         $Seen = & $ToDate $Agent.LastSeen
         $Reboot = & $ToDate $Agent.LastRebootTime
         $DaysSeen = if ($Seen) { [int][math]::Floor(($Now - $Seen).TotalDays) } else { $null }
-        $DaysReboot = if ($Reboot) { [int][math]::Floor(($Now - $Reboot).TotalDays) } else { $null }
+        # Uptime when last seen: an offline device has not been running since, so 'now' would overstate it.
+        $DaysReboot = if ($Reboot) { [int][math]::Floor(($(if ($Seen) { $Seen } else { $Now }) - $Reboot).TotalDays) } else { $null }
 
         # Alerts
         $DeviceAlerts = @()
@@ -239,7 +262,9 @@ function Get-AteraDeviceInsight {
         if ($UpdateStatus -eq 'Behind') { $Attention.Add('behind on Windows updates') }
         if ($null -ne $DaysSeen -and $DaysSeen -gt 30) { $Attention.Add("not seen for $DaysSeen days") }
         elseif ($null -ne $DaysSeen -and $DaysSeen -gt 7) { $Check.Add("not seen for $DaysSeen days") }
-        if ($null -ne $DaysReboot -and $DaysReboot -gt 30 -and ($null -eq $DaysSeen -or $DaysSeen -le 30)) { $Attention.Add("not restarted for $DaysReboot days") }
+        if ($null -ne $DaysReboot -and $DaysReboot -gt 30 -and ($null -eq $DaysSeen -or $DaysSeen -le 30)) {
+            $Attention.Add($(if ($null -ne $DaysSeen -and $DaysSeen -gt 7) { "had not restarted for $DaysReboot days when last seen" } else { "not restarted for $DaysReboot days" }))
+        }
         if ($null -ne $FreePct -and $FreePct -lt 10) { $Attention.Add("$SystemDrive only $FreePct% free") } elseif ($null -ne $FreePct -and $FreePct -lt 20) { $Check.Add("$SystemDrive $FreePct% free") }
         if ($ResourceDays -ge 5) { $Attention.Add("CPU or memory alerts on $ResourceDays days") } elseif ($ResourceDays -ge 2) { $Check.Add("CPU or memory alerts on $ResourceDays days") }
         if ($HardwareTier -eq 'Weak') { $Attention.Add("weak hardware ($HardwareNotes)") } elseif ($HardwareTier -eq 'Limited') { $Check.Add("limited hardware ($HardwareNotes)") }

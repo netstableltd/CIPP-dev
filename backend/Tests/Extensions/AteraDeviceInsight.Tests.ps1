@@ -23,11 +23,26 @@ BeforeAll {
 }
 
 Describe 'Get-AteraDeviceInsight' {
+    It 'pools builds that share monthly updates and ignores an early preview and small out-of-band steps' {
+        $Fleet = @(
+            New-Agent 'P1' -Build '26200.9457'; New-Agent 'P2' -Build '26200.9457'; New-Agent 'P3' -Build '26200.9457'
+            New-Agent 'PREVIEW1' -Build '26300.9550'; New-Agent 'PREVIEW2' -Build '26300.9550'
+            New-Agent 'ON26300' -Build '26300.9457'
+            New-Agent 'PATCHDAY' -Build '26100.9445'
+            New-Agent 'MONTHSOLD' -Build '26200.8457'
+        )
+        $R = Get-Insight $Fleet
+        ($R | Where-Object MachineName -EQ 'ON26300').UpdateStatus | Should -Be 'Up to date'
+        ($R | Where-Object MachineName -EQ 'PATCHDAY').UpdateStatus | Should -Be 'Up to date'
+        ($R | Where-Object MachineName -EQ 'MONTHSOLD').UpdateStatus | Should -Be 'Behind'
+        ($R | Where-Object MachineName -EQ 'MONTHSOLD').LatestBuild | Should -Be '26200.9457'
+    }
+
     It 'marks devices behind the newest common revision, ignoring a lone newer build' {
         $Fleet = @(
             New-Agent 'A' -Build '26200.9457'; New-Agent 'B' -Build '26200.9457'; New-Agent 'C' -Build '26200.9457'
             New-Agent 'OLD' -Build '26200.8457'
-            New-Agent 'PREVIEW' -Build '26200.9500'
+            New-Agent 'PREVIEW' -Build '26200.9600'
         )
         $R = Get-Insight $Fleet
         ($R | Where-Object MachineName -EQ 'A').UpdateStatus | Should -Be 'Up to date'
@@ -47,7 +62,8 @@ Describe 'Get-AteraDeviceInsight' {
         @{ Case = 'Windows 11 24H2 Enterprise'; OS = 'Microsoft Windows 11 Enterprise x64'; Build = '26100.6000'; Support = 'Supported'; Version = 'Windows 11 24H2' }
         @{ Case = 'Windows 11 IoT LTSC 2024'; OS = 'Microsoft Windows 11 IoT Enterprise LTSC x64'; Build = '26100.6000'; Support = 'Supported'; Version = 'Windows 11 24H2 LTSC' }
         @{ Case = 'Windows 11 25H2'; OS = 'Microsoft Windows 11 Pro x64'; Build = '26200.9457'; Support = 'Supported'; Version = 'Windows 11 25H2' }
-        @{ Case = 'a build newer than the table'; OS = 'Microsoft Windows 11 Pro x64'; Build = '26300.9550'; Support = 'Supported'; Version = 'Windows 11' }
+        @{ Case = 'Windows 11 26H2'; OS = 'Microsoft Windows 11 Pro x64'; Build = '26300.9550'; Support = 'Supported'; Version = 'Windows 11 26H2' }
+        @{ Case = 'a build newer than the table'; OS = 'Microsoft Windows 11 Pro x64'; Build = '28000.1000'; Support = 'Supported'; Version = 'Windows 11' }
         @{ Case = 'Server 2019'; OS = 'Microsoft Windows Server 2019 Standard'; Build = '17763.7000'; Support = 'Supported'; Version = 'Windows Server 2019' }
         @{ Case = 'Server 2012 R2'; OS = 'Microsoft Windows Server 2012 R2 Essentials x64'; Build = '9600.22000'; Support = 'Unsupported'; Version = 'Windows Server 2012 R2' }
         @{ Case = 'Windows 7 without a build'; OS = 'Microsoft Windows 7 Professional SP1'; Build = ''; Support = 'Unsupported'; Version = 'Windows 7 Professional SP1' }
@@ -66,6 +82,8 @@ Describe 'Get-AteraDeviceInsight' {
         @{ Cpu = 'Intel(R) Core(TM) i3 CPU M 380 @ 2.53GHz'; Summary = 'Intel Core i3, 1st gen (c. 2010)'; Ready = 'No' }
         @{ Cpu = 'AMD Ryzen 3 3200G with Radeon Vega Graphics'; Summary = 'AMD Ryzen 3 3000 series (c. 2019)'; Ready = 'Yes' }
         @{ Cpu = 'AMD Ryzen 5 1600 Six-Core Processor'; Summary = 'AMD Ryzen 5 1000 series (c. 2017)'; Ready = 'No' }
+        @{ Cpu = 'AMD Ryzen 5 2400G with Radeon Vega Graphics'; Summary = 'AMD Ryzen 5 2000 series (c. 2018)'; Ready = 'No' }
+        @{ Cpu = 'AMD Ryzen 7 2700X Eight-Core Processor'; Summary = 'AMD Ryzen 7 2000 series (c. 2018)'; Ready = 'Yes' }
         @{ Cpu = 'Intel(R) Xeon(R) CPU E3-1225 v5 @ 3.30GHz'; Summary = 'Intel Xeon (v5) (c. 2015)'; Ready = 'No' }
         @{ Cpu = 'Intel(R) Core(TM) Ultra 7 155H'; Summary = 'Intel Core Ultra 7 (c. 2024)'; Ready = 'Yes' }
     ) {
@@ -84,6 +102,12 @@ Describe 'Get-AteraDeviceInsight' {
     ) {
         $R = Get-Insight @(New-Agent 'X' -Cpu $Cpu -Cores $Cores -MemoryMB $MB)
         $R[0].HardwareTier | Should -Be $Tier
+    }
+
+    It 'does not rate IoT machines like office computers' {
+        $R = Get-Insight @(New-Agent 'KIOSK' -OS 'Microsoft Windows 11 IoT Enterprise LTSC x64' -Build '26100.9445' -Cpu 'Intel(R) Core(TM) i3-8100T CPU @ 3.10GHz' -Cores 4 -MemoryMB 8192)
+        $R[0].HardwareTier | Should -Be 'Special purpose'
+        $R[0].HealthNotes | Should -Not -Match 'hardware'
     }
 
     It 'counts days with CPU or memory alerts and flags a regularly overloaded device' {
@@ -107,11 +131,11 @@ Describe 'Get-AteraDeviceInsight' {
         $L = $R | Where-Object MachineName -EQ 'LAPTOP'
         $L.HealthStatus | Should -Be 'Needs attention'
         $L.DaysSinceSeen | Should -Be 14
-        $L.DaysSinceReboot | Should -Be 122
+        $L.DaysSinceReboot | Should -Be 107
         $L.SystemDiskFreePercent | Should -Be 4
         $L.IsHomeEdition | Should -BeTrue
         $L.HealthNotes | Should -Match 'behind on Windows updates'
-        $L.HealthNotes | Should -Match 'not restarted for 122 days'
+        $L.HealthNotes | Should -Match 'had not restarted for 107 days when last seen'
         $L.HealthNotes | Should -Match 'C: only 4% free'
         $L.HealthNotes | Should -Match 'Windows Home edition'
     }
