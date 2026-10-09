@@ -80,6 +80,31 @@ const editFields = [
   },
 ]
 
+const periodOptions = [
+  { label: 'Last month', value: 'LastMonth' },
+  { label: 'This month so far', value: 'ThisMonth' },
+]
+
+const testFields = [
+  {
+    type: 'textField',
+    name: 'SendTo',
+    label: 'Send to (optional, comma separated)',
+    placeholder: 'you@yourcompany.com',
+    helperText:
+      "Only these addresses receive the test - never the company's customer recipients. Leave blank to just generate it (it appears under Generated Reports).",
+  },
+  {
+    type: 'autoComplete',
+    name: 'Period',
+    label: 'Period',
+    multiple: false,
+    creatable: true,
+    options: periodOptions,
+    helperText: 'Or type a month as YYYY-MM.',
+  },
+]
+
 const Page = () => {
   const actions = [
     {
@@ -91,6 +116,27 @@ const Page = () => {
       fields: editFields,
       setDefaultValues: true,
       confirmText: 'Report settings for [displayName]',
+      multiPost: false,
+    },
+    {
+      label: 'Test customer report',
+      type: 'POST',
+      url: '/api/ExecReportTestRun',
+      icon: <CippIcons.Assessment />,
+      data: { TenantId: 'TenantId', ReportType: 'Customer' },
+      fields: testFields,
+      confirmText:
+        'Generate a TEST customer report for [displayName]? It is marked TEST and only goes to the addresses you enter.',
+      multiPost: false,
+    },
+    {
+      label: 'Test pre-check',
+      type: 'POST',
+      url: '/api/ExecReportTestRun',
+      icon: <CippIcons.FactCheck />,
+      data: { TenantId: 'TenantId', ReportType: 'Precheck' },
+      fields: testFields,
+      confirmText: 'Run the pre-check for [displayName] now?',
       multiPost: false,
     },
     {
