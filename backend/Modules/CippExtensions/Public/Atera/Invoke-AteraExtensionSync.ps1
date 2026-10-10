@@ -15,7 +15,10 @@ function Invoke-AteraExtensionSync {
           AteraCustomer   - the Atera customer record
           AteraAgents     - every agent (device) for the customer, with insights added by
                             Get-AteraDeviceInsight (UpdateStatus, WindowsSupport, HardwareTier,
-                            HealthStatus and more - worked out across the whole account's devices)
+                            HealthStatus and more - worked out across the whole account's devices),
+                            including each device's patch scan (installed and waiting updates; two
+                            API calls per device of a mapped customer, paced to stay under Atera's
+                            rate limit)
           AteraAlerts     - alerts created in the last AlertWindowDays days (newest-first paging stops at the cutoff)
           AteraTickets    - tickets created in the last WindowDays days, plus every Open/Pending ticket
           AteraContracts  - every contract for the customer
@@ -98,7 +101,24 @@ function Invoke-AteraExtensionSync {
         }
 
         # --- Shape rows (Add-CIPPDbItem keys rows on an 'id' property) -------------------------
-        $AgentRows = @(Get-AteraDeviceInsight -Agents $Agents -Alerts $Alerts) | Select-Object *, @{ n = 'id'; e = { "$($_.AgentID)" } }
+        # Patch scans for the devices of mapped customers (installed-patches / available-patches by DeviceGuid).
+        $MappedCustomerIds = @($Mappings | ForEach-Object { [int]$_.IntegrationId })
+        $Patches = @{}
+        $PatchErrors = 0
+        foreach ($Agent in @($Agents | Where-Object { $_.DeviceGuid -and [int]$_.CustomerID -in $MappedCustomerIds })) {
+            try {
+                $Installed = Invoke-AteraRequest -Path "agents/$($Agent.DeviceGuid)/installed-patches"
+                $Available = Invoke-AteraRequest -Path "agents/$($Agent.DeviceGuid)/available-patches"
+                $Patches["$($Agent.DeviceGuid)"] = ConvertTo-AteraPatchSummary -Installed $Installed -Available $Available
+            } catch {
+                $PatchErrors++
+                if ($PatchErrors -le 3) { Write-Information "Atera patch scan unavailable for $($Agent.MachineName): $($_.Exception.Message)" }
+            }
+            Start-Sleep -Milliseconds 120
+        }
+        $TimeZone = 'Europe/London'
+        try { if (Get-Command Get-CIPPReportSettings -ErrorAction SilentlyContinue) { $TimeZone = (Get-CIPPReportSettings).TimeZone } } catch {}
+        $AgentRows = @(Get-AteraDeviceInsight -Agents $Agents -Alerts $Alerts -Patches $Patches -TimeZone $TimeZone) | Select-Object *, @{ n = 'id'; e = { "$($_.AgentID)" } }
         $ContractRows = $Contracts | Select-Object *, @{ n = 'id'; e = { "$($_.ContractID)" } }
         $AlertRows = foreach ($Alert in $Alerts) {
             $Row = $Alert | Select-Object * -ExcludeProperty AlertMessage
@@ -163,7 +183,7 @@ function Invoke-AteraExtensionSync {
         }
 
         $Duration = [math]::Round(((Get-Date) - $Started).TotalSeconds)
-        $Message = "Atera sync complete: $($Summary.Count) tenant(s), $($Agents.Count) agents, $($Alerts.Count) alerts and $($Tickets.Count) tickets and $($Invoices.Count) invoices read in ${Duration}s (tickets $WindowDays days, alerts $AlertWindowDays days)."
+        $Message = "Atera sync complete: $($Summary.Count) tenant(s), $($Agents.Count) agents, $($Alerts.Count) alerts, $($Tickets.Count) tickets, $($Invoices.Count) invoices and $($Patches.Count) patch scans read in ${Duration}s (tickets $WindowDays days, alerts $AlertWindowDays days)."
         Write-LogMessage -API 'AteraSync' -tenant 'Global' -message $Message -Sev 'Info' -LogData @($Summary)
         Add-CIPPAzDataTableEntity @SettingsTable -Force -Entity @{
             PartitionKey    = 'Atera'

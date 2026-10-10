@@ -10,7 +10,9 @@ function Get-AteraDeviceInsight {
         can all use the same answers. Every field added is a simple value, so it also works as a Report
         Builder column, filter or chart field.
 
-        UpdateStatus      'Up to date' | 'Behind' | 'Unknown'. Compares the device's Windows build revision
+        UpdateStatus      'Up to date' | 'Behind' | 'Failing' | 'Unknown'. When Atera's patch scan is passed in
+                          (-Patches), from that: Behind = security updates waiting, Failing = updates failing to
+                          install. Otherwise (or when a device has no scan), compares the Windows build revision
                           (26200.9457 -> 9457) with the newest revision that at least 40% of recently seen
                           devices (last 14 days) in the same servicing family have reached, across the WHOLE
                           Atera account (the fleet). Builds that receive the same monthly updates are pooled
@@ -27,15 +29,29 @@ function Get-AteraDeviceInsight {
         WindowsVersion    e.g. 'Windows 11 25H2'.
         IsHomeEdition     $true for Windows Home (not suitable for business: no domain/Entra join, no BitLocker
                           management).
+        UpdateSource      'Atera patch scan' | 'Build comparison' | ''.
+        PatchScanDate, SecurityUpdatesWaiting, OtherUpdatesWaiting, UpdatesFailed, LastSecurityUpdate,
+        UpdatesWaiting, DriversWaiting, UpdatesFailing, SecurityUpdatesFailed - from Atera's patch scan
+        (ConvertTo-AteraPatchSummary). Failing = a security update failed; other failures are a 'Check'.
         MemoryGB, CpuSummary, CpuYear (approximate launch year), Windows11Ready ('Yes'|'No'|'Unknown')
-        HardwareTier      'Good' | 'Limited' | 'Weak', with HardwareNotes giving the reasons. Weak = 4 GB RAM or
-                          less, 2 cores or fewer, a CPU too old for Windows 11 or 10+ years old, or two of the
-                          lesser limits together (8 GB RAM, entry-level i3/Ryzen 3/Celeron/Pentium, CPU 7+ years old).
+        HardwareTier      'Meets baseline' | 'Below baseline' | 'Special purpose' (IoT editions). The baseline is a
+                          processor with at least four cores that can run Windows 11 (servers: four cores).
+                          HardwareNotes gives the reasons when below.
         SystemDiskFreePercent, SystemDiskFreeGB
+        Drives            Every fixed drive with its fullness, e.g. 'C: 82% full; D: 40% full'.
+        FullestDrivePercent, DrivesOver75 ('C: 82%'), DrivesOver90.
+        MemoryHighDays    Distinct working days (weekdays 08:00-18:00 in -TimeZone) with a memory alert above 90%,
+                          with MemoryPeakPercent and MemoryTopProcess (Get-AteraMemoryPressure).
         DaysSinceSeen, DaysSinceReboot
         AlertCount, ResourceAlertDays (distinct days with CPU or memory alerts), DiskAlertDays - over the
                           alerts passed in (the sync passes 90 days).
         HealthStatus      'Good' | 'Check' | 'Needs attention', with HealthNotes giving the reasons.
+
+    .PARAMETER Patches
+        Optional hashtable of DeviceGuid -> output of ConvertTo-AteraPatchSummary.
+
+    .PARAMETER TimeZone
+        Time zone for "working hours" when reading memory alerts. Default Europe/London.
 
     .PARAMETER Agents
         Every agent in the Atera account. The fleet is needed for UpdateStatus; insights are returned for
@@ -58,7 +74,9 @@ function Get-AteraDeviceInsight {
         [AllowEmptyCollection()][object[]]$Agents = @(),
         [AllowEmptyCollection()][object[]]$Alerts = @(),
         [datetime]$Now = (Get-Date).ToUniversalTime(),
-        $Lifecycle
+        $Lifecycle,
+        [hashtable]$Patches = @{},
+        [string]$TimeZone = 'Europe/London'
     )
 
     if (-not $Lifecycle) {
@@ -118,6 +136,11 @@ function Get-AteraDeviceInsight {
         $AlertsByDevice[$Key].Add($Alert)
     }
 
+    $MemoryPressure = @{}
+    foreach ($M in @(Get-AteraMemoryPressure -Alerts $Alerts -TimeZone $TimeZone)) {
+        $MemoryPressure[$(if ($M.DeviceGuid) { "g:$($M.DeviceGuid)" } else { "n:$($M.DeviceName)" })] = $M
+    }
+
     $IntelYear = @{ 1 = 2010; 2 = 2011; 3 = 2012; 4 = 2013; 5 = 2015; 6 = 2015; 7 = 2017; 8 = 2018; 9 = 2019; 10 = 2020; 11 = 2021; 12 = 2022; 13 = 2023; 14 = 2024 }
     $AmdYear = @{ 1 = 2017; 2 = 2018; 3 = 2019; 4 = 2020; 5 = 2021; 6 = 2022; 7 = 2023; 8 = 2024; 9 = 2024 }
 
@@ -165,6 +188,13 @@ function Get-AteraDeviceInsight {
         # Within 50 revisions of the reference counts as the same month's patch level: out-of-band fixes and
         # optional previews are small steps (tens of revisions); a missed month is a bigger jump.
         $UpdateStatus = if ($null -eq $Latest -or $null -eq $Revision) { 'Unknown' } elseif ($Revision -ge ($Latest - 50)) { 'Up to date' } else { 'Behind' }
+        $UpdateSource = if ($UpdateStatus -ne 'Unknown') { 'Build comparison' } else { '' }
+        $Patch = if ($Agent.DeviceGuid -and $Patches.ContainsKey("$($Agent.DeviceGuid)")) { $Patches["$($Agent.DeviceGuid)"] } else { $null }
+        if ($Patch -and $Patch.PatchScanDate) {
+            # Atera's own patch scan is the better source: what the device actually still needs.
+            $UpdateSource = 'Atera patch scan'
+            $UpdateStatus = if ([int]$Patch.SecurityUpdatesWaiting -gt 0) { 'Behind' } elseif ([int]$Patch.SecurityUpdatesFailed -gt 0) { 'Failing' } else { 'Up to date' }
+        }
 
         # Hardware
         $MemoryGB = if ($Agent.Memory) { [int][math]::Round([double]$Agent.Memory / 1024) } else { $null }
@@ -210,22 +240,12 @@ function Get-AteraDeviceInsight {
         }
         if ($CpuYear) { $CpuSummary = "$CpuSummary (c. $CpuYear)" }
 
-        $Weak = [System.Collections.Generic.List[string]]::new()
-        $Limited = [System.Collections.Generic.List[string]]::new()
-        if ($null -ne $MemoryGB) {
-            if ($MemoryGB -le 4) { $Weak.Add("$MemoryGB GB RAM") } elseif ($MemoryGB -le 8) { $Limited.Add("$MemoryGB GB RAM") }
-        }
-        if ($null -ne $Cores -and $Cores -le 2) { $Weak.Add("$Cores-core CPU") }
-        if ($Very_Old) { $Weak.Add('very old CPU') }
-        elseif ($Entry_Level) { $Limited.Add('entry-level CPU') }
-        if (-not $IsServer -and $Win11 -eq 'No') { $Weak.Add('CPU too old for Windows 11') }
-        if ($CpuYear) {
-            $Age = $Now.Year - $CpuYear
-            if ($Age -ge 10) { $Weak.Add("CPU about $Age years old") } elseif ($Age -ge 7) { $Limited.Add("CPU about $Age years old") }
-        }
-        # One hard limit, or two lesser ones together (e.g. 8 GB RAM on an 8-year-old CPU), makes it weak.
-        $HardwareTier = if ($Weak.Count -gt 0 -or $Limited.Count -ge 2) { 'Weak' } elseif ($Limited.Count -gt 0) { 'Limited' } else { 'Good' }
-        $HardwareNotes = (@($Weak) + @($Limited)) -join '; '
+        # Baseline: a processor with at least four cores that can run Windows 11 (servers: four cores).
+        $Below = [System.Collections.Generic.List[string]]::new()
+        if ($null -ne $Cores -and $Cores -lt 4) { $Below.Add("$Cores-core processor") }
+        if (-not $IsServer -and $Win11 -eq 'No') { $Below.Add('processor cannot run Windows 11') }
+        $HardwareTier = if ($Below.Count -gt 0) { 'Below baseline' } else { 'Meets baseline' }
+        $HardwareNotes = @($Below) -join '; '
         if ($Os -match 'IoT') {
             # IoT editions run machines and kiosks, sized for one job: not rated like office computers.
             $HardwareTier = 'Special purpose'; $HardwareNotes = ''
@@ -239,6 +259,14 @@ function Get-AteraDeviceInsight {
             $FreePct = [int][math]::Round(100 * [double]$Disk.Free / [double]$Disk.Total)
             $FreeGB = [int][math]::Round([double]$Disk.Free / 1024)
         }
+
+        # Every fixed drive's fullness.
+        # Atera can list a drive more than once; tiny partitions (under 1 GB, e.g. recovery or EFI) are skipped.
+        $DriveRows = @(@($Agent.HardwareDisks) | Where-Object { $_ -and [double]$_.Total -ge 1024 } | Group-Object { "$($_.Drive)".TrimEnd('\').ToUpperInvariant() } | ForEach-Object { $_.Group[0] } | ForEach-Object {
+                [pscustomobject]@{ Drive = "$($_.Drive)".TrimEnd('\'); Percent = [int][math]::Round(100 * (1 - [double]$_.Free / [double]$_.Total)); FreeGB = [int][math]::Round([double]$_.Free / 1024); TotalGB = [int][math]::Round([double]$_.Total / 1024) }
+            } | Sort-Object Drive)
+        $Over75 = @($DriveRows | Where-Object { $_.Percent -gt 75 })
+        $Over90 = @($DriveRows | Where-Object { $_.Percent -gt 90 })
 
         $Seen = & $ToDate $Agent.LastSeen
         $Reboot = & $ToDate $Agent.LastRebootTime
@@ -259,15 +287,20 @@ function Get-AteraDeviceInsight {
         $Check = [System.Collections.Generic.List[string]]::new()
         if ($Support -eq 'Unsupported') { $Attention.Add("$VersionName no longer gets security updates") }
         elseif ($Support -eq 'Ending soon') { $Check.Add("$VersionName security updates end $Ends") }
-        if ($UpdateStatus -eq 'Behind') { $Attention.Add('behind on Windows updates') }
+        if ($UpdateStatus -eq 'Behind') {
+            $Attention.Add($(if ($Patch -and [int]$Patch.SecurityUpdatesWaiting -gt 0) { "$($Patch.SecurityUpdatesWaiting) security update$(if ([int]$Patch.SecurityUpdatesWaiting -ne 1) { 's' }) waiting" } else { 'behind on Windows updates' }))
+        } elseif ($UpdateStatus -eq 'Failing') { $Attention.Add('security update failing to install') }
+        if ($Patch -and $UpdateStatus -ne 'Failing' -and [int]$Patch.UpdatesFailed -gt 0) { $Check.Add("an update is failing to install ($($Patch.UpdatesFailing))") }
         if ($null -ne $DaysSeen -and $DaysSeen -gt 30) { $Attention.Add("not seen for $DaysSeen days") }
         elseif ($null -ne $DaysSeen -and $DaysSeen -gt 7) { $Check.Add("not seen for $DaysSeen days") }
         if ($null -ne $DaysReboot -and $DaysReboot -gt 30 -and ($null -eq $DaysSeen -or $DaysSeen -le 30)) {
             $Attention.Add($(if ($null -ne $DaysSeen -and $DaysSeen -gt 7) { "had not restarted for $DaysReboot days when last seen" } else { "not restarted for $DaysReboot days" }))
         }
-        if ($null -ne $FreePct -and $FreePct -lt 10) { $Attention.Add("$SystemDrive only $FreePct% free") } elseif ($null -ne $FreePct -and $FreePct -lt 20) { $Check.Add("$SystemDrive $FreePct% free") }
-        if ($ResourceDays -ge 5) { $Attention.Add("CPU or memory alerts on $ResourceDays days") } elseif ($ResourceDays -ge 2) { $Check.Add("CPU or memory alerts on $ResourceDays days") }
-        if ($HardwareTier -eq 'Weak') { $Attention.Add("weak hardware ($HardwareNotes)") } elseif ($HardwareTier -eq 'Limited') { $Check.Add("limited hardware ($HardwareNotes)") }
+        foreach ($D in $Over90) { $Attention.Add("$($D.Drive) $($D.Percent)% full") }
+        foreach ($D in @($Over75 | Where-Object { $_.Percent -le 90 })) { $Check.Add("$($D.Drive) $($D.Percent)% full") }
+        $Mem = if ($Agent.DeviceGuid -and $MemoryPressure.ContainsKey("g:$($Agent.DeviceGuid)")) { $MemoryPressure["g:$($Agent.DeviceGuid)"] } elseif ($MemoryPressure.ContainsKey("n:$($Agent.MachineName)")) { $MemoryPressure["n:$($Agent.MachineName)"] } else { $null }
+        if ($Mem) { $Check.Add("memory over 90% in working hours on $($Mem.Days) day$(if ($Mem.Days -ne 1) { 's' })") }
+        if ($HardwareTier -eq 'Below baseline') { $Attention.Add("below hardware baseline ($HardwareNotes)") }
         $IsHome = $Os -match '\bHome\b'
         if ($IsHome) { $Check.Add('Windows Home edition') }
         $Health = if ($Attention.Count -gt 0) { 'Needs attention' } elseif ($Check.Count -gt 0) { 'Check' } else { 'Good' }
@@ -286,6 +319,23 @@ function Get-AteraDeviceInsight {
         $Out.Windows11Ready = $Win11
         $Out.HardwareTier = $HardwareTier
         $Out.HardwareNotes = $HardwareNotes
+        $Out.UpdateSource = $UpdateSource
+        $Out.PatchScanDate = $(if ($Patch) { "$($Patch.PatchScanDate)" } else { '' })
+        $Out.SecurityUpdatesWaiting = $(if ($Patch) { [int]$Patch.SecurityUpdatesWaiting } else { $null })
+        $Out.OtherUpdatesWaiting = $(if ($Patch) { [int]$Patch.OtherUpdatesWaiting } else { $null })
+        $Out.UpdatesFailed = $(if ($Patch) { [int]$Patch.UpdatesFailed } else { $null })
+        $Out.LastSecurityUpdate = $(if ($Patch) { "$($Patch.LastSecurityUpdate)" } else { '' })
+        $Out.UpdatesWaiting = $(if ($Patch) { "$($Patch.UpdatesWaiting)" } else { '' })
+        $Out.DriversWaiting = $(if ($Patch) { "$($Patch.DriversWaiting)" } else { '' })
+        $Out.SecurityUpdatesFailed = $(if ($Patch) { [int]$Patch.SecurityUpdatesFailed } else { $null })
+        $Out.UpdatesFailing = $(if ($Patch) { "$($Patch.UpdatesFailing)" } else { '' })
+        $Out.Drives = (@($DriveRows | ForEach-Object { "$($_.Drive) $($_.Percent)% full" }) -join '; ')
+        $Out.FullestDrivePercent = $(if ($DriveRows.Count -gt 0) { [int](($DriveRows | Measure-Object Percent -Maximum).Maximum) } else { $null })
+        $Out.DrivesOver75 = (@($Over75 | ForEach-Object { "$($_.Drive) $($_.Percent)%" }) -join '; ')
+        $Out.DrivesOver90 = (@($Over90 | ForEach-Object { "$($_.Drive) $($_.Percent)%" }) -join '; ')
+        $Out.MemoryHighDays = $(if ($Mem) { [int]$Mem.Days } else { 0 })
+        $Out.MemoryPeakPercent = $(if ($Mem) { [int]$Mem.PeakPercent } else { $null })
+        $Out.MemoryTopProcess = $(if ($Mem) { "$($Mem.TopProcess)" } else { '' })
         $Out.SystemDiskFreePercent = $FreePct
         $Out.SystemDiskFreeGB = $FreeGB
         $Out.DaysSinceSeen = $DaysSeen

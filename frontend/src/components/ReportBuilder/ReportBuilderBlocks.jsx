@@ -107,7 +107,7 @@ export const PRESET_TOPICS = [
       { label: 'Health and why (table)', preset: 'ateradevicehealth' },
       { label: 'Update status (donut)', preset: 'ateraupdatestatus' },
       { label: 'Windows support (table)', preset: 'ateraupdatestable' },
-      { label: 'Hardware rating (donut)', preset: 'aterahardwaretier' },
+      { label: 'Hardware baseline (donut)', preset: 'aterahardwaretier' },
     ],
   },
   {
@@ -648,10 +648,10 @@ export const BLOCK_PRESETS = {
   aterahardwaretier: () => ({
     type: 'chart',
     static: true,
-    title: 'Hardware rating',
+    title: 'Hardware baseline',
     chartKind: 'donut',
     chartSource: source('AteraAgents', { field: 'HardwareTier' }),
-    chartCaption: 'Good, limited or weak hardware',
+    chartCaption: 'Computers meeting the baseline: a quad-core processor that can run Windows 11',
     chartCentreLabel: 'Computers',
     chartMax: '',
   }),

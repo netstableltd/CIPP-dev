@@ -86,6 +86,15 @@ function Get-CIPPReportFindings {
             Add-Finding 'domain-email-security' 'Fix' 'Microsoft 365' 'Domains with weak email security' "$(& $Plural $WeakDomains.Count 'domain') are missing SPF, DMARC or DKIM, so they are easier to spoof." @($WeakDomains | ForEach-Object { "$($_.domain): $(@($_.issues) -join ', ')" }) `
                 "Finish the email security settings (SPF, DKIM and DMARC) on $(& $The $WeakDomains.Count 'domain') listed, including any domains you own but do not use, so they cannot be used to send fake email in your name."
         }
+        $Br = $Data.Breaches
+        if ($Br -and $Br.Current -gt 0) {
+            $Cur = @($Br.Accounts | Where-Object { $_.current -ne $false })
+            Add-Finding 'accounts-breached' 'Fix' 'Microsoft 365' 'Email addresses in known data breaches' "$(& $Plural $Cur.Count 'current address') appear in known breaches of other websites ($($Br.WithPasswords) where passwords were exposed). Make sure MFA is enforced for them and they don't reuse passwords." @($Cur | ForEach-Object { "$($_.email): $(@($_.breaches | ForEach-Object { $_.title }) -join ', ')" }) `
+                "Ask $(& $The $Cur.Count 'person') whose email address appears in a data breach to make sure they don't use the same password anywhere else, and that multi-factor authentication is on for their account. The breaches were of other websites, not your Microsoft 365." @($Cur | ForEach-Object { $_.email })
+        }
+        if ($Br -and $Br.Source -eq 'None' -and $Br.Error) {
+            Add-Finding 'breach-check-failed' 'Info' 'Microsoft 365' 'Breach check failed' "The breach lookup did not run: $($Br.Error)"
+        }
         if ($Data.M365.Unassigned -gt 0) {
             $Spare = @($Data.M365.Licences | Where-Object { $_.available -gt 0 } | ForEach-Object { "$($_.name): $($_.available) unassigned" })
             Add-Finding 'licences-unassigned' 'Info' 'Microsoft 365' 'Paid licences not assigned' "$(& $Plural $Data.M365.Unassigned 'licence') bought but not assigned. A saving, or seats for planned starters?" $Spare
@@ -110,24 +119,32 @@ function Get-CIPPReportFindings {
                 "Move $(& $The @($D.SupportEnding).Count 'computer') on a Windows version that is about to stop receiving security updates to the current version. This is a free update."
         }
         if (@($D.UpdatesBehind).Count -gt 0) {
-            Add-Finding 'devices-updates-behind' 'Fix' 'Updates' 'Behind on Windows updates' "$(& $Plural @($D.UpdatesBehind).Count 'device') are on an older Windows build than the rest of our managed devices on the same version. Check patching and restarts." @($D.UpdatesBehind | ForEach-Object { "$($_.name) ($($_.osBuild), current $($_.latestBuild))" }) `
+            Add-Finding 'devices-updates-behind' 'Fix' 'Updates' 'Behind on Windows updates' "$(& $Plural @($D.UpdatesBehind).Count 'device') still need security updates (Atera patch scan, or an older build than the rest of our managed devices where there is no scan). Check patching and restarts." @($D.UpdatesBehind | ForEach-Object { if ($_.updateSource -eq 'Atera patch scan') { "$($_.name) ($($_.securityWaiting) security update$(if ([int]$_.securityWaiting -ne 1) { 's' }) waiting: $($_.updatesWaiting))" } else { "$($_.name) ($($_.osBuild), current $($_.latestBuild))" } }) `
                 "Bring $(& $The @($D.UpdatesBehind).Count 'computer') that $(& $Are @($D.UpdatesBehind).Count) behind on Windows updates up to date. We will schedule this with the users." @($D.UpdatesBehind | ForEach-Object { $_.name })
         }
-        if (@($D.Overloaded).Count -gt 0) {
-            Add-Finding 'devices-overloaded' 'Fix' 'Device health' 'Regularly overloaded devices' "$(& $Plural @($D.Overloaded).Count 'device') raised CPU or memory alerts on 5 or more days in the last 90. Users are likely feeling it." @($D.Overloaded | ForEach-Object { "$($_.name) ($($_.resourceAlertDays) days$(if ($_.memoryGB) { ", $($_.memoryGB) GB RAM" }))" }) `
-                "Upgrade or replace $(& $The @($D.Overloaded).Count 'computer') that regularly $(if (@($D.Overloaded).Count -eq 1) { 'runs' } else { 'run' }) out of processing power or memory. A memory upgrade is often enough."
+        if (@($D.UpdatesFailing).Count -gt 0) {
+            Add-Finding 'devices-updates-failing' 'Fix' 'Updates' 'Updates failing to install' "$(& $Plural @($D.UpdatesFailing).Count 'device') have updates that failed to install (Atera patch scan)." @($D.UpdatesFailing | ForEach-Object { "$($_.name): $($_.updatesFailing)" }) `
+                "Fix the updates that failed to install on $(& $The @($D.UpdatesFailing).Count 'computer')." @($D.UpdatesFailing | ForEach-Object { $_.name })
         }
-        if (@($D.Weak).Count -gt 0) {
-            Add-Finding 'devices-weak' 'Info' 'Device health' 'Weak hardware' "$(& $Plural @($D.Weak).Count 'device') have weak hardware - candidates for the replacement plan." @($D.Weak | ForEach-Object { "$($_.name) ($($_.hardwareNotes))" }) `
-                "Plan to replace $(& $The @($D.Weak).Count 'computer') with weak or ageing hardware over the coming year, so it can be budgeted rather than urgent."
+        if (@($D.MemoryPressure).Count -gt 0) {
+            $Mp = @($D.MemoryPressure)
+            Add-Finding 'devices-memory' 'Info' 'Device health' 'Memory over 90% in working hours' "$(& $Plural $Mp.Count 'device') ran above 90% memory during working hours this period (Atera memory alerts). A memory upgrade is the usual fix." @($Mp | ForEach-Object { "$($_.name) ($($_.memoryDays) day$(if ($_.memoryDays -ne 1) { 's' }), peak $($_.memoryPeak)%$(if ($_.memoryGB) { ", $($_.memoryGB) GB RAM" })$(if ($_.memoryTopProcess) { ", mostly $($_.memoryTopProcess)" }))" }) `
+                "Add more memory (RAM) to $(& $The $Mp.Count 'computer') that ran out of memory during the working day. Upgrading memory is usually inexpensive and makes a noticeable difference." @($Mp | ForEach-Object { "$($_.name)$(if ($_.memoryGB) { " ($($_.memoryGB) GB now)" })" })
+        }
+        $Full = @($D.StorageOver75)
+        if ($Full.Count -gt 0) {
+            $Critical = @($Full | Where-Object { $_.drivesOver90 })
+            Add-Finding 'devices-storage' $(if ($Critical.Count -gt 0) { 'Fix' } else { 'Info' }) 'Device health' 'Drives over 75% full' "$(& $Plural $Full.Count 'device') have a drive over 75% full$(if ($Critical.Count -gt 0) { "; $($Critical.Count) over 90%" })." @($Full | ForEach-Object { "$($_.name) ($($_.drivesOver75))" }) `
+                "Free up space, by deleting or archiving old files, or fit a bigger drive in $(& $The $Full.Count 'computer') with a drive more than three-quarters full." @($Full | ForEach-Object { "$($_.name) ($($_.drivesOver75 -replace '%', '% full'))" })
+        }
+        if (@($D.BelowBaseline).Count -gt 0) {
+            $Bb = @($D.BelowBaseline)
+            Add-Finding 'devices-below-baseline' 'Info' 'Device health' 'Below the hardware baseline' "$(& $Plural $Bb.Count 'device') are below the baseline (a quad-core processor that can run Windows 11)." @($Bb | ForEach-Object { "$($_.name) ($($_.hardwareNotes))" }) `
+                "Plan to replace or upgrade $(& $The $Bb.Count 'computer') below our minimum standard: a processor with at least four cores that can run Windows 11."
         }
         if (@($D.HomeEdition).Count -gt 0) {
             Add-Finding 'devices-home-edition' 'Info' 'Device health' 'Windows Home edition on business devices' 'Home edition cannot join Entra ID or a domain and has no BitLocker management. An upgrade to Pro is a licence key change.' @($D.HomeEdition | ForEach-Object { $_.name }) `
                 "Upgrade $(& $The @($D.HomeEdition).Count 'computer') running Windows Home to Windows Pro, so $(if (@($D.HomeEdition).Count -eq 1) { 'it' } else { 'they' }) can be managed and encrypted like the rest."
-        }
-        if ($D.LowDisk.Count -gt 0) {
-            Add-Finding 'devices-low-disk' 'Fix' 'Devices' 'System drive under 10% free' "$(& $Plural $D.LowDisk.Count 'device') are nearly out of disk space on C:." @($D.LowDisk | ForEach-Object { "$($_.name) ($($_.freePct)% free)" }) `
-                "Free up or add storage on $(& $The $D.LowDisk.Count 'computer') that $(& $Are $D.LowDisk.Count) almost full."
         }
         if ($D.NotRebooted30.Count -gt 0) {
             Add-Finding 'devices-no-reboot' 'Fix' 'Devices' 'Online but not restarted for 30+ days' "$(& $Plural $D.NotRebooted30.Count 'device') have pending updates that need a restart." @($D.NotRebooted30 | ForEach-Object { "$($_.name) ($($_.daysSinceReboot) days)" }) `

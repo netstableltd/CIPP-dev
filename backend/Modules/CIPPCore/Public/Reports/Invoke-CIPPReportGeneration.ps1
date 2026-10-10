@@ -55,6 +55,12 @@ function Invoke-CIPPReportGeneration {
     $Settings = Get-CIPPReportSettings
     $PeriodInfo = Get-CIPPReportPeriod -Period $Period
     $Data = Get-CIPPCustomerReportData -TenantFilter $Domain -Period $PeriodInfo
+    # Breach lookup (live, with CIPP's cached results as a fallback) - only for tenants CIPP can read.
+    $Data.Breaches = $null
+    if ($Data.M365) {
+        $BreachUsers = @(try { New-CIPPDbRequest -TenantFilter $Domain -Type 'Users' } catch { @() })
+        $Data.Breaches = Get-CIPPReportBreachData -TenantFilter $Domain -Users $BreachUsers
+    }
 
     $AteraEnabled = $false
     try {

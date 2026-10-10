@@ -188,6 +188,15 @@ function Get-CIPPCustomerReportData {
         }
         $Field = { param($Row, $Name) if ($Row.PSObject.Properties.Name -contains $Name) { $Row.$Name } }
         $PeriodAlerts = @($AlertsAll | Where-Object { $c = ConvertTo-Utc $_.Created; $c -and $c -ge $Period.Start -and $c -lt $Period.End })
+        # Memory above 90% during working hours (weekdays 08:00-18:00 in the reports time zone) in the period.
+        $ReportZone = 'Europe/London'
+        try { $ReportZone = (Get-CIPPReportSettings).TimeZone } catch {}
+        $PeriodMemory = @{}
+        if (Get-Command Get-AteraMemoryPressure -ErrorAction SilentlyContinue) {
+            foreach ($M in @(Get-AteraMemoryPressure -Alerts $AlertsAll -TimeZone $ReportZone -From $Period.Start -To $Period.End)) {
+                $PeriodMemory[$(if ($M.DeviceGuid) { "g:$($M.DeviceGuid)" } else { "n:$($M.DeviceName)" })] = $M
+            }
+        }
         $DeviceRows = foreach ($Agent in $Agents) {
             $LastSeen = ConvertTo-Utc $Agent.LastSeen
             $LastReboot = ConvertTo-Utc $Agent.LastRebootTime
@@ -219,6 +228,24 @@ function Get-CIPPCustomerReportData {
                 updateStatus      = "$(if (& $Field $Agent 'UpdateStatus') { & $Field $Agent 'UpdateStatus' } else { 'Unknown' })"
                 latestBuild       = "$(& $Field $Agent 'LatestBuild')"
                 hardwareTier      = "$(& $Field $Agent 'HardwareTier')"
+                cores             = $(if ($Agent.ProcessorCoresCount) { [int]$Agent.ProcessorCoresCount } else { $null })
+                updateSource      = "$(& $Field $Agent 'UpdateSource')"
+                patchScanDate     = (ConvertTo-Utc (& $Field $Agent 'PatchScanDate'))
+                securityWaiting   = (& $Field $Agent 'SecurityUpdatesWaiting')
+                otherWaiting      = (& $Field $Agent 'OtherUpdatesWaiting')
+                updatesFailed     = (& $Field $Agent 'UpdatesFailed')
+                lastSecurityUpdate = "$(& $Field $Agent 'LastSecurityUpdate')"
+                updatesWaiting    = "$(& $Field $Agent 'UpdatesWaiting')"
+                updatesFailing    = "$(& $Field $Agent 'UpdatesFailing')"
+                driversWaiting    = "$(& $Field $Agent 'DriversWaiting')"
+                securityFailed    = (& $Field $Agent 'SecurityUpdatesFailed')
+                drives            = "$(& $Field $Agent 'Drives')"
+                drivesOver75      = "$(& $Field $Agent 'DrivesOver75')"
+                drivesOver90      = "$(& $Field $Agent 'DrivesOver90')"
+                fullestDrive      = (& $Field $Agent 'FullestDrivePercent')
+                memoryDays        = $(if ($M = $PeriodMemory["g:$($Agent.DeviceGuid)"] ?? $PeriodMemory["n:$Name"]) { [int]$M.Days } else { 0 })
+                memoryPeak        = $(if ($M = $PeriodMemory["g:$($Agent.DeviceGuid)"] ?? $PeriodMemory["n:$Name"]) { [int]$M.PeakPercent } else { $null })
+                memoryTopProcess  = $(if ($M = $PeriodMemory["g:$($Agent.DeviceGuid)"] ?? $PeriodMemory["n:$Name"]) { "$($M.TopProcess)" } else { '' })
                 hardwareNotes     = "$(& $Field $Agent 'HardwareNotes')"
                 win11Ready        = "$(& $Field $Agent 'Windows11Ready')"
                 isHome            = [bool](& $Field $Agent 'IsHomeEdition')
@@ -261,12 +288,12 @@ function Get-CIPPCustomerReportData {
                 UpdatesBehind  = @($Active | Where-Object { $_.updateStatus -eq 'Behind' } | Sort-Object name)
                 UpdatesUnknown = @($Active | Where-Object { $_.updateStatus -notin @('Up to date', 'Behind') }).Count
                 SupportEnding  = @($Active | Where-Object { $_.support -eq 'Ending soon' } | Sort-Object name)
-                Overloaded     = @($Active | Where-Object { $_.resourceAlertDays -ge 5 } | Sort-Object resourceAlertDays -Descending)
-                Busy           = @($Active | Where-Object { $_.resourceAlertDays -ge 2 -and $_.resourceAlertDays -lt 5 } | Sort-Object resourceAlertDays -Descending)
-                Weak           = @($Active | Where-Object { $_.hardwareTier -eq 'Weak' } | Sort-Object name)
-                Limited        = @($Active | Where-Object { $_.hardwareTier -eq 'Limited' } | Sort-Object name)
+                BelowBaseline  = @($Active | Where-Object { $_.hardwareTier -eq 'Below baseline' } | Sort-Object name)
+                MemoryPressure = @($Active | Where-Object { $_.memoryDays -gt 0 } | Sort-Object memoryDays -Descending)
+                StorageOver75  = @($Active | Where-Object { $_.drivesOver75 } | Sort-Object { - [int]$_.fullestDrive })
+                UpdatesFailing = @($Active | Where-Object { [int]$_.securityFailed -gt 0 } | Sort-Object name)
+                PatchScanned   = @($Active | Where-Object { $_.updateSource -eq 'Atera patch scan' }).Count
                 HomeEdition    = @($Active | Where-Object isHome | Sort-Object name)
-                DiskWarning    = @($Active | Where-Object { $null -ne $_.freePct -and $_.freePct -ge 10 -and $_.freePct -lt 20 } | Sort-Object freePct)
                 NotWin11Ready  = @($Active | Where-Object { $_.os -eq 'Windows 10' -and $_.win11Ready -eq 'No' } | Sort-Object name)
                 AlertsByDevice = @($DeviceRows | Where-Object { $_.alertsInPeriod -gt 0 } | Sort-Object alertsInPeriod -Descending)
             }

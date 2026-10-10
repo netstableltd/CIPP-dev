@@ -11,7 +11,9 @@ BeforeAll {
     $Modules = Join-Path $RepoRoot 'Modules'
     Get-ChildItem (Get-ChildItem $Modules -Recurse -Directory -Filter 'Reporting' | Select-Object -First 1).FullName -Filter *.ps1 | ForEach-Object { . $_.FullName }
     . (Get-ChildItem $Modules -Recurse -Filter 'ConvertTo-CippReportPdf.ps1' | Select-Object -First 1).FullName
-    . (Get-ChildItem $Modules -Recurse -Filter 'Get-AteraDeviceInsight.ps1' | Select-Object -First 1).FullName
+    foreach ($Name in 'Get-AteraDeviceInsight', 'Get-AteraMemoryPressure', 'ConvertTo-AteraPatchSummary', 'Get-CIPPReportBreachData') {
+        . (Get-ChildItem $Modules -Recurse -Filter "$Name.ps1" | Select-Object -First 1).FullName
+    }
     foreach ($Name in 'Get-CIPPReportBaselineSection', 'Get-CIPPReportPeriod', 'Get-CIPPCustomerReportData', 'Get-CIPPReportFindings', 'Build-CippCustomerReportTree', 'Build-CippReportPrecheckTree', 'Invoke-CIPPReportGeneration', 'ConvertFrom-CIPPReportSectionList', 'Get-CIPPReportSectionCatalog', 'Resolve-CIPPReportSections') {
         . (Get-ChildItem $Modules -Recurse -Filter "$Name.ps1" | Select-Object -First 1).FullName
     }
@@ -56,13 +58,14 @@ BeforeAll {
         )
         AteraCustomer   = @(@{ CustomerID = 5; CustomerName = 'Contoso' })
         AteraAgents     = @(
-            @{ MachineName = 'PC1'; DeviceType = 'PC'; OS = 'Microsoft Windows 11 Pro'; Online = $true; LastSeen = '2026-10-09T10:00:00Z'; LastRebootTime = '2026-08-01T00:00:00Z'; HardwareDisks = @(@{ Drive = 'C:'; Free = 5; Total = 100 }); LastLoginUser = 'bob' }
-            @{ MachineName = 'PC2'; DeviceType = 'PC'; OS = 'Microsoft Windows 10 Pro'; Online = $false; LastSeen = '2026-10-08T10:00:00Z'; LastRebootTime = '2026-10-07T00:00:00Z'; HardwareDisks = @(@{ Drive = 'C:'; Free = 60; Total = 100 }) }
+            @{ MachineName = 'PC1'; DeviceType = 'PC'; OS = 'Microsoft Windows 11 Pro'; Online = $true; LastSeen = '2026-10-09T10:00:00Z'; LastRebootTime = '2026-08-01T00:00:00Z'; HardwareDisks = @(@{ Drive = 'C:'; Free = 5000; Total = 100000 }); LastLoginUser = 'bob' }
+            @{ MachineName = 'PC2'; DeviceType = 'PC'; OS = 'Microsoft Windows 10 Pro'; Online = $false; LastSeen = '2026-10-08T10:00:00Z'; LastRebootTime = '2026-10-07T00:00:00Z'; HardwareDisks = @(@{ Drive = 'C:'; Free = 60000; Total = 100000 }) }
             @{ MachineName = 'OLD'; DeviceType = 'PC'; OS = 'Microsoft Windows 7 Professional'; Online = $false; LastSeen = '2025-01-01T00:00:00Z'; LastRebootTime = '2025-01-01T00:00:00Z'; HardwareDisks = @() }
         )
         AteraAlerts     = @(
             @{ Created = '2026-09-10T00:00:00Z'; Severity = 'Warning'; Title = 'Disk Usage'; DeviceName = 'PC1' }
             @{ Created = '2026-09-11T00:00:00Z'; Severity = 'Critical'; Title = 'Disk Usage'; DeviceName = 'PC1' }
+            @{ Created = '2026-09-15T10:00:00Z'; Severity = 'Warning'; Title = 'Memory Usage'; DeviceName = 'PC1'; AlertMessage = "The Memory Usage 96.10% is greater than the threshold of 90.00% for 9.00 minutes.`nTop 3 processes triggering the alert: chrome: 3,000.00 MB, svchost: 500.00 MB and Teams: 400.00 MB" }
             @{ Created = '2026-10-02T00:00:00Z'; Severity = 'Warning'; Title = 'Outside period'; DeviceName = 'PC2' }
         )
         AteraTickets    = @(
@@ -135,7 +138,7 @@ Describe 'Get-CIPPCustomerReportData' {
         @($Data.Atera.Devices.NotRebooted30).name | Should -Be @('PC1')
     }
     It 'keeps alerts and tickets to the period' {
-        $Data.Atera.Alerts.Total | Should -Be 2
+        $Data.Atera.Alerts.Total | Should -Be 3
         $Data.Atera.Tickets.Opened | Should -Be 2
         $Data.Atera.Tickets.MinutesLogged | Should -Be 30
         $Data.Atera.Tickets.OpenNow | Should -Be 1
@@ -155,7 +158,7 @@ Describe 'Get-CIPPReportFindings' {
         @{ Id = 'licences-unassigned'; Severity = 'Info' }
         @{ Id = 'devices-stale'; Severity = 'Fix' }
         @{ Id = 'devices-unsupported-os'; Severity = 'Fix' }
-        @{ Id = 'devices-low-disk'; Severity = 'Fix' }
+        @{ Id = 'devices-storage'; Severity = 'Fix' }
         @{ Id = 'devices-no-reboot'; Severity = 'Fix' }
         @{ Id = 'tickets-old-urgent'; Severity = 'Fix' }
         @{ Id = 'tickets-no-time'; Severity = 'Fix' }
@@ -167,7 +170,7 @@ Describe 'Get-CIPPReportFindings' {
     It 'keeps internal-only findings out of the customer wording' {
         $ById['devices-stale'].Customer | Should -BeNullOrEmpty
         $ById['tickets-no-time'].Customer | Should -BeNullOrEmpty
-        $ById['devices-low-disk'].Customer | Should -Not -BeNullOrEmpty
+        $ById['devices-storage'].Customer | Should -Not -BeNullOrEmpty
     }
     It 'blocks when the tenant has a connection error or no Atera mapping' {
         $Broken = Get-CIPPReportFindings -Data @{ GraphError = 'AADSTS65001'; M365 = $null; Atera = $null } -AteraEnabled $true
@@ -240,7 +243,7 @@ Describe 'Report sections' {
         $D.Sections | Should -Be @('devices')
         $B = Resolve-CIPPReportSections -TenantFilter 'contoso.com'
         $B.Source | Should -Be 'BuiltIn'
-        $B.Sections.Count | Should -Be 11
+        $B.Sections.Count | Should -Be 12
     }
     It 'loads Report Builder templates for the tenant and reports deleted ones' {
         Mock Get-CIPPAzDataTableEntity { if ($Filter -match "RowKey eq 'abc-1'") { $script:TemplateRow } }
@@ -293,9 +296,52 @@ Describe 'Computers, updates, purchases and email' {
     It 'renders every default section to a PDF in the default order' {
         $T = Build-CippCustomerReportTree -Data $Data -Findings $F
         $Titles = & $PageTitles $T.Blocks
-        $Titles | Should -Be @('Summary', 'Your Computers', 'Windows Updates', 'Computer Health', 'Monitoring', 'Support', 'Purchases', 'Microsoft 365 Security', 'Users & Licences', 'Email & Domains', 'Recommendations')
+        $Titles | Should -Be @('Summary', 'Your Computers', 'Updates', 'Computer Health', 'Monitoring', 'Support', 'Purchases', 'Microsoft 365 Security', 'Users & Licences', 'Email & Domains', 'Recommendations')
         $Bytes = ConvertTo-CippReportPdf -Blocks $T.Blocks -Variables $T.Variables -TenantName 'Contoso' -ReportName 'T'
         [Text.Encoding]::ASCII.GetString($Bytes[0..4]) | Should -Be '%PDF-'
+    }
+    It 'nudges for memory over 90% in working hours, drives over 75% full and hardware below the baseline' {
+        $D = $Data.Atera.Devices
+        @($D.MemoryPressure).name | Should -Be @('PC1')
+        $D.MemoryPressure[0].memoryPeak | Should -Be 96
+        $D.MemoryPressure[0].memoryTopProcess | Should -Be 'chrome'
+        @($D.StorageOver75).name | Should -Contain 'PC1'
+        ($F | Where-Object Id -EQ 'devices-memory').Customer | Should -Match '^Add more memory \(RAM\) to the computer'
+        ($F | Where-Object Id -EQ 'devices-storage').Customer | Should -Match 'fit a bigger drive'
+        ($F | Where-Object Id -EQ 'devices-storage').Severity | Should -Be 'Fix'
+    }
+    It 'shows breached addresses without passwords, current accounts first, with HIBP details' {
+        $script:CippHibpCatalog = @{ 'linkedin' = @{ title = 'LinkedIn'; date = '2012-05-05'; classes = @('Email addresses', 'Passwords') }; 'adobe' = @{ title = 'Adobe'; date = '2013-10-04'; classes = @('Email addresses', 'Password hints') } }
+        $script:CippHibpCatalogAt = Get-Date
+        function Get-BreachInfo { param($TenantFilter) @(
+                [pscustomobject]@{ email = 'Bob@contoso.com'; password = 'SECRET1'; sources = 'LinkedIn'; clientDomain = 'contoso.com' }
+                [pscustomobject]@{ email = 'bob@contoso.com'; password = 'SECRET2'; sources = 'Adobe'; clientDomain = 'contoso.com' }
+                [pscustomobject]@{ email = 'gone@contoso.com'; password = 'SECRET3'; sources = @('Adobe'); clientDomain = 'contoso.com' }
+            ) }
+        $Br = Get-CIPPReportBreachData -TenantFilter 'contoso.com' -Users @([pscustomobject]@{ userPrincipalName = 'bob@contoso.com'; mail = 'bob@contoso.com' })
+        $Br.Source | Should -Be 'Live'
+        $Br.Total | Should -Be 2
+        $Br.Current | Should -Be 1
+        $Br.WithPasswords | Should -Be 1
+        $Br.Accounts[0].email | Should -Be 'bob@contoso.com'
+        @($Br.Accounts[0].breaches).title | Should -Be @('Adobe', 'LinkedIn')
+        $Br.Accounts[1].current | Should -BeFalse
+        ($Br | ConvertTo-Json -Depth 10) | Should -Not -Match 'SECRET'
+        $D2 = $Data.Clone(); $D2.Breaches = $Br
+        $F2 = Get-CIPPReportFindings -Data $D2 -AteraEnabled $true
+        ($F2 | Where-Object Id -EQ 'accounts-breached').CustomerItems | Should -Be @('bob@contoso.com')
+        $T = Build-CippCustomerReportTree -Data $D2 -Findings $F2 -Sections @('breaches')
+        $Json = $T.Blocks | ConvertTo-Json -Depth 10
+        $Json | Should -Match 'Adobe \(2013\), LinkedIn \(2012\)'
+        $Json | Should -Match 'No longer in use'
+        $Json | Should -Not -Match 'SECRET'
+    }
+    It 'falls back to CIPP''s cached breach results when the live lookup fails' {
+        function Get-BreachInfo { throw 'unreachable' }
+        Mock Get-CIPPAzDataTableEntity { @([pscustomobject]@{ PartitionKey = 'contoso.com'; RowKey = 'contoso.com'; Timestamp = [datetime]'2026-10-01'; breaches = '[{"email":"bob@contoso.com","password":"X","sources":"LinkedIn"}]' }) } -ParameterFilter { $TableName -eq 'UserBreaches' }
+        $Br = Get-CIPPReportBreachData -TenantFilter 'contoso.com'
+        $Br.Source | Should -Be 'Cache'
+        $Br.Total | Should -Be 1
     }
     It 'adds the Microsoft 365 baseline only when asked for, as given' {
         $Baseline = @{ Blocks = @([ordered]@{ type = 'page'; title = 'Microsoft 365 Baseline' }, [ordered]@{ type = 'blank'; content = '<p>exec</p>' }) }

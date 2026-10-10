@@ -14,7 +14,7 @@ Atera is an RMM and PSA. The integration copies each mapped customer's devices, 
 | Collection | Contents |
 | --- | --- |
 | AteraCustomer | The Atera customer record |
-| AteraAgents | Every device, with the insights below |
+| AteraAgents | Every device, with the insights below, including its patch scan (Atera's installed and available updates; two API calls per device of a mapped customer) |
 | AteraAlerts | Alerts from the last 90 days |
 | AteraTickets | Tickets from the last 45 days, plus every open or pending ticket. `TimeLoggedMinutes` is added (Atera leaves `TotalDurationMinutes` at 0) |
 | AteraContracts | Every contract |
@@ -28,12 +28,15 @@ Each device gets plain-English verdicts that the reports use and that the Report
 
 | Field | Meaning |
 | --- | --- |
-| UpdateStatus | **Up to date**, **Behind** or **Unknown**. Compares the device's Windows build revision with the newest revision that is common (2+ devices and 10%) among recently seen devices on the same build across the whole Atera account. |
+| UpdateStatus | **Up to date**, **Behind** (security updates waiting), **Failing** (a security update failed to install) or **Unknown**, from Atera's patch scan. Devices without a scan are compared with the Windows build 40% of recently seen devices in the account have reached. |
+| SecurityUpdatesWaiting, UpdatesWaiting, DriversWaiting, UpdatesFailing, LastSecurityUpdate, PatchScanDate | The patch scan: updates still to install (drivers listed separately as optional; antivirus definitions ignored), failures, and the date of the last security update. |
 | WindowsVersion, WindowsSupport, WindowsSupportEnds | The Windows version, and whether it still receives security fixes (Supported / Ending soon within 90 days / Unsupported), by build and edition, from `Config/WindowsLifecycle.json`. Update that file as Microsoft releases new versions. |
-| HardwareTier, HardwareNotes | **Good**, **Limited** or **Weak**. Weak: 4 GB RAM or less, 2 cores or fewer, a CPU too old for Windows 11 or about 10+ years old, or two lesser limits together (8 GB RAM, an entry-level CPU, a CPU about 7+ years old). |
+| HardwareTier, HardwareNotes | **Meets baseline** or **Below baseline**: the baseline is a processor with at least four cores that can run Windows 11 (servers: four cores). IoT editions are **Special purpose**. |
 | CpuSummary, CpuYear, Windows11Ready, MemoryGB | The processor family and generation, its approximate launch year, and whether it can run Windows 11. |
+| Drives, DrivesOver75, DrivesOver90, FullestDrivePercent | How full every drive is (duplicates and partitions under 1 GB ignored). Over 75% full is a nudge to clear space or fit a bigger drive. |
+| MemoryHighDays, MemoryPeakPercent, MemoryTopProcess | Weekdays (08:00-18:00 in the Reports time zone) with a memory alert above 90%, the highest reading and the process using most memory - a nudge to add RAM. |
 | SystemDiskFreePercent, DaysSinceSeen, DaysSinceReboot | Disk space and ages. |
-| ResourceAlertDays, DiskAlertDays, AlertCount | Days with CPU/memory or disk alerts in the last 90 days, and the total alerts. 5+ resource alert days marks a device as regularly overloaded. |
+| ResourceAlertDays, DiskAlertDays, AlertCount | Days with CPU/memory or disk alerts in the last 90 days, and the total alerts. |
 | IsHomeEdition | Windows Home, which cannot be managed like Pro. |
 | HealthStatus, HealthNotes | **Good**, **Check** or **Needs attention**, with the reasons. |
 

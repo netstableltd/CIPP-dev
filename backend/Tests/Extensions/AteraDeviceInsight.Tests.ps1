@@ -7,7 +7,9 @@
 
 BeforeAll {
     $RepoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSCommandPath))
-    . (Get-ChildItem -Path (Join-Path $RepoRoot 'Modules') -Recurse -Filter 'Get-AteraDeviceInsight.ps1' | Select-Object -First 1 -ExpandProperty FullName)
+    foreach ($Name in 'Get-AteraDeviceInsight', 'Get-AteraMemoryPressure', 'ConvertTo-AteraPatchSummary') {
+        . (Get-ChildItem -Path (Join-Path $RepoRoot 'Modules') -Recurse -Filter "$Name.ps1" | Select-Object -First 1 -ExpandProperty FullName)
+    }
     $script:Now = [datetime]::new(2026, 10, 9, 12, 0, 0, [DateTimeKind]::Utc)
     $script:Lifecycle = Get-Content (Join-Path $RepoRoot 'Config/WindowsLifecycle.json') -Raw | ConvertFrom-Json
 
@@ -92,13 +94,12 @@ Describe 'Get-AteraDeviceInsight' {
         $R[0].Windows11Ready | Should -Be $Ready
     }
 
-    It 'grades hardware: <Case>' -ForEach @(
-        @{ Case = 'modern with 16 GB is good'; Cpu = '12th Gen Intel(R) Core(TM) i5-12400'; Cores = 6; MB = 16384; Tier = 'Good' }
-        @{ Case = '8 GB alone is limited'; Cpu = '12th Gen Intel(R) Core(TM) i5-12400'; Cores = 6; MB = 8192; Tier = 'Limited' }
-        @{ Case = '8 GB on an 8-year-old CPU is weak'; Cpu = 'Intel(R) Core(TM) i5-8500T CPU @ 2.10GHz'; Cores = 6; MB = 8059; Tier = 'Weak' }
-        @{ Case = '4 GB is weak'; Cpu = '12th Gen Intel(R) Core(TM) i5-12400'; Cores = 6; MB = 4096; Tier = 'Weak' }
-        @{ Case = 'two cores is weak'; Cpu = 'Intel(R) Pentium(R) CPU N3540 @ 2.16GHz'; Cores = 2; MB = 8192; Tier = 'Weak' }
-        @{ Case = 'a CPU too old for Windows 11 is weak'; Cpu = 'Intel(R) Core(TM) i7-6700 CPU @ 3.40GHz'; Cores = 4; MB = 16384; Tier = 'Weak' }
+    It 'checks the hardware baseline (quad-core, can run Windows 11): <Case>' -ForEach @(
+        @{ Case = 'modern six-core meets it'; Cpu = '12th Gen Intel(R) Core(TM) i5-12400'; Cores = 6; MB = 16384; Tier = 'Meets baseline' }
+        @{ Case = 'memory does not matter'; Cpu = 'Intel(R) Core(TM) i5-8500T CPU @ 2.10GHz'; Cores = 6; MB = 4096; Tier = 'Meets baseline' }
+        @{ Case = 'a quad-core Ryzen 3 meets it'; Cpu = 'AMD Ryzen 3 3200G with Radeon Vega Graphics'; Cores = 4; MB = 8192; Tier = 'Meets baseline' }
+        @{ Case = 'two cores is below'; Cpu = 'Intel(R) Pentium(R) CPU N3540 @ 2.16GHz'; Cores = 2; MB = 8192; Tier = 'Below baseline' }
+        @{ Case = 'a CPU that cannot run Windows 11 is below'; Cpu = 'Intel(R) Core(TM) i7-6700 CPU @ 3.40GHz'; Cores = 4; MB = 16384; Tier = 'Below baseline' }
     ) {
         $R = Get-Insight @(New-Agent 'X' -Cpu $Cpu -Cores $Cores -MemoryMB $MB)
         $R[0].HardwareTier | Should -Be $Tier
@@ -110,18 +111,81 @@ Describe 'Get-AteraDeviceInsight' {
         $R[0].HealthNotes | Should -Not -Match 'hardware'
     }
 
-    It 'counts days with CPU or memory alerts and flags a regularly overloaded device' {
+    It 'counts memory over 90% only on weekdays in working hours (UK time), with the peak and main process' {
         $Agent = New-Agent 'BUSY'
-        $Alerts = @(foreach ($d in 1..6) { [pscustomobject]@{ DeviceGuid = 'guid-BUSY'; Title = 'Memory Usage'; Created = "2026-09-0$($d)T10:00:00Z" } }
-            [pscustomobject]@{ DeviceGuid = 'guid-BUSY'; Title = 'CPU Load'; Created = '2026-09-01T11:00:00Z' }
-            [pscustomobject]@{ DeviceGuid = 'guid-BUSY'; Title = 'Disk Usage(C:)'; Created = '2026-09-02T11:00:00Z' }
-            [pscustomobject]@{ DeviceGuid = 'guid-OTHER'; Title = 'Memory Usage'; Created = '2026-09-02T11:00:00Z' })
+        $Msg = { param($p) "The Memory Usage $p% is greater than the threshold of 90.00% for 9.00 minutes.`nTop 3 processes triggering the alert: chrome: 5,158.34 MB, svchost: 1,522.61 MB and Spotify: 1,152.19 MB" }
+        $Alerts = @(
+            [pscustomobject]@{ DeviceGuid = 'guid-BUSY'; Title = 'Memory Usage'; Created = '2026-09-01T09:00:00Z'; AlertMessage = (& $Msg '95.90') }   # Tue 10:00 BST
+            [pscustomobject]@{ DeviceGuid = 'guid-BUSY'; Title = 'Memory Usage'; Created = '2026-09-01T13:00:00Z'; AlertMessage = (& $Msg '92.10') }   # same day
+            [pscustomobject]@{ DeviceGuid = 'guid-BUSY'; Title = 'Memory Usage'; Created = '2026-09-02T09:00:00Z'; AlertMessage = (& $Msg '97.00') }   # Wed
+            [pscustomobject]@{ DeviceGuid = 'guid-BUSY'; Title = 'Memory Usage'; Created = '2026-09-02T17:30:00Z'; AlertMessage = (& $Msg '99.00') }   # 18:30 BST - after hours
+            [pscustomobject]@{ DeviceGuid = 'guid-BUSY'; Title = 'Memory Usage'; Created = '2026-09-05T10:00:00Z'; AlertMessage = (& $Msg '99.00') }   # Saturday
+            [pscustomobject]@{ DeviceGuid = 'guid-BUSY'; Title = 'Memory Usage'; Created = '2026-09-03T10:00:00Z'; AlertMessage = (& $Msg '88.00') }   # under 90%
+            [pscustomobject]@{ DeviceGuid = 'guid-BUSY'; Title = 'CPU Load'; Created = '2026-09-03T10:00:00Z'; AlertMessage = 'The CPU Load 100.00% is greater than the threshold' }
+        )
         $R = Get-Insight @($Agent) $Alerts
-        $R[0].ResourceAlertDays | Should -Be 6
-        $R[0].DiskAlertDays | Should -Be 1
-        $R[0].AlertCount | Should -Be 8
+        $R[0].MemoryHighDays | Should -Be 2
+        $R[0].MemoryPeakPercent | Should -Be 97
+        $R[0].MemoryTopProcess | Should -Be 'chrome'
+        $R[0].HealthNotes | Should -Match 'memory over 90% in working hours on 2 days'
+    }
+
+    It 'flags drives over 75% full, and over 90% as needing attention' {
+        $Agent = New-Agent 'DISKS'
+        $Agent.HardwareDisks = @([pscustomobject]@{ Drive = 'C:'; Free = 100000; Total = 500000 }, [pscustomobject]@{ Drive = 'D:'; Free = 40000; Total = 1000000 }, [pscustomobject]@{ Drive = 'D:'; Free = 40000; Total = 1000000 }, [pscustomobject]@{ Drive = 'E:'; Free = 900000; Total = 1000000 }, [pscustomobject]@{ Drive = 'F:'; Free = 1; Total = 96 })
+        $R = Get-Insight @($Agent)
+        $R[0].DrivesOver75 | Should -Be 'C: 80%; D: 96%'
+        $R[0].DrivesOver90 | Should -Be 'D: 96%'
+        $R[0].FullestDrivePercent | Should -Be 96
         $R[0].HealthStatus | Should -Be 'Needs attention'
-        $R[0].HealthNotes | Should -Match 'CPU or memory alerts on 6 days'
+        $R[0].HealthNotes | Should -Match 'D: 96% full'
+        $R[0].HealthNotes | Should -Match 'C: 80% full'
+    }
+
+    It 'uses Atera''s patch scan for update status when there is one' {
+        $Fleet = @(New-Agent 'A'; New-Agent 'B'; New-Agent 'WAITING'; New-Agent 'FAILING'; New-Agent 'OLDBUILD' -Build '26200.8457')
+        $Patches = @{
+            'guid-A'        = [pscustomobject]@{ PatchScanDate = '2026-10-09T10:00:00Z'; SecurityUpdatesWaiting = 0; OtherUpdatesWaiting = 1; UpdatesFailed = 0; LastSecurityUpdate = '2026-09-15'; UpdatesWaiting = 'Intel driver'; UpdatesFailing = '' }
+            'guid-WAITING'  = [pscustomobject]@{ PatchScanDate = '2026-10-09T10:00:00Z'; SecurityUpdatesWaiting = 2; OtherUpdatesWaiting = 0; UpdatesFailed = 0; LastSecurityUpdate = '2026-06-09'; UpdatesWaiting = '2026-09 Security Update; .NET'; UpdatesFailing = '' }
+            'guid-FAILING'  = [pscustomobject]@{ PatchScanDate = '2026-10-09T10:00:00Z'; SecurityUpdatesWaiting = 0; OtherUpdatesWaiting = 0; UpdatesFailed = 1; SecurityUpdatesFailed = 1; LastSecurityUpdate = '2026-09-15'; UpdatesWaiting = ''; UpdatesFailing = '2026-09 Security Update' }
+            'guid-B'        = [pscustomobject]@{ PatchScanDate = '2026-10-09T10:00:00Z'; SecurityUpdatesWaiting = 0; OtherUpdatesWaiting = 0; UpdatesFailed = 1; SecurityUpdatesFailed = 0; LastSecurityUpdate = '2026-09-15'; UpdatesWaiting = ''; UpdatesFailing = 'Brother printer driver' }
+            'guid-OLDBUILD' = [pscustomobject]@{ PatchScanDate = '2026-10-09T10:00:00Z'; SecurityUpdatesWaiting = 0; OtherUpdatesWaiting = 0; UpdatesFailed = 0; LastSecurityUpdate = '2026-09-15'; UpdatesWaiting = ''; UpdatesFailing = '' }
+        }
+        $R = @(Get-AteraDeviceInsight -Agents $Fleet -Now $script:Now -Lifecycle $script:Lifecycle -Patches $Patches)
+        ($R | Where-Object MachineName -EQ 'A').UpdateStatus | Should -Be 'Up to date'
+        ($R | Where-Object MachineName -EQ 'A').UpdateSource | Should -Be 'Atera patch scan'
+        ($R | Where-Object MachineName -EQ 'WAITING').UpdateStatus | Should -Be 'Behind'
+        ($R | Where-Object MachineName -EQ 'WAITING').HealthNotes | Should -Match '2 security updates waiting'
+        ($R | Where-Object MachineName -EQ 'FAILING').UpdateStatus | Should -Be 'Failing'
+        # the scan wins over the build comparison
+        ($R | Where-Object MachineName -EQ 'OLDBUILD').UpdateStatus | Should -Be 'Up to date'
+        # a failed driver is not a failed security update
+        ($R | Where-Object MachineName -EQ 'B').UpdateStatus | Should -Be 'Up to date'
+        ($R | Where-Object MachineName -EQ 'B').HealthStatus | Should -Be 'Check'
+        ($R | Where-Object MachineName -EQ 'B').HealthNotes | Should -Match 'Brother printer driver'
+    }
+
+    It 'summarises a patch scan, ignoring antivirus definitions' {
+        $Installed = [pscustomobject]@{ timestamp = '2026-10-09T12:45:06Z'; installedUpdates = @(
+                [pscustomobject]@{ name = 'Old'; class = 'Security Updates'; installDate = '2026-08-12T00:00:00Z' }
+                [pscustomobject]@{ name = 'Sept'; class = 'Security Updates'; installDate = '2026-09-15T00:00:00Z' }
+                [pscustomobject]@{ name = 'Defender'; class = 'Definition Updates'; installDate = '2026-10-09T00:00:00Z' }) }
+        $Available = [pscustomobject]@{ timestamp = '2026-10-09T12:45:06Z'; availableUpdates = @(
+                [pscustomobject]@{ name = 'Brother - Printer - 3.3.0.0'; class = 'Hardware driver updates'; status = 'Failed' }
+                [pscustomobject]@{ name = 'Security Intelligence Update for Microsoft Defender Antivirus'; class = 'Definition Updates'; status = 'Available' }
+                [pscustomobject]@{ name = '2026-09 Security Update (KB5129195)'; class = 'Security Updates'; status = 'Available' }
+                [pscustomobject]@{ name = 'Insyde firmware'; class = 'Hardware driver updates'; status = 'Available' }) }
+        $S = ConvertTo-AteraPatchSummary -Installed $Installed -Available $Available
+        $S.SecurityUpdatesWaiting | Should -Be 1
+        $S.OtherUpdatesWaiting | Should -Be 0
+        $S.DriverUpdatesWaiting | Should -Be 1
+        $S.UpdatesFailed | Should -Be 1
+        $S.SecurityUpdatesFailed | Should -Be 0
+        $S.DriversWaiting | Should -Be 'Insyde firmware'
+        $S.LastSecurityUpdate | Should -Be '2026-09-15'
+        $S.UpdatesWaiting | Should -Be '2026-09 Security Update (KB5129195)'
+        $S.UpdatesFailing | Should -Be 'Brother - Printer - 3.3.0.0'
+        $S.PatchScanDate | Should -Be '2026-10-09T12:45:06Z'
     }
 
     It 'gives a healthy device Good, and lists every reason otherwise' {
@@ -136,7 +200,7 @@ Describe 'Get-AteraDeviceInsight' {
         $L.IsHomeEdition | Should -BeTrue
         $L.HealthNotes | Should -Match 'behind on Windows updates'
         $L.HealthNotes | Should -Match 'had not restarted for 107 days when last seen'
-        $L.HealthNotes | Should -Match 'C: only 4% free'
+        $L.HealthNotes | Should -Match 'C: 96% full'
         $L.HealthNotes | Should -Match 'Windows Home edition'
     }
 }

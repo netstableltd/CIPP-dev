@@ -194,41 +194,60 @@ function Build-CippCustomerReportTree {
         if ($A -and $A.Devices.Total -gt 0) {
             $D = $A.Devices
             $Act = @($D.List | Where-Object { $null -eq $_.daysSinceSeen -or $_.daysSinceSeen -lt 30 })
-            $blocks.Add((New-CippReportPage -Title 'Windows Updates' -Subtitle 'Security updates and how long each version of Windows is supported'))
-            $blocks.Add((New-CippReportParagraph -Text 'Microsoft releases security fixes every month, and each version of Windows only receives them for a set time. A computer is "up to date" when it is on the same Windows build as the rest of the computers we manage on that version; one that is behind usually needs a restart, or has been switched off when updates ran. A computer on a version that no longer receives fixes stays exposed to every new vulnerability found after that date.'))
+            $blocks.Add((New-CippReportPage -Title 'Updates' -Subtitle 'Windows and Microsoft software updates, and how long each version of Windows is supported'))
+            $blocks.Add((New-CippReportParagraph -Text 'Microsoft releases security fixes every month for Windows and its other software (.NET, Office, drivers), and each version of Windows only receives them for a set time. Our monitoring checks each computer for the updates it still needs. A computer showing updates waiting usually needs a restart, or was switched off when updates ran. A computer on a version of Windows that no longer receives fixes stays exposed to every new vulnerability found after that date.'))
             $Unsupported = @($Act | Where-Object { $_.support -eq 'Unsupported' })
             $Ending = @($Act | Where-Object { $_.support -eq 'Ending soon' })
             $Restart = @($Act | Where-Object { $_.daysSinceReboot -gt 30 })
+            $Failing = @($Act | Where-Object { [int]$_.securityFailed -gt 0 })
             $blocks.Add((New-CippReportStatRow -Stats @(
                         @{ value = "$($D.UpToDate)"; label = 'Up to date'; colour = $okC }
-                        @{ value = "$(@($D.UpdatesBehind).Count)"; label = 'Behind on updates'; colour = $(if (@($D.UpdatesBehind).Count -gt 0) { $dangerC }) }
-                        @{ value = "$($Ending.Count)"; label = 'Support ending soon'; colour = $(if ($Ending.Count -gt 0) { $warnC }) }
-                        @{ value = "$($Unsupported.Count)"; label = 'Unsupported Windows'; colour = $(if ($Unsupported.Count -gt 0) { $dangerC }) }
+                        @{ value = "$(@($D.UpdatesBehind).Count)"; label = 'Security updates waiting'; colour = $(if (@($D.UpdatesBehind).Count -gt 0) { $dangerC }) }
+                        @{ value = "$($Failing.Count)"; label = 'Updates failing'; colour = $(if ($Failing.Count -gt 0) { $warnC }) }
+                        @{ value = "$($Unsupported.Count + $Ending.Count)"; label = 'Windows support ended or ending'; colour = $(if ($Unsupported.Count -gt 0) { $dangerC } elseif ($Ending.Count -gt 0) { $warnC }) }
                     )))
             $FormatEnd = { param($Iso) if ($Iso) { try { ([datetime]::ParseExact($Iso, 'yyyy-MM-dd', [cultureinfo]::InvariantCulture)).ToString('d MMM yyyy') } catch { $Iso } } else { '' } }
-            $Rows = @($Act | Sort-Object { switch ($_.support) { 'Unsupported' { 0 } 'Ending soon' { 1 } default { 2 } } }, { if ($_.updateStatus -eq 'Behind') { 0 } else { 1 } }, name | ForEach-Object {
+            $Rows = @($Act | Sort-Object { switch ($_.support) { 'Unsupported' { 0 } 'Ending soon' { 1 } default { 2 } } }, { switch ($_.updateStatus) { 'Behind' { 0 } 'Failing' { 1 } default { 2 } } }, name | ForEach-Object {
                     $Dev = $_
-                    $Upd = switch ($_.updateStatus) { 'Up to date' { 'Up to date' } 'Behind' { 'Behind' } default { 'Not known' } }
-                    if ($_.daysSinceReboot -gt 30) { $Upd = "$Upd - restart needed" }
+                    $Upd = switch ($Dev.updateStatus) {
+                        'Up to date' { 'Up to date' }
+                        'Behind' { if ($null -ne $Dev.securityWaiting) { "$($Dev.securityWaiting) security update$(if ([int]$Dev.securityWaiting -ne 1) { 's' }) waiting" } else { 'Behind' } }
+                        'Failing' { 'Security update failing' }
+                        default { 'Not known' }
+                    }
+                    if ($Dev.daysSinceReboot -gt 30) { $Upd = "$Upd - restart needed" }
+                    $Last = if ($Dev.lastSecurityUpdate) { & $FormatEnd $Dev.lastSecurityUpdate } else { '' }
                     @{
-                        name    = $_.name
-                        windows = $_.version
-                        build   = $_.osBuild
+                        name    = $Dev.name
+                        windows = $Dev.version
                         until   = $(if ($Dev.support -eq 'Unsupported') { 'Ended' } elseif ($Dev.supportEnds) { & $FormatEnd $Dev.supportEnds } elseif ($Dev.support -eq 'Supported') { 'Latest version' } else { '' })
-                        ut      = $(switch ($_.support) { 'Unsupported' { 'fail' } 'Ending soon' { 'warn' } 'Supported' { 'pass' } default { '' } })
+                        ut      = $(switch ($Dev.support) { 'Unsupported' { 'fail' } 'Ending soon' { 'warn' } 'Supported' { 'pass' } default { '' } })
+                        last    = $Last
                         update  = $Upd
-                        tone    = $(if ($_.updateStatus -eq 'Behind' -or $_.daysSinceReboot -gt 30) { 'fail' } elseif ($_.updateStatus -eq 'Up to date') { 'pass' } else { '' })
+                        tone    = $(if ($Dev.updateStatus -in @('Behind', 'Failing') -or $Dev.daysSinceReboot -gt 30) { 'fail' } elseif ($Dev.updateStatus -eq 'Up to date') { 'pass' } else { '' })
                     }
                 })
             $blocks.Add((New-CippReportTable -Title 'Update status' -Limit 200 -Columns @(
                         @{ header = 'Computer'; key = 'name'; width = 1.4; bold = $true }
-                        @{ header = 'Windows'; key = 'windows'; width = 1.4 }
-                        @{ header = 'Build'; key = 'build'; width = 1 }
-                        @{ header = 'Security fixes until'; key = 'until'; width = 1.3; toneField = 'ut' }
-                        @{ header = 'Updates'; key = 'update'; width = 1.5; toneField = 'tone' }
+                        @{ header = 'Windows'; key = 'windows'; width = 1.3 }
+                        @{ header = 'Last security update'; key = 'last'; width = 1.1 }
+                        @{ header = 'Updates'; key = 'update'; width = 1.7; toneField = 'tone' }
+                        @{ header = 'Security fixes until'; key = 'until'; width = 1.2; toneField = 'ut' }
                     ) -Rows $Rows))
-            $Versions = @($Act | Group-Object version | Sort-Object Count -Descending | ForEach-Object { @{ label = $(if ($_.Name) { $_.Name } else { 'Unknown' }); value = $_.Count } })
-            if ($Versions.Count -gt 1) { $blocks.Add((New-CippReportChart -Kind donut -Title 'Windows versions' -CentreLabel 'computers' -Data $Versions)) }
+            $Waiting = @($Act | Where-Object { $_.updatesWaiting -or $_.updatesFailing -or $_.driversWaiting })
+            if ($Waiting.Count -gt 0) {
+                $AllRows = @(foreach ($Dev in $Waiting) {
+                        foreach ($U in @("$($Dev.updatesFailing)" -split '; ' | Where-Object { $_ })) { @{ order = 0; name = $Dev.name; update = $U; state = 'Failed'; tone = 'fail' } }
+                        foreach ($U in @("$($Dev.updatesWaiting)" -split '; ' | Where-Object { $_ })) { $Sec = $U -match 'Security|Cumulative'; @{ order = $(if ($Sec) { 1 } else { 2 }); name = $Dev.name; update = $U; state = 'Waiting'; tone = $(if ($Sec) { 'fail' } else { 'warn' }) } }
+                        foreach ($U in @("$($Dev.driversWaiting)" -split '; ' | Where-Object { $_ })) { @{ order = 3; name = $Dev.name; update = $U; state = 'Optional driver'; tone = '' } }
+                    })
+                $WRows = @($AllRows | Sort-Object { $_.order }, { $_.name })
+                $blocks.Add((New-CippReportTable -Title 'Updates still to install' -Limit 60 -Columns @(
+                            @{ header = 'Computer'; key = 'name'; width = 1.4; bold = $true }
+                            @{ header = 'Update'; key = 'update'; width = 4 }
+                            @{ header = 'State'; key = 'state'; width = 1; toneField = 'tone' }
+                        ) -Rows $WRows))
+            }
             if ($Ending.Count -gt 0) {
                 $Ends = @($Ending | ForEach-Object { & $FormatEnd $_.supportEnds } | Sort-Object -Unique) -join ', '
                 $blocks.Add((New-CippReportAlertBox -Title 'Windows support ending soon' -Colour $warnC -Content "$(& $plural $Ending.Count 'computer') $(if ($Ending.Count -eq 1) { 'is' } else { 'are' }) on a version of Windows that stops receiving security fixes on $Ends. Moving to the current version is a free update that we will schedule with the users."))
@@ -236,62 +255,70 @@ function Build-CippCustomerReportTree {
             if ($Unsupported.Count -gt 0) {
                 $blocks.Add((New-CippReportAlertBox -Title 'No longer receiving security fixes' -Colour $dangerC -Content "$(& $plural $Unsupported.Count 'computer') $(if ($Unsupported.Count -eq 1) { 'runs' } else { 'run' }) a version of Windows Microsoft no longer supports: $(@($Unsupported | ForEach-Object { "$($_.name) ($($_.version))" }) -join ', '). These should be upgraded or replaced as a priority."))
             }
-            if (@($D.UpdatesBehind).Count -eq 0 -and $Ending.Count -eq 0 -and $Unsupported.Count -eq 0 -and $Restart.Count -eq 0) {
+            if (@($D.UpdatesBehind).Count -eq 0 -and $Failing.Count -eq 0 -and $Ending.Count -eq 0 -and $Unsupported.Count -eq 0 -and $Restart.Count -eq 0) {
                 $blocks.Add((New-CippReportClearBox -Title 'Fully up to date' -Content 'Every computer has this month''s updates and is on a supported version of Windows.'))
             }
+            $Scanned = [int]$D.PatchScanned
+            $blocks.Add((New-CippReportNote -Text $(if ($Scanned -ge $Act.Count) { 'From each computer''s latest update scan in our monitoring. Driver updates are optional and listed for completeness. Antivirus definition updates are not counted: they install automatically several times a day.' } else { "From each computer's latest update scan in our monitoring ($Scanned of $($Act.Count) computers; the others are compared with the Windows build of the computers we manage). Antivirus definition updates are not counted." })))
         }
         }
         'device-health' = {
         if ($A -and $A.Devices.Total -gt 0) {
             $D = $A.Devices
-            $blocks.Add((New-CippReportPage -Title 'Computer Health' -Subtitle 'Performance, hardware and disk space'))
-            $blocks.Add((New-CippReportParagraph -Text 'This page looks for computers that are struggling: ones that keep running out of processing power or memory, ones whose hardware is weak or ageing, and ones running short of disk space. These are the machines users find slow, and the ones to plan to upgrade or replace before they fail.'))
+            $blocks.Add((New-CippReportPage -Title 'Computer Health' -Subtitle 'Memory, storage and hardware'))
+            $blocks.Add((New-CippReportParagraph -Text 'This page looks for computers that are struggling or due an upgrade: ones that run out of memory during the working day, drives that are filling up, and hardware below our minimum standard of a processor with at least four cores that can run Windows 11.'))
             $Any = $false
-            if (@($D.AlertsByDevice).Count -gt 0) {
+            $Mp = @($D.MemoryPressure)
+            if ($Mp.Count -gt 0) {
                 $Any = $true
-                $blocks.Add((New-CippReportTable -Title "Alerts this month by computer" -Limit 15 -Columns @(
-                            @{ header = 'Computer'; key = 'name'; width = 1.6; bold = $true }
-                            @{ header = 'Alerts this month'; key = 'alerts'; width = 1.2; align = 'right' }
-                            @{ header = 'Days with CPU or memory alerts (90 days)'; key = 'days'; width = 2; align = 'right' }
-                        ) -Rows @($D.AlertsByDevice | ForEach-Object { @{ name = $_.name; alerts = "$($_.alertsInPeriod)"; days = "$($_.resourceAlertDays)" } })))
-            }
-            $Pressure = @(@($D.Overloaded) + @($D.Busy))
-            if ($Pressure.Count -gt 0) {
-                $Any = $true
-                $blocks.Add((New-CippReportTable -Title 'Computers regularly running out of power or memory' -Limit 20 -Columns @(
+                $blocks.Add((New-CippReportTable -Title 'Running out of memory during the working day' -Limit 30 -Columns @(
                             @{ header = 'Computer'; key = 'name'; width = 1.5; bold = $true }
-                            @{ header = 'Alert days (90 days)'; key = 'days'; width = 1.2; align = 'right'; toneField = 'tone' }
-                            @{ header = 'Processor'; key = 'cpu'; width = 2 }
-                            @{ header = 'Memory'; key = 'ram'; width = 0.8; align = 'right' }
-                        ) -Rows @($Pressure | ForEach-Object { @{ name = $_.name; days = "$($_.resourceAlertDays)"; tone = $(if ($_.resourceAlertDays -ge 5) { 'fail' } else { 'warn' }); cpu = $_.cpu; ram = $(if ($_.memoryGB) { "$($_.memoryGB) GB" }) } })))
-                $blocks.Add((New-CippReportNote -Text 'Counted as the number of separate days on which monitoring raised a CPU or memory alert. Five or more days in three months means the computer is regularly short of resources, not just busy once.'))
+                            @{ header = 'Days over 90%'; key = 'days'; width = 1; align = 'right'; toneField = 'tone' }
+                            @{ header = 'Highest'; key = 'peak'; width = 0.8; align = 'right' }
+                            @{ header = 'Memory fitted'; key = 'ram'; width = 1; align = 'right' }
+                            @{ header = 'Using most memory'; key = 'top'; width = 1.6 }
+                        ) -Rows @($Mp | ForEach-Object { @{ name = $_.name; days = "$($_.memoryDays)"; tone = 'warn'; peak = "$($_.memoryPeak)%"; ram = $(if ($_.memoryGB) { "$($_.memoryGB) GB" }); top = $_.memoryTopProcess } })))
+                $blocks.Add((New-CippReportNote -Text "Days in $PeriodLabel when memory use went over 90% between 8am and 6pm on a weekday. Adding memory is usually the cheapest way to speed these computers up."))
             }
-            $Hw = @(@($D.Weak) + @($D.Limited))
-            if ($Hw.Count -gt 0) {
+            $Full = @($D.StorageOver75)
+            if ($Full.Count -gt 0) {
                 $Any = $true
-                $blocks.Add((New-CippReportTable -Title 'Hardware to plan for' -Limit 50 -Columns @(
-                            @{ header = 'Computer'; key = 'name'; width = 1.4; bold = $true }
-                            @{ header = 'Processor'; key = 'cpu'; width = 2 }
-                            @{ header = 'Memory'; key = 'ram'; width = 0.8; align = 'right' }
-                            @{ header = 'Rating'; key = 'tier'; width = 0.8; toneField = 'tone' }
-                            @{ header = 'Why'; key = 'why'; width = 2 }
-                        ) -Rows @($Hw | ForEach-Object { @{ name = $_.name; cpu = $_.cpu; ram = $(if ($_.memoryGB) { "$($_.memoryGB) GB" }); tier = $_.hardwareTier; tone = $(if ($_.hardwareTier -eq 'Weak') { 'fail' } else { 'warn' }); why = $_.hardwareNotes } })))
-                $blocks.Add((New-CippReportNote -Text 'Weak: 4 GB of memory or less, two processor cores, a processor too old for Windows 11 or about ten years old, or two of the lesser limits together. Limited: 8 GB of memory, an entry-level processor, or a processor about seven years old. Years are when the processor model came out, a guide to the computer''s age.'))
-            }
-            $Disk = @(@($D.LowDisk) + @($D.DiskWarning))
-            if ($Disk.Count -gt 0) {
-                $Any = $true
-                $blocks.Add((New-CippReportTable -Title 'Low disk space' -Limit 20 -Columns @(
+                $SRows = @(foreach ($Dev in $Full) {
+                        foreach ($Drive in @("$($Dev.drivesOver75)" -split '; ' | Where-Object { $_ })) {
+                            $Pct = [int](($Drive -split ' ')[-1] -replace '%', '')
+                            @{ name = $Dev.name; drive = ($Drive -split ' ')[0]; full = "$Pct% full"; tone = $(if ($Pct -gt 90) { 'fail' } else { 'warn' }) }
+                        }
+                    })
+                $blocks.Add((New-CippReportTable -Title 'Drives more than three-quarters full' -Limit 40 -Columns @(
                             @{ header = 'Computer'; key = 'name'; width = 1.6; bold = $true }
-                            @{ header = 'Free space on C:'; key = 'free'; width = 1.2; align = 'right'; toneField = 'tone' }
-                        ) -Rows @($Disk | ForEach-Object { @{ name = $_.name; free = "$($_.freePct)%"; tone = $(if ($_.freePct -lt 10) { 'fail' } else { 'warn' }) } })))
+                            @{ header = 'Drive'; key = 'drive'; width = 0.8 }
+                            @{ header = 'Used'; key = 'full'; width = 1; align = 'right'; toneField = 'tone' }
+                        ) -Rows $SRows))
+                $blocks.Add((New-CippReportNote -Text 'Once a drive is more than three-quarters full it is time to delete or archive old files, or fit a bigger drive. Over 90% full, Windows updates and everyday work start to fail.'))
+            }
+            $Bb = @($D.BelowBaseline)
+            if ($Bb.Count -gt 0) {
+                $Any = $true
+                $blocks.Add((New-CippReportTable -Title 'Below our hardware baseline' -Limit 50 -Columns @(
+                            @{ header = 'Computer'; key = 'name'; width = 1.4; bold = $true }
+                            @{ header = 'Processor'; key = 'cpu'; width = 2.2 }
+                            @{ header = 'Cores'; key = 'cores'; width = 0.6; align = 'right' }
+                            @{ header = 'Why'; key = 'why'; width = 2; toneField = 'tone' }
+                        ) -Rows @($Bb | ForEach-Object { @{ name = $_.name; cpu = $_.cpu; cores = "$($_.cores)"; why = $_.hardwareNotes; tone = 'fail' } })))
             }
             if (@($D.HomeEdition).Count -gt 0) {
                 $Any = $true
                 $blocks.Add((New-CippReportInfoBox -Title 'Windows Home edition' -Tone warn -Content "$(@($D.HomeEdition | ForEach-Object { $_.name }) -join ', ') $(if (@($D.HomeEdition).Count -eq 1) { 'runs' } else { 'run' }) Windows Home, which is meant for personal use: it cannot be managed centrally or have its disk encryption managed like your other computers. Upgrading to Windows Pro is a licence change, not a reinstall."))
             }
+            if (@($D.AlertsByDevice).Count -gt 0) {
+                $Any = $true
+                $blocks.Add((New-CippReportTable -Title 'Monitoring alerts this month by computer' -Limit 15 -Columns @(
+                            @{ header = 'Computer'; key = 'name'; width = 1.6; bold = $true }
+                            @{ header = 'Alerts'; key = 'alerts'; width = 1; align = 'right' }
+                        ) -Rows @($D.AlertsByDevice | ForEach-Object { @{ name = $_.name; alerts = "$($_.alertsInPeriod)" } })))
+            }
             if (-not $Any) {
-                $blocks.Add((New-CippReportClearBox -Title 'No health concerns' -Content 'No computer is regularly overloaded, short of disk space or running on weak hardware.'))
+                $blocks.Add((New-CippReportClearBox -Title 'No health concerns' -Content 'Every computer meets our hardware baseline, no drive is more than three-quarters full, and no computer ran out of memory during the working day.'))
             }
         }
         }
@@ -409,6 +436,44 @@ function Build-CippCustomerReportTree {
             }
         }
         }
+        'breaches' = {
+        $Br = $Data.Breaches
+        if ($Br) {
+            $blocks.Add((New-CippReportPage -Title 'Data Breaches' -Subtitle 'Your email addresses in known breaches of other websites'))
+            $blocks.Add((New-CippReportParagraph -Text 'When a website or service is hacked, the email addresses (and often passwords) of its users are published. We check every email domain you own against the known breaches each month. A match does not mean your Microsoft 365 was breached: it means someone signed up to that website with a work address. The risk is a reused password, so anyone listed should make sure they use a different password for work, and multi-factor authentication protects the account either way.'))
+            if ($Br.Source -eq 'None') {
+                $blocks.Add((New-CippReportInfoBox -Title 'Breach check unavailable' -Tone warn -Content 'The breach check could not run this month. It will run again with next month''s report.'))
+            } elseif ($Br.Total -eq 0) {
+                $blocks.Add((New-CippReportClearBox -Title 'No addresses found' -Content 'None of your email addresses appear in the known data breaches.'))
+            } else {
+                $blocks.Add((New-CippReportStatRow -Stats @(
+                            @{ value = "$($Br.Total)"; label = 'Addresses found' }
+                            @{ value = "$($Br.Current)"; label = 'Current accounts'; colour = $(if ($Br.Current -gt 0) { $warnC }) }
+                            @{ value = "$($Br.WithPasswords)"; label = 'Passwords exposed'; colour = $(if ($Br.WithPasswords -gt 0) { $dangerC }) }
+                        )))
+                $Rows = @($Br.Accounts | ForEach-Object {
+                        $List = @($_.breaches)
+                        $Shown = @($List | Select-Object -First 3 | ForEach-Object { if ($_.date -and $_.date.Length -ge 4) { "$($_.title) ($($_.date.Substring(0, 4)))" } else { $_.title } })
+                        $Classes = @($List | ForEach-Object { @($_.classes) } | Where-Object { $_ -in @('Passwords', 'Email addresses', 'Phone numbers', 'Physical addresses', 'Dates of birth', 'Names', 'IP addresses', 'Credit cards', 'Bank account numbers') } | Sort-Object -Unique)
+                        @{
+                            email    = $_.email
+                            breaches = ($Shown -join ', ') + $(if ($List.Count -gt 3) { " and $($List.Count - 3) more" } else { '' })
+                            exposed  = $(if ($Classes.Count -gt 0) { $Classes -join ', ' } else { 'Not known' })
+                            tone     = $(if ($_.passwords) { 'fail' } else { 'warn' })
+                            account  = $(switch ($_.current) { $true { 'Current' } $false { 'No longer in use' } default { '' } })
+                        }
+                    })
+                $blocks.Add((New-CippReportTable -Title 'Addresses found in breaches' -Limit 100 -Columns @(
+                            @{ header = 'Email address'; key = 'email'; width = 1.8; bold = $true }
+                            @{ header = 'Breaches'; key = 'breaches'; width = 2.2 }
+                            @{ header = 'What was exposed'; key = 'exposed'; width = 1.6; toneField = 'tone' }
+                            @{ header = 'Account'; key = 'account'; width = 0.9 }
+                        ) -Rows $Rows))
+            }
+            $When = if ($Br.CheckedAt) { ([datetime]$Br.CheckedAt).ToString('d MMMM yyyy') } else { '' }
+            $blocks.Add((New-CippReportNote -Text "Checked $When using CIPP's breach lookup, with breach details from Have I Been Pwned (haveibeenpwned.com)."))
+        }
+        }
         'm365-baseline' = {
         if ($Baseline -and @($Baseline.Blocks).Count -gt 0) {
             foreach ($B in @($Baseline.Blocks)) { $blocks.Add($B) }
@@ -450,7 +515,7 @@ function Build-CippCustomerReportTree {
     # Assemble in the requested order. Built-in ids map to the builders above; anything else
     # (Report Builder templates, 'template:<GUID>') comes pre-resolved in -ExtraSections.
     $Order = @($Sections | Where-Object { $_ })
-    if ($Order.Count -eq 0) { $Order = @('summary', 'devices', 'updates', 'device-health', 'monitoring', 'support', 'purchases', 'm365-security', 'users-licences', 'email', 'recommendations') }
+    if ($Order.Count -eq 0) { $Order = @('summary', 'devices', 'updates', 'device-health', 'monitoring', 'support', 'purchases', 'm365-security', 'users-licences', 'email', 'breaches', 'recommendations') }
     foreach ($SectionId in $Order) {
         if ($SectionBuilders.Contains($SectionId)) {
             $null = & $SectionBuilders[$SectionId]

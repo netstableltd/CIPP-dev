@@ -24,14 +24,15 @@ Each company's report is one PDF assembled from an ordered list of **sections**.
 | --- | --- | --- |
 | Summary | Headline figures, overall status and an optional note from your team | All |
 | Your computers | Every computer with its user, Windows version, hardware, last seen and a status (Good / Check / Needs attention), and why any need attention | RMM |
-| Windows updates | Up to date or behind, Windows versions, and the date each version stops receiving security fixes | RMM |
-| Computer health | Alerts by computer, computers regularly short of CPU or memory, weak or ageing hardware, low disk space, Windows Home | RMM |
+| Updates | Security and other Microsoft updates waiting or failing on each computer (from the RMM's patch scan), last security update, and the date each Windows version stops receiving security fixes | RMM |
+| Computer health | Memory over 90% during working hours (add RAM), drives over 75% full (clear space or a bigger drive), computers below the hardware baseline (a quad-core processor that can run Windows 11), Windows Home | RMM |
 | Monitoring alerts | Alerts in the month by severity and the most common | RMM |
 | Support requests | Tickets opened and resolved, who raised them, time spent | PSA |
 | Purchases | Items bought this month and over the last 12 months, from invoices | PSA |
 | Microsoft 365 security | Secure Score with trend, MFA coverage | CIPP cache |
 | Users & licences | Users, guests and licences with spare seats | CIPP cache |
 | Email & domains | Fullest mailboxes; SPF, DKIM and DMARC per domain | CIPP cache |
+| Data breaches | Email addresses on the tenant's domains found in known breaches (CIPP's breach lookup, run when the report is generated), with breach dates and what was exposed from Have I Been Pwned's public catalogue. Passwords are never shown | Breach lookup |
 | Microsoft 365 baseline | CIPP's full Executive Summary (standards, Secure Score, licences, devices, Conditional Access). Opt-in: useful for a first report or quarterly | CIPP cache |
 | Recommendations | What to do now and what to plan for, from the pre-check | All |
 
@@ -45,7 +46,7 @@ The pre-check runs the same data through a set of rules and sorts findings into:
 * **Fix** - should be sorted before the report goes out; if still open, it appears in the customer's Recommendations.
 * **Info** - worth knowing; items with customer wording appear under "To plan for".
 
-Rules include admins or users without enforced MFA, a Secure Score drop, unassigned licences, devices not seen for 30 days, unsupported or soon-unsupported Windows, devices behind on updates, regularly overloaded devices, weak hardware, Windows Home, low disk, devices not restarted for 30 days, mailboxes 80% full, domains missing SPF/DKIM/DMARC, old urgent tickets, closed tickets with no time, and contracts ending.
+Rules include admins or users without enforced MFA, a Secure Score drop, unassigned licences, addresses in data breaches, devices not seen for 30 days, unsupported or soon-unsupported Windows, security updates waiting or failing, memory over 90% in working hours, drives over 75% full, hardware below the baseline, Windows Home, devices not restarted for 30 days, mailboxes 80% full, domains missing SPF/DKIM/DMARC, old urgent tickets, closed tickets with no time, and contracts ending.
 
 ## Test runs
 
