@@ -320,7 +320,17 @@ function Build-CippCustomerReportTree {
                             @{ header = 'Alerts'; key = 'alerts'; width = 1; align = 'right' }
                         ) -Rows @($D.AlertsByDevice | ForEach-Object { @{ name = $_.name; alerts = "$($_.alertsInPeriod)" } })))
             }
-            if (-not $Any) {
+            if ($Any) {
+                # Say which checks passed, so a short page still shows what was looked at.
+                $Passed = [System.Collections.Generic.List[string]]::new()
+                if ($Bb.Count -eq 0) { $Passed.Add("all $($D.Total) computers meet our hardware baseline (at least four processor cores and able to run Windows 11)") }
+                if ($Mp.Count -eq 0) { $Passed.Add('no computer ran out of memory during the working day') }
+                if ($Full.Count -eq 0) { $Passed.Add('no drive is more than three-quarters full') }
+                if ($Passed.Count -gt 0) {
+                    $Text = ($Passed -join '; ')
+                    $blocks.Add((New-CippReportClearBox -Title 'Also checked' -Content ($Text.Substring(0, 1).ToUpper() + $Text.Substring(1) + '.')))
+                }
+            } else {
                 $blocks.Add((New-CippReportClearBox -Title 'No health concerns' -Content 'Every computer meets our hardware baseline, no drive is more than three-quarters full, and no computer ran out of memory during the working day.'))
             }
         }
