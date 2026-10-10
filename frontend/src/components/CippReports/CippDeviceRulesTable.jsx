@@ -95,7 +95,7 @@ export const CippDeviceRulesTable = () => {
       slotProps={{
         htmlInput: { min: 0, 'aria-label': `${rule.label} ${label}` },
       }}
-      sx={{ width: 110 }}
+      sx={{ width: 150 }}
       helperText={
         rule.kind === 'setting'
           ? rule.unit

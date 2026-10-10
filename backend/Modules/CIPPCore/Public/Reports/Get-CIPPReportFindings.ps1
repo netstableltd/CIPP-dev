@@ -45,7 +45,7 @@ function Get-CIPPReportFindings {
                 CustomerItems = $(if ($null -ne $CustomerItems) { @($CustomerItems | Where-Object { $_ }) } else { $List })
             })
     }
-    $Plural = { param($n, $word) "$n $word$(if ($n -ne 1) { 's' })" }
+    $Plural = { param($n, $word) if ($n -eq 1) { "$n $word" } elseif ($word -eq 'person') { "$n people" } elseif ($word -match '(s|x|ch|sh)$') { "$n $($word)es" } else { "$n $($word)s" } }
     # 'the computer' / 'the 3 computers' for customer wording (plural adds s, or es after s/x/ch/sh).
     $The = { param($n, $word) if ($n -eq 1) { "the $word" } elseif ($word -eq 'person') { "the $n people" } else { "the $n $($word)$(if ($word -match '(s|x|ch|sh)$') { 'es' } else { 's' })" } }
     $Are = { param($n) if ($n -eq 1) { 'is' } else { 'are' } }
