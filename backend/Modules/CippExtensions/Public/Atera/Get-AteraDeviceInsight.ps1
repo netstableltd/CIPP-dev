@@ -204,7 +204,7 @@ function Get-AteraDeviceInsight {
         }
 
         # Hardware
-        $MemoryGB = if ($Agent.Memory) { [int][math]::Round([double]$Agent.Memory / 1024) } else { $null }
+        $MemoryGB = ConvertTo-AteraMemoryGB -MemoryMB $Agent.Memory
         $Cores = if ($Agent.ProcessorCoresCount) { [int]$Agent.ProcessorCoresCount } else { $null }
         $CpuInfo = ConvertTo-AteraCpuInfo -Processor "$($Agent.Processor)"
         $CpuSummary = $CpuInfo.Summary; $CpuYear = $CpuInfo.Year; $Win11 = $CpuInfo.Win11
@@ -287,6 +287,7 @@ function Get-AteraDeviceInsight {
         $Rating = Get-AteraDeviceRating -Device ([pscustomobject]$Out) -Rules $RuleSet
         $Out.CpuGeneration = $CpuInfo.Generation
         $Out.HardwareRating = $Rating.HardwareRating
+        $Out.IsVirtual = $Rating.IsVirtual
         $Out.HardwareTier = $Rating.HardwareTier
         $Out.HardwareNotes = $Rating.HardwareNotes
         $Out.HealthStatus = $Rating.HealthStatus

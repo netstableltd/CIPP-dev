@@ -11,7 +11,7 @@ BeforeAll {
     $Modules = Join-Path $RepoRoot 'Modules'
     Get-ChildItem (Get-ChildItem $Modules -Recurse -Directory -Filter 'Reporting' | Select-Object -First 1).FullName -Filter *.ps1 | ForEach-Object { . $_.FullName }
     . (Get-ChildItem $Modules -Recurse -Filter 'ConvertTo-CippReportPdf.ps1' | Select-Object -First 1).FullName
-    foreach ($Name in 'Get-AteraDeviceInsight', 'Get-AteraMemoryPressure', 'ConvertTo-AteraPatchSummary', 'ConvertTo-AteraLocalTime', 'Get-CIPPReportBreachData', 'Get-AteraDeviceRating', 'ConvertTo-AteraCpuInfo', 'Resolve-AteraDeviceRules') {
+    foreach ($Name in 'Get-AteraDeviceInsight', 'Get-AteraMemoryPressure', 'ConvertTo-AteraPatchSummary', 'ConvertTo-AteraLocalTime', 'Get-CIPPReportBreachData', 'Get-AteraDeviceRating', 'ConvertTo-AteraCpuInfo', 'Resolve-AteraDeviceRules', 'ConvertTo-AteraMemoryGB') {
         . (Get-ChildItem $Modules -Recurse -Filter "$Name.ps1" | Select-Object -First 1).FullName
     }
     foreach ($Name in 'Get-CIPPReportBaselineSection', 'Get-CIPPReportPeriod', 'Get-CIPPCustomerReportData', 'Get-CIPPReportFindings', 'Build-CippCustomerReportTree', 'Build-CippReportPrecheckTree', 'Invoke-CIPPReportGeneration', 'ConvertFrom-CIPPReportSectionList', 'Get-CIPPReportSectionCatalog', 'Resolve-CIPPReportSections', 'Get-CIPPReportDeviceRules') {
@@ -72,6 +72,7 @@ BeforeAll {
             @{ TicketID = 101; TicketTitle = 'Printer'; TicketStatus = 'Closed'; TicketCreatedDate = '2026-09-05T09:00:00Z'; TotalDurationSeconds = 1800; TicketPriority = 'Low' }
             @{ TicketID = 102; TicketTitle = 'No time'; TicketStatus = 'Closed'; TicketCreatedDate = '2026-09-06T09:00:00Z'; TotalDurationSeconds = 0; TicketPriority = 'Low' }
             @{ TicketID = 90; TicketTitle = 'Old urgent'; TicketStatus = 'Open'; TicketCreatedDate = '2026-08-30T09:00:00Z'; TotalDurationSeconds = 600; TicketPriority = 'High' }
+            @{ TicketID = 103; TicketTitle = 'New vulnerabilities notification'; TicketStatus = 'Open'; TicketCreatedDate = '2026-09-07T09:00:00Z'; TotalDurationSeconds = 120; TicketPriority = 'Low'; EndUserFirstName = 'Microsoft'; EndUserLastName = '365 Defender'; EndUserEmail = 'defender-noreply@microsoft.com' }
         )
         AteraContracts  = @(@{ ContractName = 'Support'; ContractType = 'RetainerFlatFee'; Active = $true; EndDate = '2026-11-01T00:00:00Z' })
         AteraPurchases  = @(
@@ -142,6 +143,9 @@ Describe 'Get-CIPPCustomerReportData' {
         $Data.Atera.Tickets.Opened | Should -Be 2
         $Data.Atera.Tickets.MinutesLogged | Should -Be 30
         $Data.Atera.Tickets.OpenNow | Should -Be 1
+        # Automated notifications (no-reply senders) are counted separately, not as customer requests.
+        $Data.Atera.Tickets.Automated | Should -Be 1
+        $Data.Atera.Tickets.AutomatedFrom | Should -Be @('Microsoft 365 Defender')
     }
 }
 

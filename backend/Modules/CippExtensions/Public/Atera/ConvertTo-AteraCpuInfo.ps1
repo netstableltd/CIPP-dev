@@ -44,6 +44,9 @@ function ConvertTo-AteraCpuInfo {
         # Microsoft's Windows 11 list; 2000-series desktop CPUs (Zen+) and later are.
         $Info.Win11 = if ($Series -ge 3 -or ($Series -eq 2 -and $AmdSuffix -notmatch '^(G|GE|U|H|HS)$')) { 'Yes' } else { 'No' }
         $Info.Summary = "AMD Ryzen $Tier $($Series)000 series"
+    } elseif ($Cpu -match 'Ryzen (\d) Microsoft Surface') {
+        # Surface Laptop 3/4 custom parts (3780U / 4980U): both on Microsoft's Windows 11 list.
+        $Info.Summary = "AMD Ryzen $($Matches[1]) (Surface)"; $Info.Vendor = 'AMD'; $Info.Family = 'Ryzen'; $Info.Win11 = 'Yes'
     } elseif ($Cpu -match 'Ryzen AI') {
         $Info.Summary = 'AMD Ryzen AI'; $Info.Vendor = 'AMD'; $Info.Family = 'Ryzen'; $Info.Generation = 9; $Info.Year = 2024; $Info.Win11 = 'Yes'
     } elseif ($Cpu -match 'Xeon.*\bE[357]-\d{4}\w?\s*v(\d)') {

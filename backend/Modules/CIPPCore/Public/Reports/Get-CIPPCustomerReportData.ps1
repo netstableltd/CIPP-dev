@@ -81,7 +81,8 @@ function Get-CIPPCustomerReportData {
         $MfaRows = @(Read-Db 'MFAState' | Where-Object { $_.AccountEnabled -eq $true -and $_.UserType -ne 'Guest' -and -not $NonPersonUpns.ContainsKey("$($_.UPN)".ToLowerInvariant()) })
         if ($MfaRows.Count -gt 0) {
             $Unprotected = @($MfaRows | Where-Object { "$($_.CoveredByCA)" -notlike 'Enforced*' -and $_.CoveredBySD -ne $true -and $_.PerUser -notin @('Enforced', 'Enabled') })
-            $UnprotectedLicensed = @($Unprotected | Where-Object { $_.isLicensed -eq $true })
+            $BreakGlass = '(?i)break.?glass|emergency.?access|emergencyaccess'
+            $UnprotectedLicensed = @($Unprotected | Where-Object { $_.isLicensed -eq $true -and "$($_.DisplayName) $($_.UPN)" -notmatch $BreakGlass })
             $Mfa = @{
                 Users               = $MfaRows.Count
                 Protected           = $MfaRows.Count - $Unprotected.Count
@@ -89,7 +90,9 @@ function Get-CIPPCustomerReportData {
                 Registered          = @($MfaRows | Where-Object { $_.MFARegistration -eq $true }).Count
                 # Protected only because Microsoft's Security Defaults are on (no Conditional Access or per-user MFA).
                 ViaSecurityDefaults = @($MfaRows | Where-Object { $_.CoveredBySD -eq $true -and "$($_.CoveredByCA)" -notlike 'Enforced*' -and $_.PerUser -notin @('Enforced', 'Enabled') }).Count
-                UnprotectedAdmins   = @($Unprotected | Where-Object { $_.IsAdmin -eq $true } | ForEach-Object { $_.DisplayName })
+                # Break-glass (emergency access) accounts are usually excluded from MFA on purpose: listed separately.
+                UnprotectedAdmins   = @($Unprotected | Where-Object { $_.IsAdmin -eq $true -and "$($_.DisplayName) $($_.UPN)" -notmatch $BreakGlass } | ForEach-Object { $_.DisplayName })
+                BreakGlassAdmins    = @($Unprotected | Where-Object { $_.IsAdmin -eq $true -and "$($_.DisplayName) $($_.UPN)" -match $BreakGlass } | ForEach-Object { $_.DisplayName })
                 UnprotectedLicensed = @($UnprotectedLicensed | Sort-Object DisplayName | ForEach-Object { @{ name = $_.DisplayName; upn = $_.UPN } })
             }
         }
@@ -118,7 +121,7 @@ function Get-CIPPCustomerReportData {
 
         $Licences = @(Read-Db 'LicenseOverview' | Where-Object { [int]$_.TotalLicenses -gt 0 -and [int]$_.TotalLicenses -lt 10000 } |
                 Sort-Object -Property @{ Expression = { [int]$_.TotalLicenses } } -Descending | ForEach-Object {
-                    @{ name = "$($_.License)"; used = [int]$_.CountUsed; total = [int]$_.TotalLicenses; available = [int]$_.CountAvailable }
+                    @{ name = "$($_.License)"; used = [int]$_.CountUsed; total = [int]$_.TotalLicenses; available = [math]::Max(0, [int]$_.CountAvailable); over = [math]::Max(0, - [int]$_.CountAvailable) }
                 })
 
         $ManagedDevices = @(Read-Db 'ManagedDevices')
@@ -247,7 +250,8 @@ function Get-CIPPCustomerReportData {
                 user              = ("$($Agent.LastLoginUser)" -replace '^.*\\', '')
                 model             = $Model
                 cpu               = "$(& $Field $Agent 'CpuSummary')"
-                memoryGB          = (& $Field $Agent 'MemoryGB')
+                memoryGB          = $(if ($Agent.Memory -and (Get-Command ConvertTo-AteraMemoryGB -ErrorAction SilentlyContinue)) { ConvertTo-AteraMemoryGB -MemoryMB $Agent.Memory } else { & $Field $Agent 'MemoryGB' })
+                isVirtual         = $(if ($Rating) { [bool]$Rating.IsVirtual } else { [bool](& $Field $Agent 'IsVirtual') })
                 support           = $(if ($Support) { $Support } else { 'Unknown' })
                 supportEnds       = "$(& $Field $Agent 'WindowsSupportEnds')"
                 updateStatus      = "$(if (& $Field $Agent 'UpdateStatus') { & $Field $Agent 'UpdateStatus' } else { 'Unknown' })"
@@ -292,10 +296,15 @@ function Get-CIPPCustomerReportData {
         # ("RE: [#13006] Adobe"); those are replies, not new requests.
         $IsReplyTicket = { param($T) "$($T.TicketTitle)" -match '^\s*(RE|FW|FWD|AW|SV)\s*:\s*\[#\d+\]' }
         $TicketsRaw = @(Read-Db 'AteraTickets')
-        $TicketsAll = @($TicketsRaw | Where-Object { -not (& $IsReplyTicket $_) })
+        # Tickets raised by an automated sender (Microsoft Defender, Azure notices and other no-reply
+        # addresses) are not requests from the customer: counted separately.
+        $IsAutomated = { param($T) "$($T.EndUserEmail)" -match '^[^@]*(no-?reply|donotreply|do-not-reply|notification|alerts?|mailer-daemon|postmaster)[^@]*@' }
+        $AutomatedAll = @($TicketsRaw | Where-Object { -not (& $IsReplyTicket $_) -and (& $IsAutomated $_) })
+        $TicketsAll = @($TicketsRaw | Where-Object { -not (& $IsReplyTicket $_) -and -not (& $IsAutomated $_) })
         $ReplyTickets = @($TicketsRaw | Where-Object { & $IsReplyTicket $_ } | ForEach-Object { "#$($_.TicketID): $($_.TicketTitle)" })
         $Tickets = @($TicketsAll | Where-Object { $c = ConvertTo-Utc $_.TicketCreatedDate; $c -and $c -ge $Period.Start -and $c -lt $Period.End })
         $OpenNow = @($TicketsAll | Where-Object { $_.TicketStatus -in @('Open', 'Pending') })
+        $Automated = @($AutomatedAll | Where-Object { $c = ConvertTo-Utc $_.TicketCreatedDate; $c -and $c -ge $Period.Start -and $c -lt $Period.End })
         $Contracts = @(Read-Db 'AteraContracts')
         $PurchaseRows = @(Read-Db 'AteraPurchases' | ForEach-Object {
                 @{ date = (ConvertTo-Utc $_.InvoiceDate); invoice = "$($_.InvoiceNumber)"; item = "$($_.Item)"; details = "$($_.Details)"; quantity = [double]($_.Quantity ?? 0); total = [double]($_.Total ?? 0); currency = "$($_.Currency)" }
@@ -359,6 +368,10 @@ function Get-CIPPCustomerReportData {
                     })
                 OldUrgent     = @($OpenNow | Where-Object { $_.TicketPriority -in @('High', 'Critical') -and (ConvertTo-Utc $_.TicketCreatedDate) -lt $Now.AddDays(-14) } | ForEach-Object { "#$($_.TicketID): $($_.TicketTitle)" })
                 ReplyTickets  = @($ReplyTickets)
+                Automated     = $Automated.Count
+                AutomatedMinutes = [math]::Round((($Automated | Measure-Object -Property TotalDurationSeconds -Sum).Sum ?? 0) / 60)
+                AutomatedFrom = @($Automated | Group-Object { "$($_.EndUserFirstName) $($_.EndUserLastName)".Trim() } | Sort-Object Count -Descending | ForEach-Object { $_.Name })
+                AutomatedOpen = @($AutomatedAll | Where-Object { $_.TicketStatus -in @('Open', 'Pending') }).Count
                 NoTimeClosed  = @($Tickets | Where-Object { $_.TicketStatus -in @('Closed', 'Resolved') -and [double]($_.TotalDurationSeconds ?? 0) -le 0 } | ForEach-Object { "#$($_.TicketID): $($_.TicketTitle)" })
             }
             Purchases        = @{

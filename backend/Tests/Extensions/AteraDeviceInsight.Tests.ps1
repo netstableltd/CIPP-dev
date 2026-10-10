@@ -7,7 +7,7 @@
 
 BeforeAll {
     $RepoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSCommandPath))
-    foreach ($Name in 'Get-AteraDeviceInsight', 'Get-AteraMemoryPressure', 'ConvertTo-AteraPatchSummary', 'ConvertTo-AteraLocalTime', 'Get-AteraDeviceRating', 'ConvertTo-AteraCpuInfo', 'Resolve-AteraDeviceRules') {
+    foreach ($Name in 'Get-AteraDeviceInsight', 'Get-AteraMemoryPressure', 'ConvertTo-AteraPatchSummary', 'ConvertTo-AteraLocalTime', 'Get-AteraDeviceRating', 'ConvertTo-AteraCpuInfo', 'Resolve-AteraDeviceRules', 'ConvertTo-AteraMemoryGB') {
         . (Get-ChildItem -Path (Join-Path $RepoRoot 'Modules') -Recurse -Filter "$Name.ps1" | Select-Object -First 1 -ExpandProperty FullName)
     }
     $script:Now = [datetime]::new(2026, 10, 9, 12, 0, 0, [DateTimeKind]::Utc)
@@ -111,6 +111,30 @@ Describe 'Get-AteraDeviceInsight' {
         $R = Get-Insight @(New-Agent 'X' -Cpu $Cpu -Cores $Cores -MemoryMB $MB)
         $R[0].HardwareRating | Should -Be $Rating
         $R[0].HardwareNotes | Should -Be $Why
+    }
+
+    It 'reads memory as fitted, not as Windows reports it: <MB> MB is <GB> GB' -ForEach @(
+        @{ MB = 7631; GB = 8 }, @{ MB = 7933; GB = 8 }, @{ MB = 14254; GB = 16 }, @{ MB = 15669; GB = 16 }, @{ MB = 32509; GB = 32 }, @{ MB = 6077; GB = 6 }, @{ MB = 3273; GB = 3 }, @{ MB = 4096; GB = 4 }
+    ) {
+        ConvertTo-AteraMemoryGB -MemoryMB $MB | Should -Be $GB
+    }
+
+    It 'rates an 8 GB Surface Laptop 4 (7,631 MB usable) as Check, not Needs attention' {
+        $A = New-Agent 'SURFACE' -Cpu 'AMD Ryzen 7 Microsoft Surface (R) Edition' -Cores 8 -MemoryMB 7631
+        $A | Add-Member -NotePropertyName VendorBrandModel -NotePropertyValue 'Surface Laptop 4'
+        $R = Get-Insight @($A)
+        $R[0].HardwareRating | Should -Be 'Check'
+        $R[0].HardwareNotes | Should -Be '8 GB memory'
+        $R[0].CpuSummary | Should -Be 'AMD Ryzen 7 (Surface)'
+    }
+
+    It 'does not rate the hardware of a virtual machine' {
+        $A = New-Agent 'VM1' -Cpu 'AMD Ryzen 7 5800X3D 8-Core Processor' -Cores 4 -MemoryMB 3273
+        $A | Add-Member -NotePropertyName VendorBrandModel -NotePropertyValue 'Virtual Machine'
+        $R = Get-Insight @($A)
+        $R[0].IsVirtual | Should -BeTrue
+        $R[0].HardwareRating | Should -Be 'Good'
+        $R[0].HardwareNotes | Should -Be ''
     }
 
     It 'rates the same hardware differently when the rules change' {

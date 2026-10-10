@@ -67,6 +67,9 @@ function Get-CIPPReportFindings {
             Add-Finding 'mfa-admins' 'Fix' 'Microsoft 365' 'Admin accounts without enforced MFA' "$(& $Plural $Mfa.UnprotectedAdmins.Count 'admin account') can sign in without MFA being enforced." $Mfa.UnprotectedAdmins `
                 'Turn on multi-factor authentication for every administrator account. Admin accounts are the most targeted.'
         }
+        if ($Mfa -and @($Mfa.BreakGlassAdmins).Count -gt 0) {
+            Add-Finding 'mfa-breakglass' 'Info' 'Microsoft 365' 'Emergency access accounts without enforced MFA' 'Break-glass accounts are usually excluded from MFA on purpose. Check each is meant to be, has a long random password or a FIDO2 key, and is monitored for sign-ins. Not shown to the customer.' @($Mfa.BreakGlassAdmins)
+        }
         if ($Mfa -and $Mfa.UnprotectedLicensed.Count -gt 0) {
             Add-Finding 'mfa-users' 'Fix' 'Microsoft 365' 'Users without enforced MFA' "$(& $Plural $Mfa.UnprotectedLicensed.Count 'licensed user') of $($Mfa.Users) are not covered by Conditional Access, Security Defaults or per-user MFA." @($Mfa.UnprotectedLicensed | ForEach-Object { $_.name }) `
                 "Enforce multi-factor authentication for $(& $The $Mfa.UnprotectedLicensed.Count 'remaining user')."
@@ -99,6 +102,10 @@ function Get-CIPPReportFindings {
         if ($SharedLic.Count -gt 0) {
             Add-Finding 'licence-shared-mailbox' 'Info' 'Microsoft 365' 'Licences on shared mailboxes' "$(& $Plural $SharedLic.Count 'shared mailbox') hold a paid licence but are under 50 GB with no archive, so they do not need one." @($SharedLic | ForEach-Object { "$($_.upn)$(if ($null -ne $_.usedGB) { " ($($_.usedGB) GB)" })" }) `
                 "Remove the Microsoft 365 licence from $(& $The $SharedLic.Count 'shared mailbox'): a shared mailbox under 50 GB does not need one, so it is a saving." @($SharedLic | ForEach-Object { $_.upn })
+        }
+        $Over = @($Data.M365.Licences | Where-Object { $_.over -gt 0 })
+        if ($Over.Count -gt 0) {
+            Add-Finding 'licences-over-assigned' 'Info' 'Microsoft 365' 'More licences assigned than owned' 'Usually trial, free or expiring subscriptions, or licences assigned from another source. Check before the customer is billed or users lose access. Not shown to the customer.' @($Over | ForEach-Object { "$($_.name): $($_.used) assigned, $($_.total) owned" })
         }
         if ($Data.M365.Unassigned -gt 0) {
             $Spare = @($Data.M365.Licences | Where-Object { $_.available -gt 0 } | ForEach-Object { "$($_.name): $($_.available) unassigned" })

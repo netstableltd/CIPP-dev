@@ -159,7 +159,7 @@ function Build-CippCustomerReportTree {
                 else { "$($Row.daysSinceSeen) days ago" }
             }
             $Rows = @($D.List | ForEach-Object {
-                    $Spec = (@(($_.cpu -replace ' \(c\. \d{4}\)', '' -replace '^Intel Core ', '' -replace '^AMD ', ''), $(if ($_.memoryGB) { "$($_.memoryGB) GB" })) | Where-Object { $_ }) -join ', '
+                    $Spec = (@($(if ($_.isVirtual) { 'Virtual machine' } else { ($_.cpu -replace ' \(c\. \d{4}\)', '' -replace '^Intel Core ', '' -replace '^AMD ', '' -replace ' Microsoft Surface Edition', ' (Surface)') }), $(if ($_.memoryGB) { "$($_.memoryGB) GB" })) | Where-Object { $_ }) -join ', '
                     @{
                         name   = $_.name
                         user   = $_.user
@@ -243,8 +243,10 @@ function Build-CippCustomerReportTree {
                 $AllRows = @(foreach ($Dev in $Waiting) {
                         foreach ($U in @("$($Dev.updatesFailing)" -split '; ' | Where-Object { $_ })) { @{ order = 0; name = $Dev.name; update = $U; state = 'Failed'; tone = 'fail' } }
                         foreach ($U in @("$($Dev.updatesWaiting)" -split '; ' | Where-Object { $_ })) { $Sec = $U -match 'Security|Cumulative'; @{ order = $(if ($Sec) { 1 } else { 2 }); name = $Dev.name; update = $U; state = 'Waiting'; tone = $(if ($Sec) { 'fail' } else { 'warn' }) } }
-                        foreach ($U in @("$($Dev.driversWaiting)" -split '; ' | Where-Object { $_ })) { @{ order = 3; name = $Dev.name; update = $U; state = 'Optional driver'; tone = '' } }
-                        foreach ($U in @("$($Dev.driversFailing)" -split '; ' | Where-Object { $_ })) { @{ order = 3; name = $Dev.name; update = $U; state = 'Optional driver (failed)'; tone = '' } }
+                        # Driver updates are optional: one line per computer rather than one per driver.
+                        $Drv = @("$($Dev.driversWaiting)" -split '; ' | Where-Object { $_ }).Count
+                        $DrvFailed = @("$($Dev.driversFailing)" -split '; ' | Where-Object { $_ }).Count
+                        if (($Drv + $DrvFailed) -gt 0) { @{ order = 3; name = $Dev.name; update = "$(& $plural ($Drv + $DrvFailed) 'optional driver update')$(if ($DrvFailed -gt 0) { " ($DrvFailed failed to install)" })"; state = 'Optional'; tone = '' } }
                     })
                 $WRows = @($AllRows | Sort-Object { $_.order }, { $_.name })
                 $blocks.Add((New-CippReportTable -Title 'Updates still to install' -Limit 60 -Columns @(
@@ -373,6 +375,10 @@ function Build-CippCustomerReportTree {
                         @{ value = "$($T.OpenNow)"; label = 'Open now' }
                         @{ value = (& $hm $T.MinutesLogged); label = 'Time spent' }
                     )))
+            if ($T.Automated -gt 0) {
+                $From = @($T.AutomatedFrom | Select-Object -First 3) -join ', '
+                $blocks.Add((New-CippReportNote -Text "Not counted above: $(& $plural $T.Automated 'automated notification') ($From) that came in to our helpdesk and were checked by us$(if ($T.AutomatedMinutes -gt 0) { " ($(& $hm $T.AutomatedMinutes))" })."))
+            }
             if ($T.Opened -gt 0) {
                 if (@($T.ByRequester).Count -gt 1) {
                     $blocks.Add((New-CippReportChart -Kind bar -Title 'Requests by person' -Data @($T.ByRequester)))

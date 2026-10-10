@@ -81,20 +81,24 @@ function Get-AteraDeviceRating {
     $Os = "$(& $Get 'OS')"
     $IsServer = $Os -match 'Server' -or "$(& $Get 'OSType')" -match 'Server|Domain Controller'
     $Cpu = ConvertTo-AteraCpuInfo -Processor "$(& $Get 'Processor')"
-    if ($Cpu.Vendor -eq 'Intel' -and $Cpu.Family -eq 'Core' -and $Cpu.Generation) {
-        $Ord = "$($Cpu.Generation)$(switch ($Cpu.Generation) { 1 { 'st' } 2 { 'nd' } 3 { 'rd' } default { 'th' } })"
-        & $AddTo (& $Below 'intelGeneration' $Cpu.Generation) "$Ord gen Intel processor" -Hardware
-    } elseif ($Cpu.Family -eq 'Ryzen' -and $Cpu.Generation) {
-        & $AddTo (& $Below 'ryzenSeries' $Cpu.Generation) "Ryzen $($Cpu.Generation)000 series processor" -Hardware
+    # Virtual machines get the processors and memory they are given, so hardware rules don't apply.
+    $IsVirtual = "$(& $Get 'VendorBrandModel') $(& $Get 'Vendor')" -match '(?i)virtual machine|vmware|virtualbox|kvm|qemu|\bxen\b|hvm domu|parallels|hyper-v'
+    if (-not $IsVirtual) {
+        if ($Cpu.Vendor -eq 'Intel' -and $Cpu.Family -eq 'Core' -and $Cpu.Generation) {
+            $Ord = "$($Cpu.Generation)$(switch ($Cpu.Generation) { 1 { 'st' } 2 { 'nd' } 3 { 'rd' } default { 'th' } })"
+            & $AddTo (& $Below 'intelGeneration' $Cpu.Generation) "$Ord gen Intel processor" -Hardware
+        } elseif ($Cpu.Family -eq 'Ryzen' -and $Cpu.Generation) {
+            & $AddTo (& $Below 'ryzenSeries' $Cpu.Generation) "Ryzen $($Cpu.Generation)000 series processor" -Hardware
+        }
+        $Cores = & $Num (& $Get 'ProcessorCoresCount')
+        & $AddTo (& $Below 'cores' $Cores) "$Cores-core processor" -Hardware
+        # Memory fitted, from what Windows reports (shared graphics memory is not counted by Windows).
+        $MemGB = if (& $Get 'Memory') { ConvertTo-AteraMemoryGB -MemoryMB (& $Get 'Memory') } else { & $Num (& $Get 'MemoryGB') }
+        & $AddTo (& $Below 'memoryGB' $MemGB) "$MemGB GB memory" -Hardware
+        $Win11 = if (& $Get 'Windows11Ready') { "$(& $Get 'Windows11Ready')" } else { $Cpu.Win11 }
+        if (-not $IsServer -and $Win11 -eq 'No') { & $AddTo (& $Flag 'windows11') 'processor cannot run Windows 11' -Hardware }
+        if ($Cpu.EntryLevel) { & $AddTo (& $Flag 'entryLevelCpu') 'entry-level processor' -Hardware }
     }
-    $Cores = & $Num (& $Get 'ProcessorCoresCount')
-    & $AddTo (& $Below 'cores' $Cores) "$Cores-core processor" -Hardware
-    $MemGB = & $Num (& $Get 'MemoryGB')
-    if ($null -eq $MemGB -and (& $Get 'Memory')) { $MemGB = [math]::Round([double](& $Get 'Memory') / 1024) }
-    & $AddTo (& $Below 'memoryGB' $MemGB) "$MemGB GB memory" -Hardware
-    $Win11 = if (& $Get 'Windows11Ready') { "$(& $Get 'Windows11Ready')" } else { $Cpu.Win11 }
-    if (-not $IsServer -and $Win11 -eq 'No') { & $AddTo (& $Flag 'windows11') 'processor cannot run Windows 11' -Hardware }
-    if ($Cpu.EntryLevel) { & $AddTo (& $Flag 'entryLevelCpu') 'entry-level processor' -Hardware }
     $HardwareRating = if ($HwAttention.Count -gt 0) { 'Needs attention' } elseif ($HwCheck.Count -gt 0) { 'Check' } else { 'Good' }
 
     # --- Everything else -------------------------------------------------------------------------------
@@ -148,6 +152,7 @@ function Get-AteraDeviceRating {
     [pscustomobject]@{
         HardwareRating = $HardwareRating
         HardwareNotes  = (@($HwAttention) + @($HwCheck)) -join '; '
+        IsVirtual      = [bool]$IsVirtual
         HardwareTier   = switch ($HardwareRating) { 'Needs attention' { 'Below baseline' } 'Check' { 'Borderline' } default { 'Meets baseline' } }
         HealthStatus   = $Health
         HealthNotes    = (@($Attention) + @($Check)) -join '; '
