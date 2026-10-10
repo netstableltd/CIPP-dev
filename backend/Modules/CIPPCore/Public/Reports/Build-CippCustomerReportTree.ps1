@@ -81,10 +81,10 @@ function Build-CippCustomerReportTree {
         if ($Actions.Count -eq 0) {
             $blocks.Add((New-CippReportClearBox -Title 'Status: Good' -Content 'Nothing in this month''s checks needs action from you. We will keep monitoring and let you know if that changes.'))
         } else {
-            $Level = if ($Actions.Count -ge 4) { 'Action needed' } else { 'Attention' }
+            $Level = if ($Actions.Count -ge 4) { 'Action needed' } else { 'A few things to do' }
             $Colour = if ($Actions.Count -ge 4) { $dangerC } else { $warnC }
             $PlanText = if ($Planned.Count -gt 0) { " and $(& $plural $Planned.Count 'thing') to plan for" } else { '' }
-            $blocks.Add((New-CippReportAlertBox -Title "Status: $Level" -Colour $Colour -Content "We found $(& $plural $Actions.Count 'item') that need attention$PlanText. They are listed under Recommendations at the end of this report with what we suggest doing about each."))
+            $blocks.Add((New-CippReportAlertBox -Title "Status: $Level" -Colour $Colour -Content "We recommend $(& $plural $Actions.Count 'thing') to do now$PlanText. They are listed under Recommendations at the end of this report with what we suggest doing about each."))
         }
         }
         'm365-security' = {
