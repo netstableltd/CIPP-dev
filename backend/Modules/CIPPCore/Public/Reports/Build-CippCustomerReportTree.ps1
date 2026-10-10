@@ -83,7 +83,8 @@ function Build-CippCustomerReportTree {
         } else {
             $Level = if ($Actions.Count -ge 4) { 'Action needed' } else { 'Attention' }
             $Colour = if ($Actions.Count -ge 4) { $dangerC } else { $warnC }
-            $blocks.Add((New-CippReportAlertBox -Title "Status: $Level" -Colour $Colour -Content "We found $(& $plural $Actions.Count 'item') that need attention. They are listed under Recommendations at the end of this report with what we suggest doing about each."))
+            $PlanText = if ($Planned.Count -gt 0) { " and $(& $plural $Planned.Count 'thing') to plan for" } else { '' }
+            $blocks.Add((New-CippReportAlertBox -Title "Status: $Level" -Colour $Colour -Content "We found $(& $plural $Actions.Count 'item') that need attention$PlanText. They are listed under Recommendations at the end of this report with what we suggest doing about each."))
         }
         }
         'm365-security' = {
@@ -97,7 +98,7 @@ function Build-CippCustomerReportTree {
                 $Move = if ($S.Change -gt 0) { ", up $($S.Change) points$Since" } elseif ($S.Change -lt 0) { ", down $([math]::Abs($S.Change)) points$Since" } else { '' }
                 $blocks.Add((New-CippReportParagraph -Text "Secure Score is Microsoft's own measure of how many of its recommended security settings are in place. It is a guide rather than a target: some recommendations do not suit every business. Your score is currently $($S.Current) of $($S.Max) ($($S.Percent)%)$Move.$Compare"))
                 if (@($S.Trend).Count -gt 1) {
-                    $blocks.Add((New-CippReportChart -Kind trend -Title 'Secure Score' -Max ([double]$S.Max) -Caption 'Recent daily scores' -Data @($S.Trend)))
+                    $blocks.Add((New-CippReportChart -Kind trend -Title 'Secure Score' -Max ([double]$S.Max) -Caption 'Daily scores, last two weeks' -Data @($S.Trend)))
                 }
             }
             if ($M.Mfa) {
@@ -118,7 +119,7 @@ function Build-CippCustomerReportTree {
         if ($M) {
             $blocks.Add((New-CippReportPage -Title 'Users & Licences' -Subtitle 'Who has access, and what you are paying for'))
             $blocks.Add((New-CippReportStatRow -Stats @(
-                        @{ value = "$($M.Users)"; label = 'People with accounts' }
+                        @{ value = "$($M.Users)"; label = 'User accounts' }
                         @{ value = "$($M.Licensed)"; label = 'With a paid licence' }
                         @{ value = "$($M.Guests)"; label = 'Guest accounts' }
                         @{ value = "$($M.Unassigned)"; label = 'Spare licences'; colour = $(if ($M.Unassigned -gt 0) { $warnC }) }
@@ -202,7 +203,7 @@ function Build-CippCustomerReportTree {
             $Failing = @($Act | Where-Object { [int]$_.securityFailed -gt 0 })
             $blocks.Add((New-CippReportStatRow -Stats @(
                         @{ value = "$($D.UpToDate)"; label = 'Up to date'; colour = $okC }
-                        @{ value = "$(@($D.UpdatesBehind).Count)"; label = 'Security updates waiting'; colour = $(if (@($D.UpdatesBehind).Count -gt 0) { $dangerC }) }
+                        @{ value = "$(@($D.UpdatesBehind).Count)"; label = 'Need security updates'; colour = $(if (@($D.UpdatesBehind).Count -gt 0) { $dangerC }) }
                         @{ value = "$($Failing.Count)"; label = 'Updates failing'; colour = $(if ($Failing.Count -gt 0) { $warnC }) }
                         @{ value = "$($Unsupported.Count + $Ending.Count)"; label = 'Windows support ended or ending'; colour = $(if ($Unsupported.Count -gt 0) { $dangerC } elseif ($Ending.Count -gt 0) { $warnC }) }
                     )))
@@ -216,6 +217,7 @@ function Build-CippCustomerReportTree {
                         default { 'Not known' }
                     }
                     if ($Dev.daysSinceReboot -gt 30) { $Upd = "$Upd - restart needed" }
+                    if ($Dev.patchScanDate -and ($Data.GeneratedAt - $Dev.patchScanDate).TotalDays -gt 7) { $Upd = "$Upd (last checked $($Dev.patchScanDate.ToString('d MMM')))" }
                     $Last = if ($Dev.lastSecurityUpdate) { & $FormatEnd $Dev.lastSecurityUpdate } else { '' }
                     @{
                         name    = $Dev.name
@@ -240,6 +242,7 @@ function Build-CippCustomerReportTree {
                         foreach ($U in @("$($Dev.updatesFailing)" -split '; ' | Where-Object { $_ })) { @{ order = 0; name = $Dev.name; update = $U; state = 'Failed'; tone = 'fail' } }
                         foreach ($U in @("$($Dev.updatesWaiting)" -split '; ' | Where-Object { $_ })) { $Sec = $U -match 'Security|Cumulative'; @{ order = $(if ($Sec) { 1 } else { 2 }); name = $Dev.name; update = $U; state = 'Waiting'; tone = $(if ($Sec) { 'fail' } else { 'warn' }) } }
                         foreach ($U in @("$($Dev.driversWaiting)" -split '; ' | Where-Object { $_ })) { @{ order = 3; name = $Dev.name; update = $U; state = 'Optional driver'; tone = '' } }
+                        foreach ($U in @("$($Dev.driversFailing)" -split '; ' | Where-Object { $_ })) { @{ order = 3; name = $Dev.name; update = $U; state = 'Optional driver (failed)'; tone = '' } }
                     })
                 $WRows = @($AllRows | Sort-Object { $_.order }, { $_.name })
                 $blocks.Add((New-CippReportTable -Title 'Updates still to install' -Limit 60 -Columns @(
@@ -335,7 +338,7 @@ function Build-CippCustomerReportTree {
                             @{ header = 'Devices'; key = 'devices'; width = 0.8; align = 'right' }
                         ) -Rows @($A.Alerts.TopTitles)))
             } else {
-                $blocks.Add((New-CippReportClearBox -Title 'A quiet month' -Content 'No monitoring alerts were raised in this period.'))
+                $blocks.Add((New-CippReportClearBox -Title 'No alerts' -Content 'No monitoring alerts were raised in this period.'))
             }
         }
         }
@@ -448,19 +451,20 @@ function Build-CippCustomerReportTree {
             } else {
                 $blocks.Add((New-CippReportStatRow -Stats @(
                             @{ value = "$($Br.Total)"; label = 'Addresses found' }
-                            @{ value = "$($Br.Current)"; label = 'Current accounts'; colour = $(if ($Br.Current -gt 0) { $warnC }) }
-                            @{ value = "$($Br.WithPasswords)"; label = 'Passwords exposed'; colour = $(if ($Br.WithPasswords -gt 0) { $dangerC }) }
+                            @{ value = "$(@($Br.People).Count)"; label = 'People affected'; colour = $(if (@($Br.People).Count -gt 0) { $warnC }) }
+                            @{ value = "$($Br.PeopleWithPasswords)"; label = 'Passwords exposed'; colour = $(if ($Br.PeopleWithPasswords -gt 0) { $dangerC }) }
                         )))
                 $Rows = @($Br.Accounts | ForEach-Object {
+                        $Acc = $_
                         $List = @($_.breaches)
                         $Shown = @($List | Select-Object -First 3 | ForEach-Object { if ($_.date -and $_.date.Length -ge 4) { "$($_.title) ($($_.date.Substring(0, 4)))" } else { $_.title } })
-                        $Classes = @($List | ForEach-Object { @($_.classes) } | Where-Object { $_ -in @('Passwords', 'Email addresses', 'Phone numbers', 'Physical addresses', 'Dates of birth', 'Names', 'IP addresses', 'Credit cards', 'Bank account numbers') } | Sort-Object -Unique)
+                        $Classes = @(@($List | ForEach-Object { @($_.classes) }) + $(if ($_.passwords) { 'Passwords' }) | Where-Object { $_ -in @('Passwords', 'Email addresses', 'Phone numbers', 'Physical addresses', 'Dates of birth', 'Names', 'IP addresses', 'Credit cards', 'Bank account numbers') } | Sort-Object -Unique)
                         @{
                             email    = $_.email
                             breaches = ($Shown -join ', ') + $(if ($List.Count -gt 3) { " and $($List.Count - 3) more" } else { '' })
-                            exposed  = $(if ($Classes.Count -gt 0) { $Classes -join ', ' } else { 'Not known' })
+                            exposed  = $(if ($Classes.Count -gt 0) { $Classes -join ', ' } else { 'Email address' })
                             tone     = $(if ($_.passwords) { 'fail' } else { 'warn' })
-                            account  = $(switch ($_.current) { $true { 'Current' } $false { 'No longer in use' } default { '' } })
+                            account  = $(switch ($Acc.kind) { 'Person' { if ($Acc.alias) { "Alias of $($Acc.owner)" } else { 'In use' } } 'Shared mailbox' { 'Shared mailbox' } 'Disabled account' { 'Disabled account' } 'Not in use' { 'No longer in use' } default { '' } })
                         }
                     })
                 $blocks.Add((New-CippReportTable -Title 'Addresses found in breaches' -Limit 100 -Columns @(

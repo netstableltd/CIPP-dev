@@ -84,16 +84,21 @@ function Get-CIPPReportFindings {
         $WeakDomains = @($Data.M365.Domains | Where-Object { @($_.issues).Count -gt 0 })
         if ($WeakDomains.Count -gt 0) {
             Add-Finding 'domain-email-security' 'Fix' 'Microsoft 365' 'Domains with weak email security' "$(& $Plural $WeakDomains.Count 'domain') are missing SPF, DMARC or DKIM, so they are easier to spoof." @($WeakDomains | ForEach-Object { "$($_.domain): $(@($_.issues) -join ', ')" }) `
-                "Finish the email security settings (SPF, DKIM and DMARC) on $(& $The $WeakDomains.Count 'domain') listed, including any domains you own but do not use, so they cannot be used to send fake email in your name."
+                "Finish the email security settings (SPF, DKIM and DMARC) on $(& $The $WeakDomains.Count 'domain') listed, including any domains you own but do not use, so they cannot be used to send fake email in your name. The Email & Domains page shows what each one needs." @($WeakDomains | ForEach-Object { $_.domain })
         }
         $Br = $Data.Breaches
-        if ($Br -and $Br.Current -gt 0) {
-            $Cur = @($Br.Accounts | Where-Object { $_.current -ne $false })
-            Add-Finding 'accounts-breached' 'Fix' 'Microsoft 365' 'Email addresses in known data breaches' "$(& $Plural $Cur.Count 'current address') appear in known breaches of other websites ($($Br.WithPasswords) where passwords were exposed). Make sure MFA is enforced for them and they don't reuse passwords." @($Cur | ForEach-Object { "$($_.email): $(@($_.breaches | ForEach-Object { $_.title }) -join ', ')" }) `
-                "Ask $(& $The $Cur.Count 'person') whose email address appears in a data breach to make sure they don't use the same password anywhere else, and that multi-factor authentication is on for their account. The breaches were of other websites, not your Microsoft 365." @($Cur | ForEach-Object { $_.email })
+        $People = @($Br.People)
+        if ($Br -and $People.Count -gt 0) {
+            Add-Finding 'accounts-breached' 'Fix' 'Microsoft 365' 'Email addresses in known data breaches' "$(& $Plural $People.Count 'person') ($(& $Plural $Br.Total 'address') in all, including aliases, shared mailboxes and old accounts) appear in known breaches of other websites; $($Br.PeopleWithPasswords) with passwords exposed. Make sure MFA is enforced for them and they don't reuse passwords." @($Br.Accounts | ForEach-Object { "$($_.email) [$($_.kind)$(if ($_.alias) { ", alias of $($_.owner)" })]: $(@($_.breaches | ForEach-Object { $_.title }) -join ', ')" }) `
+                "Ask $(& $The $People.Count 'person') whose email address appears in a data breach to make sure they don't use the same password anywhere else, and that multi-factor authentication is on for their account. The breaches were of other websites, not your Microsoft 365." $People
         }
         if ($Br -and $Br.Source -eq 'None' -and $Br.Error) {
             Add-Finding 'breach-check-failed' 'Info' 'Microsoft 365' 'Breach check failed' "The breach lookup did not run: $($Br.Error)"
+        }
+        $SharedLic = @($Data.M365.LicensedSharedMailboxes)
+        if ($SharedLic.Count -gt 0) {
+            Add-Finding 'licence-shared-mailbox' 'Info' 'Microsoft 365' 'Licences on shared mailboxes' "$(& $Plural $SharedLic.Count 'shared mailbox') hold a paid licence but are under 50 GB with no archive, so they do not need one." @($SharedLic | ForEach-Object { "$($_.upn)$(if ($null -ne $_.usedGB) { " ($($_.usedGB) GB)" })" }) `
+                "Remove the Microsoft 365 licence from $(& $The $SharedLic.Count 'shared mailbox'): a shared mailbox under 50 GB does not need one, so it is a saving." @($SharedLic | ForEach-Object { $_.upn })
         }
         if ($Data.M365.Unassigned -gt 0) {
             $Spare = @($Data.M365.Licences | Where-Object { $_.available -gt 0 } | ForEach-Object { "$($_.name): $($_.available) unassigned" })
@@ -135,7 +140,7 @@ function Get-CIPPReportFindings {
         if ($Full.Count -gt 0) {
             $Critical = @($Full | Where-Object { $_.drivesOver90 })
             Add-Finding 'devices-storage' $(if ($Critical.Count -gt 0) { 'Fix' } else { 'Info' }) 'Device health' 'Drives over 75% full' "$(& $Plural $Full.Count 'device') have a drive over 75% full$(if ($Critical.Count -gt 0) { "; $($Critical.Count) over 90%" })." @($Full | ForEach-Object { "$($_.name) ($($_.drivesOver75))" }) `
-                "Free up space, by deleting or archiving old files, or fit a bigger drive in $(& $The $Full.Count 'computer') with a drive more than three-quarters full." @($Full | ForEach-Object { "$($_.name) ($($_.drivesOver75 -replace '%', '% full'))" })
+                $(if ($Critical.Count -gt 0) { "Free up space now, or fit a bigger drive, on $(& $The $Full.Count 'computer') with a drive more than three-quarters full. A drive over 90% full stops updates and everyday work, so $(if ($Critical.Count -eq 1) { "$($Critical[0].name) needs" } else { 'these need' }) attention first." } else { "Free up space, by deleting or archiving old files, or fit a bigger drive in $(& $The $Full.Count 'computer') with a drive more than three-quarters full." }) @($Full | ForEach-Object { "$($_.name) ($($_.drivesOver75 -replace '%', '% full'))" })
         }
         if (@($D.BelowBaseline).Count -gt 0) {
             $Bb = @($D.BelowBaseline)
@@ -152,12 +157,15 @@ function Get-CIPPReportFindings {
         }
 
         if ($D.Total -gt 0 -and $null -ne $Data.Atera.Alerts.Last90 -and $Data.Atera.Alerts.Last90 -eq 0) {
-            Add-Finding 'monitoring-silent' 'Info' 'Monitoring' 'No monitoring alerts in 90 days' 'Not one alert in three months is unusual. Check the customer has a monitoring profile/threshold policy applied in Atera before the report says we monitor around the clock.'
+            Add-Finding 'monitoring-silent' 'Fix' 'Monitoring' 'No monitoring alerts in 90 days' 'Not one alert in three months usually means no threshold profile is applied to this customer in Atera, so disk, memory and CPU problems are not being alerted on (and the memory check in this report cannot fire). Check the customer''s monitoring profile.'
         }
 
         $T = $Data.Atera.Tickets
         if ($T.OldUrgent.Count -gt 0) {
             Add-Finding 'tickets-old-urgent' 'Fix' 'Support' 'High/Critical tickets open over 14 days' 'Resolve or update these before the customer sees the report.' $T.OldUrgent
+        }
+        if (@($T.ReplyTickets).Count -gt 0) {
+            Add-Finding 'tickets-replies' 'Info' 'Support' 'Replies logged as new tickets' 'Left out of the customer''s request count. Merge them into the original ticket in Atera.' @($T.ReplyTickets)
         }
         if ($T.NoTimeClosed.Count -gt 0) {
             Add-Finding 'tickets-no-time' 'Fix' 'Support' 'Closed tickets with no time logged' 'These will show as zero time in the support summary (and may be unbilled).' $T.NoTimeClosed

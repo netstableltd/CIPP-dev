@@ -7,7 +7,7 @@
 
 BeforeAll {
     $RepoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSCommandPath))
-    foreach ($Name in 'Get-AteraDeviceInsight', 'Get-AteraMemoryPressure', 'ConvertTo-AteraPatchSummary') {
+    foreach ($Name in 'Get-AteraDeviceInsight', 'Get-AteraMemoryPressure', 'ConvertTo-AteraPatchSummary', 'ConvertTo-AteraLocalTime') {
         . (Get-ChildItem -Path (Join-Path $RepoRoot 'Modules') -Recurse -Filter "$Name.ps1" | Select-Object -First 1 -ExpandProperty FullName)
     }
     $script:Now = [datetime]::new(2026, 10, 9, 12, 0, 0, [DateTimeKind]::Utc)
@@ -148,7 +148,7 @@ Describe 'Get-AteraDeviceInsight' {
             'guid-A'        = [pscustomobject]@{ PatchScanDate = '2026-10-09T10:00:00Z'; SecurityUpdatesWaiting = 0; OtherUpdatesWaiting = 1; UpdatesFailed = 0; LastSecurityUpdate = '2026-09-15'; UpdatesWaiting = 'Intel driver'; UpdatesFailing = '' }
             'guid-WAITING'  = [pscustomobject]@{ PatchScanDate = '2026-10-09T10:00:00Z'; SecurityUpdatesWaiting = 2; OtherUpdatesWaiting = 0; UpdatesFailed = 0; LastSecurityUpdate = '2026-06-09'; UpdatesWaiting = '2026-09 Security Update; .NET'; UpdatesFailing = '' }
             'guid-FAILING'  = [pscustomobject]@{ PatchScanDate = '2026-10-09T10:00:00Z'; SecurityUpdatesWaiting = 0; OtherUpdatesWaiting = 0; UpdatesFailed = 1; SecurityUpdatesFailed = 1; LastSecurityUpdate = '2026-09-15'; UpdatesWaiting = ''; UpdatesFailing = '2026-09 Security Update' }
-            'guid-B'        = [pscustomobject]@{ PatchScanDate = '2026-10-09T10:00:00Z'; SecurityUpdatesWaiting = 0; OtherUpdatesWaiting = 0; UpdatesFailed = 1; SecurityUpdatesFailed = 0; LastSecurityUpdate = '2026-09-15'; UpdatesWaiting = ''; UpdatesFailing = 'Brother printer driver' }
+            'guid-B'        = [pscustomobject]@{ PatchScanDate = '2026-10-09T10:00:00Z'; SecurityUpdatesWaiting = 0; OtherUpdatesWaiting = 0; UpdatesFailed = 0; SecurityUpdatesFailed = 0; DriversFailed = 1; LastSecurityUpdate = '2026-09-15'; UpdatesWaiting = ''; UpdatesFailing = ''; DriversFailing = 'Brother printer driver' }
             'guid-OLDBUILD' = [pscustomobject]@{ PatchScanDate = '2026-10-09T10:00:00Z'; SecurityUpdatesWaiting = 0; OtherUpdatesWaiting = 0; UpdatesFailed = 0; LastSecurityUpdate = '2026-09-15'; UpdatesWaiting = ''; UpdatesFailing = '' }
         }
         $R = @(Get-AteraDeviceInsight -Agents $Fleet -Now $script:Now -Lifecycle $script:Lifecycle -Patches $Patches)
@@ -159,16 +159,17 @@ Describe 'Get-AteraDeviceInsight' {
         ($R | Where-Object MachineName -EQ 'FAILING').UpdateStatus | Should -Be 'Failing'
         # the scan wins over the build comparison
         ($R | Where-Object MachineName -EQ 'OLDBUILD').UpdateStatus | Should -Be 'Up to date'
-        # a failed driver is not a failed security update
+        # a failed driver is optional: listed, but the device stays up to date and healthy
         ($R | Where-Object MachineName -EQ 'B').UpdateStatus | Should -Be 'Up to date'
-        ($R | Where-Object MachineName -EQ 'B').HealthStatus | Should -Be 'Check'
-        ($R | Where-Object MachineName -EQ 'B').HealthNotes | Should -Match 'Brother printer driver'
+        ($R | Where-Object MachineName -EQ 'B').HealthStatus | Should -Be 'Good'
+        ($R | Where-Object MachineName -EQ 'B').DriversFailing | Should -Be 'Brother printer driver'
     }
 
     It 'summarises a patch scan, ignoring antivirus definitions' {
         $Installed = [pscustomobject]@{ timestamp = '2026-10-09T12:45:06Z'; installedUpdates = @(
                 [pscustomobject]@{ name = 'Old'; class = 'Security Updates'; installDate = '2026-08-12T00:00:00Z' }
                 [pscustomobject]@{ name = 'Sept'; class = 'Security Updates'; installDate = '2026-09-15T00:00:00Z' }
+                [pscustomobject]@{ name = 'Windows Malicious Software Removal Tool x64 - v5.130 (KB890830)'; class = 'Update Rollups'; installDate = '2026-09-24T00:00:00Z' }
                 [pscustomobject]@{ name = 'Defender'; class = 'Definition Updates'; installDate = '2026-10-09T00:00:00Z' }) }
         $Available = [pscustomobject]@{ timestamp = '2026-10-09T12:45:06Z'; availableUpdates = @(
                 [pscustomobject]@{ name = 'Brother - Printer - 3.3.0.0'; class = 'Hardware driver updates'; status = 'Failed' }
@@ -179,12 +180,14 @@ Describe 'Get-AteraDeviceInsight' {
         $S.SecurityUpdatesWaiting | Should -Be 1
         $S.OtherUpdatesWaiting | Should -Be 0
         $S.DriverUpdatesWaiting | Should -Be 1
-        $S.UpdatesFailed | Should -Be 1
+        $S.UpdatesFailed | Should -Be 0
+        $S.DriversFailed | Should -Be 1
         $S.SecurityUpdatesFailed | Should -Be 0
         $S.DriversWaiting | Should -Be 'Insyde firmware'
         $S.LastSecurityUpdate | Should -Be '2026-09-15'
         $S.UpdatesWaiting | Should -Be '2026-09 Security Update (KB5129195)'
-        $S.UpdatesFailing | Should -Be 'Brother - Printer - 3.3.0.0'
+        $S.UpdatesFailing | Should -Be ''
+        $S.DriversFailing | Should -Be 'Brother - Printer - 3.3.0.0'
         $S.PatchScanDate | Should -Be '2026-10-09T12:45:06Z'
     }
 
@@ -194,7 +197,7 @@ Describe 'Get-AteraDeviceInsight' {
         ($R | Where-Object MachineName -EQ 'A').HealthStatus | Should -Be 'Good'
         $L = $R | Where-Object MachineName -EQ 'LAPTOP'
         $L.HealthStatus | Should -Be 'Needs attention'
-        $L.DaysSinceSeen | Should -Be 14
+        $L.DaysSinceSeen | Should -Be 15
         $L.DaysSinceReboot | Should -Be 107
         $L.SystemDiskFreePercent | Should -Be 4
         $L.IsHomeEdition | Should -BeTrue

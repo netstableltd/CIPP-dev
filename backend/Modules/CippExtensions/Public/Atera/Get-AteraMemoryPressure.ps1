@@ -27,22 +27,6 @@ function Get-AteraMemoryPressure {
         [datetime]$To = [datetime]::MaxValue
     )
 
-    $Zone = try { [System.TimeZoneInfo]::FindSystemTimeZoneById($TimeZone) } catch { $null }
-    # Containers without time zone data: built-in rule for UK/Irish and Central European time (EU summer
-    # time runs from 01:00 UTC on the last Sunday of March to 01:00 UTC on the last Sunday of October).
-    $BaseOffset = switch -Regex ($TimeZone) {
-        '^(Europe/(London|Dublin|Lisbon)|GMT Standard Time)$' { 0; break }
-        '^(Europe/(Amsterdam|Berlin|Paris|Brussels|Madrid|Rome|Vienna|Zurich|Stockholm|Oslo|Copenhagen|Warsaw|Prague)|W\. Europe Standard Time|Romance Standard Time|Central Europe Standard Time)$' { 1; break }
-        default { $null }
-    }
-    $LastSunday = { param([int]$Year, [int]$Month) $d = [datetime]::new($Year, $Month, [datetime]::DaysInMonth($Year, $Month), 1, 0, 0, [DateTimeKind]::Utc); while ($d.DayOfWeek -ne [DayOfWeek]::Sunday) { $d = $d.AddDays(-1) }; $d }
-    $ToLocal = {
-        param([datetime]$Utc)
-        if ($Zone) { return [System.TimeZoneInfo]::ConvertTimeFromUtc([datetime]::SpecifyKind($Utc, [DateTimeKind]::Utc), $Zone) }
-        if ($null -eq $BaseOffset) { return $Utc }
-        $Summer = $Utc -ge (& $LastSunday $Utc.Year 3) -and $Utc -lt (& $LastSunday $Utc.Year 10)
-        $Utc.AddHours($BaseOffset + $(if ($Summer) { 1 } else { 0 }))
-    }
     $Hits = foreach ($Alert in $Alerts) {
         if ("$($Alert.Title)" -notmatch 'Memory') { continue }
         $Message = "$($Alert.AlertMessage)"
@@ -53,7 +37,7 @@ function Get-AteraMemoryPressure {
         if ($Alert.Created -is [datetime]) { $Created = $Alert.Created.ToUniversalTime() }
         else { $p = [datetime]::MinValue; if ([datetime]::TryParse("$($Alert.Created)", [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]'AssumeUniversal, AdjustToUniversal', [ref]$p)) { $Created = $p } }
         if (-not $Created -or $Created -lt $From -or $Created -ge $To) { continue }
-        $Local = & $ToLocal $Created
+        $Local = ConvertTo-AteraLocalTime -Utc $Created -TimeZone $TimeZone
         if ($Local.DayOfWeek -in @([DayOfWeek]::Saturday, [DayOfWeek]::Sunday)) { continue }
         if ($Local.Hour -lt $WorkdayStart -or $Local.Hour -ge $WorkdayEnd) { continue }
         $Top = if ($Message -match 'processes triggering the alert:\s*([^:]+):') { $Matches[1].Trim() } else { '' }

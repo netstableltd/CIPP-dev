@@ -10,9 +10,11 @@ function ConvertTo-AteraPatchSummary {
         ignored - they arrive several times a day and are never "behind" in a way that matters here.
 
         Output fields: PatchScanDate, SecurityUpdatesWaiting, OtherUpdatesWaiting (not security, not
-        drivers), DriverUpdatesWaiting, UpdatesFailed, SecurityUpdatesFailed, LastSecurityUpdate
-        (yyyy-MM-dd), UpdatesWaiting (names of security and other updates, security first, '; '-joined),
-        DriversWaiting (driver/firmware names), UpdatesFailing (names).
+        drivers), DriverUpdatesWaiting, UpdatesFailed / SecurityUpdatesFailed (not drivers), DriversFailed,
+        LastSecurityUpdate (yyyy-MM-dd; the Malicious Software Removal Tool doesn't count), UpdatesWaiting
+        (security and other updates, security first, '; '-joined), DriversWaiting, UpdatesFailing (not
+        drivers), DriversFailing. Driver updates are optional, so a failed driver is listed but not a
+        problem.
 
     .PARAMETER Installed
         Response of GET agents/{deviceGuid}/installed-patches.
@@ -29,11 +31,14 @@ function ConvertTo-AteraPatchSummary {
     $SecurityClasses = @('Security Updates', 'Critical Updates', 'Update Rollups')
     $Waiting = @(@($Available.availableUpdates) | Where-Object { $_ -and "$($_.class)" -ne 'Definition Updates' })
     $Failed = @($Waiting | Where-Object { "$($_.status)" -eq 'Failed' })
+    $FailedDrivers = @($Failed | Where-Object { "$($_.class)" -match 'driver' })
+    $FailedOther = @($Failed | Where-Object { "$($_.class)" -notmatch 'driver' })
     $Pending = @($Waiting | Where-Object { "$($_.status)" -ne 'Failed' })
     $Security = @($Pending | Where-Object { "$($_.class)" -in $SecurityClasses })
     $Drivers = @($Pending | Where-Object { "$($_.class)" -match 'driver' })
     $Other = @($Pending | Where-Object { "$($_.class)" -notin $SecurityClasses -and "$($_.class)" -notmatch 'driver' })
-    $LastSecurity = @(@($Installed.installedUpdates) | Where-Object { $_ -and "$($_.class)" -in $SecurityClasses -and $_.installDate } | ForEach-Object {
+    # The monthly Malicious Software Removal Tool is filed as an update rollup but is not a security patch.
+    $LastSecurity = @(@($Installed.installedUpdates) | Where-Object { $_ -and "$($_.class)" -in $SecurityClasses -and $_.installDate -and "$($_.name)" -notmatch 'Malicious Software Removal Tool' } | ForEach-Object {
             $d = [datetime]::MinValue
             if ($_.installDate -is [datetime]) { $_.installDate.ToUniversalTime() }
             elseif ([datetime]::TryParse("$($_.installDate)", [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]'AssumeUniversal, AdjustToUniversal', [ref]$d)) { $d }
@@ -47,11 +52,13 @@ function ConvertTo-AteraPatchSummary {
         SecurityUpdatesWaiting = $Security.Count
         OtherUpdatesWaiting    = $Other.Count
         DriverUpdatesWaiting   = $Drivers.Count
-        UpdatesFailed          = $Failed.Count
-        SecurityUpdatesFailed  = @($Failed | Where-Object { "$($_.class)" -in $SecurityClasses }).Count
+        UpdatesFailed          = $FailedOther.Count
+        SecurityUpdatesFailed  = @($FailedOther | Where-Object { "$($_.class)" -in $SecurityClasses }).Count
+        DriversFailed          = $FailedDrivers.Count
         LastSecurityUpdate     = $(if ($LastSecurity.Count -gt 0) { $LastSecurity[0].ToString('yyyy-MM-dd') } else { '' })
         UpdatesWaiting         = (@(@($Security) + @($Other) | ForEach-Object { "$($_.name)".Trim() }) -join '; ')
         DriversWaiting         = (@($Drivers | ForEach-Object { "$($_.name)".Trim() }) -join '; ')
-        UpdatesFailing         = (@($Failed | ForEach-Object { "$($_.name)".Trim() }) -join '; ')
+        UpdatesFailing         = (@($FailedOther | ForEach-Object { "$($_.name)".Trim() }) -join '; ')
+        DriversFailing         = (@($FailedDrivers | ForEach-Object { "$($_.name)".Trim() }) -join '; ')
     }
 }

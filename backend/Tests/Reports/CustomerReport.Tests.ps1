@@ -11,7 +11,7 @@ BeforeAll {
     $Modules = Join-Path $RepoRoot 'Modules'
     Get-ChildItem (Get-ChildItem $Modules -Recurse -Directory -Filter 'Reporting' | Select-Object -First 1).FullName -Filter *.ps1 | ForEach-Object { . $_.FullName }
     . (Get-ChildItem $Modules -Recurse -Filter 'ConvertTo-CippReportPdf.ps1' | Select-Object -First 1).FullName
-    foreach ($Name in 'Get-AteraDeviceInsight', 'Get-AteraMemoryPressure', 'ConvertTo-AteraPatchSummary', 'Get-CIPPReportBreachData') {
+    foreach ($Name in 'Get-AteraDeviceInsight', 'Get-AteraMemoryPressure', 'ConvertTo-AteraPatchSummary', 'ConvertTo-AteraLocalTime', 'Get-CIPPReportBreachData') {
         . (Get-ChildItem $Modules -Recurse -Filter "$Name.ps1" | Select-Object -First 1).FullName
     }
     foreach ($Name in 'Get-CIPPReportBaselineSection', 'Get-CIPPReportPeriod', 'Get-CIPPCustomerReportData', 'Get-CIPPReportFindings', 'Build-CippCustomerReportTree', 'Build-CippReportPrecheckTree', 'Invoke-CIPPReportGeneration', 'ConvertFrom-CIPPReportSectionList', 'Get-CIPPReportSectionCatalog', 'Resolve-CIPPReportSections') {
@@ -318,17 +318,22 @@ Describe 'Computers, updates, purchases and email' {
                 [pscustomobject]@{ email = 'bob@contoso.com'; password = 'SECRET2'; sources = 'Adobe'; clientDomain = 'contoso.com' }
                 [pscustomobject]@{ email = 'gone@contoso.com'; password = 'SECRET3'; sources = @('Adobe'); clientDomain = 'contoso.com' }
                 [pscustomobject]@{ email = 'amy@contoso.com'; password = ''; sources = 'MyFitnessPal.com, SomeSite.co.uk'; clientDomain = 'contoso.com' }
+                [pscustomobject]@{ email = 'robert@contoso.com'; password = ''; sources = 'Adobe'; clientDomain = 'contoso.com' }
+                [pscustomobject]@{ email = 'sales@contoso.com'; password = ''; sources = 'Adobe'; clientDomain = 'contoso.com' }
             ) }
-        $Br = Get-CIPPReportBreachData -TenantFilter 'contoso.com' -Users @([pscustomobject]@{ userPrincipalName = 'bob@contoso.com'; mail = 'bob@contoso.com' }, [pscustomobject]@{ userPrincipalName = 'amy@contoso.com' })
+        $Br = Get-CIPPReportBreachData -TenantFilter 'contoso.com' -Users @([pscustomobject]@{ userPrincipalName = 'bob@contoso.com'; mail = 'bob@contoso.com'; accountEnabled = $true; proxyAddresses = @('SMTP:bob@contoso.com', 'smtp:robert@contoso.com') }, [pscustomobject]@{ userPrincipalName = 'amy@contoso.com'; accountEnabled = $true }, [pscustomobject]@{ userPrincipalName = 'sales@contoso.com'; accountEnabled = $true }) -SharedUpns @('sales@contoso.com')
         $Br.Source | Should -Be 'Live'
-        $Br.Total | Should -Be 3
-        $Br.Current | Should -Be 2
-        $Br.WithPasswords | Should -Be 2
-        @($Br.Accounts).email | Should -Be @('amy@contoso.com', 'bob@contoso.com', 'gone@contoso.com')
+        $Br.Total | Should -Be 5
+        # robert@ is Bob's alias (one person); sales@ is a shared mailbox; gone@ has no account
+        @($Br.People) | Should -Be @('amy@contoso.com', 'bob@contoso.com')
+        $Br.PeopleWithPasswords | Should -Be 2
+        ($Br.Accounts | Where-Object email -EQ 'robert@contoso.com').alias | Should -BeTrue
+        ($Br.Accounts | Where-Object email -EQ 'sales@contoso.com').kind | Should -Be 'Shared mailbox'
+        @($Br.Accounts | Where-Object { $_.current }).email | Should -Be @('amy@contoso.com', 'bob@contoso.com', 'robert@contoso.com')
         @($Br.Accounts[1].breaches).title | Should -Be @('Adobe', 'LinkedIn')
         # 'MyFitnessPal.com' matches HIBP's MyFitnessPal; an unknown site is kept as given
         @($Br.Accounts[0].breaches).title | Should -Be @('MyFitnessPal', 'SomeSite.co.uk')
-        $Br.Accounts[2].current | Should -BeFalse
+        ($Br.Accounts | Where-Object email -EQ 'gone@contoso.com').kind | Should -Be 'Not in use'
         ($Br | ConvertTo-Json -Depth 10) | Should -Not -Match 'SECRET'
         $D2 = $Data.Clone(); $D2.Breaches = $Br
         $F2 = Get-CIPPReportFindings -Data $D2 -AteraEnabled $true
@@ -338,6 +343,7 @@ Describe 'Computers, updates, purchases and email' {
         $Json = $T.Blocks | ConvertTo-Json -Depth 10
         $Json | Should -Match 'Adobe \(2013\), LinkedIn \(2012\)'
         $Json | Should -Match 'No longer in use'
+        $Json | Should -Match 'Alias of bob@contoso.com'
         $Json | Should -Not -Match 'SECRET'
     }
     It 'downloads the HIBP catalogue (returned as one array object) and matches by domain-style names' {

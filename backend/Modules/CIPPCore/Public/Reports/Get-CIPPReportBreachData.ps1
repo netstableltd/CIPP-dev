@@ -22,7 +22,11 @@ function Get-CIPPReportBreachData {
         Tenant default domain.
 
     .PARAMETER Users
-        Optional Reporting DB Users rows, to mark which addresses belong to current accounts.
+        Optional Reporting DB Users rows, to work out whose address each one is (aliases included) and
+        whether that account is in use.
+
+    .PARAMETER SharedUpns
+        Optional UPNs of shared and other non-person mailboxes.
 
     .OUTPUTS
         @{ Source = 'Live'|'Cache'|'None'; CheckedAt; Error; Accounts = @(@{ email; current; breaches = @(@{ name; title; date; classes }) });
@@ -34,10 +38,11 @@ function Get-CIPPReportBreachData {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$TenantFilter,
-        [object[]]$Users = @()
+        [object[]]$Users = @(),
+        [string[]]$SharedUpns = @()
     )
 
-    $Result = @{ Source = 'None'; CheckedAt = (Get-Date).ToUniversalTime(); Error = $null; Accounts = @(); Total = 0; Current = 0; WithPasswords = 0 }
+    $Result = @{ Source = 'None'; CheckedAt = (Get-Date).ToUniversalTime(); Error = $null; Accounts = @(); Total = 0; Current = 0; WithPasswords = 0; People = @(); PeopleWithPasswords = 0 }
 
     # Raw records: email + sources (breach names). Only those two fields are kept.
     $Records = $null
@@ -75,10 +80,12 @@ function Get-CIPPReportBreachData {
         } catch { Write-Information "HIBP breach catalogue unavailable: $($_.Exception.Message)" }
     }
 
+    # Address -> owning account (UPN, primary address and every alias).
     $Known = @{}
+    $Shared = @{}; foreach ($S in $SharedUpns) { if ($S) { $Shared["$S".ToLowerInvariant()] = $true } }
     foreach ($U in @($Users)) {
         foreach ($Address in @($U.userPrincipalName, $U.mail) + @($U.proxyAddresses | ForEach-Object { "$_" -replace '^smtp:', '' })) {
-            if ($Address) { $Known["$Address".ToLowerInvariant()] = $true }
+            if ($Address) { $Known["$Address".ToLowerInvariant()] = $U }
         }
     }
 
@@ -92,9 +99,15 @@ function Get-CIPPReportBreachData {
                 if ($Match) { @{ name = $_; title = $Match.title; date = $Match.date; classes = @($Match.classes) } }
                 else { @{ name = $_; title = $_; date = ''; classes = @() } }
             } | Sort-Object { $_.date } -Descending)
+        $Owner = if ($Known.ContainsKey($Group.Name)) { $Known[$Group.Name] } else { $null }
+        $OwnerUpn = if ($Owner) { "$($Owner.userPrincipalName)".ToLowerInvariant() } else { '' }
+        $Kind = if ($Known.Count -eq 0) { 'Unknown' } elseif (-not $Owner) { 'Not in use' } elseif ($Shared.ContainsKey($OwnerUpn)) { 'Shared mailbox' } elseif ($Owner.accountEnabled -eq $false) { 'Disabled account' } else { 'Person' }
         @{
             email    = $Group.Name
-            current  = $(if ($Known.Count -gt 0) { $Known.ContainsKey($Group.Name) } else { $null })
+            owner    = $OwnerUpn
+            alias    = [bool]($OwnerUpn -and $OwnerUpn -ne $Group.Name)
+            kind     = $Kind
+            current  = $(if ($Known.Count -gt 0) { $Kind -eq 'Person' } else { $null })
             breaches = $Breaches
             passwords = [bool]((@($Group.Group | Where-Object { $_.haspw }).Count -gt 0) -or (@($Breaches | Where-Object { @($_.classes) -contains 'Passwords' }).Count -gt 0))
         }
@@ -103,5 +116,9 @@ function Get-CIPPReportBreachData {
     $Result.Total = $Result.Accounts.Count
     $Result.Current = @($Result.Accounts | Where-Object { $_.current -ne $false }).Count
     $Result.WithPasswords = @($Result.Accounts | Where-Object { $_.passwords -and $_.current -ne $false }).Count
+    # People: distinct accounts in use by a person (an alias counts once, with its main address).
+    $PeopleGroups = @($Result.Accounts | Where-Object { $_.current -ne $false } | Group-Object { if ($_.owner) { $_.owner } else { $_.email } })
+    $Result.People = @($PeopleGroups | ForEach-Object { $_.Name })
+    $Result.PeopleWithPasswords = @($PeopleGroups | Where-Object { @($_.Group | Where-Object { $_.passwords }).Count -gt 0 }).Count
     return $Result
 }

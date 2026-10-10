@@ -59,7 +59,8 @@ function Invoke-CIPPReportGeneration {
     $Data.Breaches = $null
     if ($Data.M365) {
         $BreachUsers = @(try { New-CIPPDbRequest -TenantFilter $Domain -Type 'Users' } catch { @() })
-        $Data.Breaches = Get-CIPPReportBreachData -TenantFilter $Domain -Users $BreachUsers
+        $SharedUpns = @(try { New-CIPPDbRequest -TenantFilter $Domain -Type 'Mailboxes' | Where-Object { "$($_.recipientTypeDetails)" -match 'Shared|Room|Equipment|Scheduling|Discovery' } | ForEach-Object { "$($_.UPN)" } } catch { @() })
+        $Data.Breaches = Get-CIPPReportBreachData -TenantFilter $Domain -Users $BreachUsers -SharedUpns $SharedUpns
     }
 
     $AteraEnabled = $false

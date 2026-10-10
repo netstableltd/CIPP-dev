@@ -160,7 +160,16 @@ function Get-CIPPCustomerReportData {
                 }
             } | Sort-Object { -not $_.inUse }, { $_.domain })
 
+        # Shared mailboxes holding a paid licence: under 50 GB without an archive they do not need one.
+        $SharedLicensed = @($Users | Where-Object { $NonPersonUpns.ContainsKey("$($_.userPrincipalName)".ToLowerInvariant()) -and $PaidSkus.Count -gt 0 -and @($_.assignedLicenses | Where-Object { $PaidSkus.ContainsKey("$($_.skuId)") }).Count -gt 0 } | ForEach-Object {
+                $Upn = "$($_.userPrincipalName)"
+                $Box = $Mailboxes | Where-Object { $_.upn -ieq $Upn } | Select-Object -First 1
+                if ($Box -and ($Box.usedGB -ge 45 -or $Box.archive)) { return }
+                @{ name = "$($_.displayName)"; upn = $Upn; usedGB = $(if ($Box) { $Box.usedGB } else { $null }) }
+            })
+
         $M365 = @{
+            LicensedSharedMailboxes = @($SharedLicensed)
             Mailboxes   = @($Mailboxes)
             MailboxesNearlyFull = @($Mailboxes | Where-Object { $_.percent -ge 80 })
             Domains     = @($Domains)
@@ -216,7 +225,7 @@ function Get-CIPPCustomerReportData {
                 osBuild           = "$($Agent.OSBuild)"
                 online            = [bool]$Agent.Online
                 lastSeen          = $LastSeen
-                daysSinceSeen     = $(if ($LastSeen) { [int][math]::Floor(($Now - $LastSeen).TotalDays) } else { $null })
+                daysSinceSeen     = $(if ($LastSeen) { if (Get-Command ConvertTo-AteraLocalTime -ErrorAction SilentlyContinue) { [int]((ConvertTo-AteraLocalTime -Utc $Now -TimeZone $ReportZone).Date - (ConvertTo-AteraLocalTime -Utc $LastSeen -TimeZone $ReportZone).Date).TotalDays } else { [int][math]::Floor(($Now - $LastSeen).TotalDays) } } else { $null })
                 daysSinceReboot   = $(if ($LastReboot) { [int][math]::Floor(($Now - $LastReboot).TotalDays) } else { $null })
                 freePct           = $FreePct
                 user              = ("$($Agent.LastLoginUser)" -replace '^.*\\', '')
@@ -238,6 +247,7 @@ function Get-CIPPCustomerReportData {
                 updatesWaiting    = "$(& $Field $Agent 'UpdatesWaiting')"
                 updatesFailing    = "$(& $Field $Agent 'UpdatesFailing')"
                 driversWaiting    = "$(& $Field $Agent 'DriversWaiting')"
+                driversFailing    = "$(& $Field $Agent 'DriversFailing')"
                 securityFailed    = (& $Field $Agent 'SecurityUpdatesFailed')
                 drives            = "$(& $Field $Agent 'Drives')"
                 drivesOver75      = "$(& $Field $Agent 'DrivesOver75')"
@@ -261,7 +271,12 @@ function Get-CIPPCustomerReportData {
         $HealthOrder = @{ 'Needs attention' = 0; 'Check' = 1; 'Good' = 2; 'Unknown' = 3 }
 
         $Alerts = $PeriodAlerts
-        $TicketsAll = @(Read-Db 'AteraTickets')
+        # Atera opens a new ticket when someone replies to a notification with the subject changed
+        # ("RE: [#13006] Adobe"); those are replies, not new requests.
+        $IsReplyTicket = { param($T) "$($T.TicketTitle)" -match '^\s*(RE|FW|FWD|AW|SV)\s*:\s*\[#\d+\]' }
+        $TicketsRaw = @(Read-Db 'AteraTickets')
+        $TicketsAll = @($TicketsRaw | Where-Object { -not (& $IsReplyTicket $_) })
+        $ReplyTickets = @($TicketsRaw | Where-Object { & $IsReplyTicket $_ } | ForEach-Object { "#$($_.TicketID): $($_.TicketTitle)" })
         $Tickets = @($TicketsAll | Where-Object { $c = ConvertTo-Utc $_.TicketCreatedDate; $c -and $c -ge $Period.Start -and $c -lt $Period.End })
         $OpenNow = @($TicketsAll | Where-Object { $_.TicketStatus -in @('Open', 'Pending') })
         $Contracts = @(Read-Db 'AteraContracts')
@@ -291,7 +306,7 @@ function Get-CIPPCustomerReportData {
                 BelowBaseline  = @($Active | Where-Object { $_.hardwareTier -eq 'Below baseline' } | Sort-Object name)
                 MemoryPressure = @($Active | Where-Object { $_.memoryDays -gt 0 } | Sort-Object memoryDays -Descending)
                 StorageOver75  = @($Active | Where-Object { $_.drivesOver75 } | Sort-Object { - [int]$_.fullestDrive })
-                UpdatesFailing = @($Active | Where-Object { [int]$_.securityFailed -gt 0 } | Sort-Object name)
+                UpdatesFailing = @($Active | Where-Object { $_.updateStatus -eq 'Failing' } | Sort-Object name)
                 PatchScanned   = @($Active | Where-Object { $_.updateSource -eq 'Atera patch scan' }).Count
                 HomeEdition    = @($Active | Where-Object isHome | Sort-Object name)
                 NotWin11Ready  = @($Active | Where-Object { $_.os -eq 'Windows 10' -and $_.win11Ready -eq 'No' } | Sort-Object name)
@@ -321,6 +336,7 @@ function Get-CIPPCustomerReportData {
                         }
                     })
                 OldUrgent     = @($OpenNow | Where-Object { $_.TicketPriority -in @('High', 'Critical') -and (ConvertTo-Utc $_.TicketCreatedDate) -lt $Now.AddDays(-14) } | ForEach-Object { "#$($_.TicketID): $($_.TicketTitle)" })
+                ReplyTickets  = @($ReplyTickets)
                 NoTimeClosed  = @($Tickets | Where-Object { $_.TicketStatus -in @('Closed', 'Resolved') -and [double]($_.TotalDurationSeconds ?? 0) -le 0 } | ForEach-Object { "#$($_.TicketID): $($_.TicketTitle)" })
             }
             Purchases        = @{

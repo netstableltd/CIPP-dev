@@ -32,7 +32,8 @@ function Get-AteraDeviceInsight {
         UpdateSource      'Atera patch scan' | 'Build comparison' | ''.
         PatchScanDate, SecurityUpdatesWaiting, OtherUpdatesWaiting, UpdatesFailed, LastSecurityUpdate,
         UpdatesWaiting, DriversWaiting, UpdatesFailing, SecurityUpdatesFailed - from Atera's patch scan
-        (ConvertTo-AteraPatchSummary). Failing = a security update failed; other failures are a 'Check'.
+        (ConvertTo-AteraPatchSummary). Failing = a non-driver update failed; driver updates are optional
+        and never flag a device.
         MemoryGB, CpuSummary, CpuYear (approximate launch year), Windows11Ready ('Yes'|'No'|'Unknown')
         HardwareTier      'Meets baseline' | 'Below baseline' | 'Special purpose' (IoT editions). The baseline is a
                           processor with at least four cores that can run Windows 11 (servers: four cores).
@@ -193,7 +194,7 @@ function Get-AteraDeviceInsight {
         if ($Patch -and $Patch.PatchScanDate) {
             # Atera's own patch scan is the better source: what the device actually still needs.
             $UpdateSource = 'Atera patch scan'
-            $UpdateStatus = if ([int]$Patch.SecurityUpdatesWaiting -gt 0) { 'Behind' } elseif ([int]$Patch.SecurityUpdatesFailed -gt 0) { 'Failing' } else { 'Up to date' }
+            $UpdateStatus = if ([int]$Patch.SecurityUpdatesWaiting -gt 0) { 'Behind' } elseif ([int]$Patch.UpdatesFailed -gt 0) { 'Failing' } else { 'Up to date' }
         }
 
         # Hardware
@@ -270,7 +271,8 @@ function Get-AteraDeviceInsight {
 
         $Seen = & $ToDate $Agent.LastSeen
         $Reboot = & $ToDate $Agent.LastRebootTime
-        $DaysSeen = if ($Seen) { [int][math]::Floor(($Now - $Seen).TotalDays) } else { $null }
+        # Calendar days in the local time zone: seen on Friday and checked on Saturday is 1 day, not 0.
+        $DaysSeen = if ($Seen) { [int]((ConvertTo-AteraLocalTime -Utc $Now -TimeZone $TimeZone).Date - (ConvertTo-AteraLocalTime -Utc $Seen -TimeZone $TimeZone).Date).TotalDays } else { $null }
         # Uptime when last seen: an offline device has not been running since, so 'now' would overstate it.
         $DaysReboot = if ($Reboot) { [int][math]::Floor(($(if ($Seen) { $Seen } else { $Now }) - $Reboot).TotalDays) } else { $null }
 
@@ -289,8 +291,7 @@ function Get-AteraDeviceInsight {
         elseif ($Support -eq 'Ending soon') { $Check.Add("$VersionName security updates end $Ends") }
         if ($UpdateStatus -eq 'Behind') {
             $Attention.Add($(if ($Patch -and [int]$Patch.SecurityUpdatesWaiting -gt 0) { "$($Patch.SecurityUpdatesWaiting) security update$(if ([int]$Patch.SecurityUpdatesWaiting -ne 1) { 's' }) waiting" } else { 'behind on Windows updates' }))
-        } elseif ($UpdateStatus -eq 'Failing') { $Attention.Add('security update failing to install') }
-        if ($Patch -and $UpdateStatus -ne 'Failing' -and [int]$Patch.UpdatesFailed -gt 0) { $Check.Add("an update is failing to install ($($Patch.UpdatesFailing))") }
+        } elseif ($UpdateStatus -eq 'Failing') { $Attention.Add("update failing to install ($($Patch.UpdatesFailing))") }
         if ($null -ne $DaysSeen -and $DaysSeen -gt 30) { $Attention.Add("not seen for $DaysSeen days") }
         elseif ($null -ne $DaysSeen -and $DaysSeen -gt 7) { $Check.Add("not seen for $DaysSeen days") }
         if ($null -ne $DaysReboot -and $DaysReboot -gt 30 -and ($null -eq $DaysSeen -or $DaysSeen -le 30)) {
@@ -327,6 +328,7 @@ function Get-AteraDeviceInsight {
         $Out.LastSecurityUpdate = $(if ($Patch) { "$($Patch.LastSecurityUpdate)" } else { '' })
         $Out.UpdatesWaiting = $(if ($Patch) { "$($Patch.UpdatesWaiting)" } else { '' })
         $Out.DriversWaiting = $(if ($Patch) { "$($Patch.DriversWaiting)" } else { '' })
+        $Out.DriversFailing = $(if ($Patch) { "$($Patch.DriversFailing)" } else { '' })
         $Out.SecurityUpdatesFailed = $(if ($Patch) { [int]$Patch.SecurityUpdatesFailed } else { $null })
         $Out.UpdatesFailing = $(if ($Patch) { "$($Patch.UpdatesFailing)" } else { '' })
         $Out.Drives = (@($DriveRows | ForEach-Object { "$($_.Drive) $($_.Percent)% full" }) -join '; ')
