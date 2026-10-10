@@ -31,13 +31,13 @@ Each device gets plain-English verdicts that the reports use and that the Report
 | UpdateStatus | **Up to date**, **Behind** (security updates waiting), **Failing** (a security update failed to install) or **Unknown**, from Atera's patch scan. Devices without a scan are compared with the Windows build 40% of recently seen devices in the account have reached. |
 | SecurityUpdatesWaiting, UpdatesWaiting, DriversWaiting, UpdatesFailing, LastSecurityUpdate, PatchScanDate | The patch scan: updates still to install (drivers listed separately as optional; antivirus definitions ignored), failures, and the date of the last security update. |
 | WindowsVersion, WindowsSupport, WindowsSupportEnds | The Windows version, and whether it still receives security fixes (Supported / Ending soon within 90 days / Unsupported), by build and edition, from `Config/WindowsLifecycle.json`. Update that file as Microsoft releases new versions. |
-| HardwareTier, HardwareNotes | **Meets baseline** or **Below baseline**: the baseline is a processor with at least four cores that can run Windows 11 (servers: four cores). IoT editions are **Special purpose**. |
+| HardwareRating, HardwareNotes, CpuGeneration | **Good**, **Check** or **Needs attention** from the hardware rules in [Reports > Device Rules](../../reports/device-rules.md) (processor generation, cores, memory, Windows 11 support), with the reasons. HardwareTier says the same as Meets baseline / Borderline / Below baseline. |
 | CpuSummary, CpuYear, Windows11Ready, MemoryGB | The processor family and generation, its approximate launch year, and whether it can run Windows 11. |
-| Drives, DrivesOver75, DrivesOver90, FullestDrivePercent | How full every drive is (duplicates and partitions under 1 GB ignored). Over 75% full is a nudge to clear space or fit a bigger drive. |
+| Drives, DrivesOver75, DrivesOver90, FullestDrivePercent | How full every drive is (duplicates and partitions under 1 GB ignored). DrivesOver75 lists drives over the Drive used threshold in the Device Rules (75% by default). |
 | MemoryHighDays, MemoryPeakPercent, MemoryTopProcess | Weekdays (08:00-18:00 in the Reports time zone) with a memory alert above 90%, the highest reading and the process using most memory - a nudge to add RAM. |
 | SystemDiskFreePercent, DaysSinceSeen, DaysSinceReboot | Disk space and ages. |
 | ResourceAlertDays, DiskAlertDays, AlertCount | Days with CPU/memory or disk alerts in the last 90 days, and the total alerts. |
 | IsHomeEdition | Windows Home, which cannot be managed like Pro. |
-| HealthStatus, HealthNotes | **Good**, **Check** or **Needs attention**, with the reasons. |
+| HealthStatus, HealthNotes | **Good**, **Check** or **Needs attention**, with the reasons: the worst of every rule in [Reports > Device Rules](../../reports/device-rules.md). |
 
 The Report Builder's **Pre-built** list has Atera devices, alerts, tickets, contracts and purchases blocks built on these.

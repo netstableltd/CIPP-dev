@@ -200,9 +200,15 @@ function Get-CIPPCustomerReportData {
         # Memory above 90% during working hours (weekdays 08:00-18:00 in the reports time zone) in the period.
         $ReportZone = 'Europe/London'
         try { $ReportZone = (Get-CIPPReportSettings).TimeZone } catch {}
+        # Device rules (Reports > Device Rules) are applied here, so a change takes effect in the next report.
+        $DeviceRules = $null
+        try { $DeviceRules = (Get-CIPPReportDeviceRules).Rules } catch {}
+        $RuleValue = { param($Id, $Default) $R = @($DeviceRules | Where-Object { $_.id -eq $Id }) | Select-Object -First 1; if ($R -and "$($R.value)" -ne '') { [int]$R.value } else { $Default } }
+        $DriveRule = @($DeviceRules | Where-Object { $_.id -eq 'driveFull' }) | Select-Object -First 1
+        $DriveCheck = if ($DriveRule -and "$($DriveRule.check)" -ne '') { [double]$DriveRule.check } else { 75 }
         $PeriodMemory = @{}
         if (Get-Command Get-AteraMemoryPressure -ErrorAction SilentlyContinue) {
-            foreach ($M in @(Get-AteraMemoryPressure -Alerts $AlertsAll -TimeZone $ReportZone -From $Period.Start -To $Period.End)) {
+            foreach ($M in @(Get-AteraMemoryPressure -Alerts $AlertsAll -TimeZone $ReportZone -From $Period.Start -To $Period.End -Threshold (& $RuleValue 'memoryThreshold' 90) -WorkdayStart (& $RuleValue 'workdayStart' 8) -WorkdayEnd (& $RuleValue 'workdayEnd' 18))) {
                 $PeriodMemory[$(if ($M.DeviceGuid) { "g:$($M.DeviceGuid)" } else { "n:$($M.DeviceName)" })] = $M
             }
         }
@@ -216,6 +222,16 @@ function Get-CIPPCustomerReportData {
             $Support = "$(& $Field $Agent 'WindowsSupport')"
             $Name = "$($Agent.MachineName ?? $Agent.AgentName)"
             $Model = (@("$($Agent.Vendor)".Trim(), "$($Agent.VendorBrandModel)".Trim()) | Where-Object { $_ -and $_ -notmatch 'To Be Filled|System manufacturer|System Product' }) -join ' '
+            $PeriodMem = $PeriodMemory["g:$($Agent.DeviceGuid)"] ?? $PeriodMemory["n:$Name"]
+            $DaysSeenLocal = $(if ($LastSeen) { if (Get-Command ConvertTo-AteraLocalTime -ErrorAction SilentlyContinue) { [int]((ConvertTo-AteraLocalTime -Utc $Now -TimeZone $ReportZone).Date - (ConvertTo-AteraLocalTime -Utc $LastSeen -TimeZone $ReportZone).Date).TotalDays } else { [int][math]::Floor(($Now - $LastSeen).TotalDays) } } else { $null })
+            # Rate with today's rules and this period's memory alerts (the sync's rating used the last 90 days).
+            $Rating = $null
+            if (Get-Command Get-AteraDeviceRating -ErrorAction SilentlyContinue) {
+                $Rated = $Agent | Select-Object *
+                $Rated | Add-Member -NotePropertyName DaysSinceSeen -NotePropertyValue $DaysSeenLocal -Force
+                try { $Rating = Get-AteraDeviceRating -Device $Rated -Rules $DeviceRules -MemoryDays $(if ($PeriodMem) { [int]$PeriodMem.Days } else { 0 }) } catch { Write-Information "Device rating failed for $($Name): $($_.Exception.Message)" }
+            }
+            $DrivesOver = @("$(& $Field $Agent 'Drives')" -split ';\s*' | Where-Object { $_ -match '^(\S+)\s+(\d+)%' -and [int]$Matches[2] -gt $DriveCheck } | ForEach-Object { $_ -replace ' full$', '' })
             [PSCustomObject]@{
                 name              = $Name
                 type              = "$($Agent.DeviceType)"
@@ -225,7 +241,7 @@ function Get-CIPPCustomerReportData {
                 osBuild           = "$($Agent.OSBuild)"
                 online            = [bool]$Agent.Online
                 lastSeen          = $LastSeen
-                daysSinceSeen     = $(if ($LastSeen) { if (Get-Command ConvertTo-AteraLocalTime -ErrorAction SilentlyContinue) { [int]((ConvertTo-AteraLocalTime -Utc $Now -TimeZone $ReportZone).Date - (ConvertTo-AteraLocalTime -Utc $LastSeen -TimeZone $ReportZone).Date).TotalDays } else { [int][math]::Floor(($Now - $LastSeen).TotalDays) } } else { $null })
+                daysSinceSeen     = $DaysSeenLocal
                 daysSinceReboot   = $(if ($LastReboot) { [int][math]::Floor(($Now - $LastReboot).TotalDays) } else { $null })
                 freePct           = $FreePct
                 user              = ("$($Agent.LastLoginUser)" -replace '^.*\\', '')
@@ -236,7 +252,8 @@ function Get-CIPPCustomerReportData {
                 supportEnds       = "$(& $Field $Agent 'WindowsSupportEnds')"
                 updateStatus      = "$(if (& $Field $Agent 'UpdateStatus') { & $Field $Agent 'UpdateStatus' } else { 'Unknown' })"
                 latestBuild       = "$(& $Field $Agent 'LatestBuild')"
-                hardwareTier      = "$(& $Field $Agent 'HardwareTier')"
+                hardwareTier      = "$(if ($Rating) { $Rating.HardwareTier } else { & $Field $Agent 'HardwareTier' })"
+                hardwareRating    = "$(if ($Rating) { $Rating.HardwareRating } elseif ((& $Field $Agent 'HardwareTier') -eq 'Below baseline') { 'Needs attention' } else { 'Good' })"
                 cores             = $(if ($Agent.ProcessorCoresCount) { [int]$Agent.ProcessorCoresCount } else { $null })
                 updateSource      = "$(& $Field $Agent 'UpdateSource')"
                 patchScanDate     = (ConvertTo-Utc (& $Field $Agent 'PatchScanDate'))
@@ -250,19 +267,19 @@ function Get-CIPPCustomerReportData {
                 driversFailing    = "$(& $Field $Agent 'DriversFailing')"
                 securityFailed    = (& $Field $Agent 'SecurityUpdatesFailed')
                 drives            = "$(& $Field $Agent 'Drives')"
-                drivesOver75      = "$(& $Field $Agent 'DrivesOver75')"
+                drivesOver75      = $(if ("$(& $Field $Agent 'Drives')") { $DrivesOver -join '; ' } else { "$(& $Field $Agent 'DrivesOver75')" })
                 drivesOver90      = "$(& $Field $Agent 'DrivesOver90')"
                 fullestDrive      = (& $Field $Agent 'FullestDrivePercent')
-                memoryDays        = $(if ($M = $PeriodMemory["g:$($Agent.DeviceGuid)"] ?? $PeriodMemory["n:$Name"]) { [int]$M.Days } else { 0 })
-                memoryPeak        = $(if ($M = $PeriodMemory["g:$($Agent.DeviceGuid)"] ?? $PeriodMemory["n:$Name"]) { [int]$M.PeakPercent } else { $null })
-                memoryTopProcess  = $(if ($M = $PeriodMemory["g:$($Agent.DeviceGuid)"] ?? $PeriodMemory["n:$Name"]) { "$($M.TopProcess)" } else { '' })
-                hardwareNotes     = "$(& $Field $Agent 'HardwareNotes')"
+                memoryDays        = $(if ($PeriodMem) { [int]$PeriodMem.Days } else { 0 })
+                memoryPeak        = $(if ($PeriodMem) { [int]$PeriodMem.PeakPercent } else { $null })
+                memoryTopProcess  = $(if ($PeriodMem) { "$($PeriodMem.TopProcess)" } else { '' })
+                hardwareNotes     = "$(if ($Rating) { $Rating.HardwareNotes } else { & $Field $Agent 'HardwareNotes' })"
                 win11Ready        = "$(& $Field $Agent 'Windows11Ready')"
                 isHome            = [bool](& $Field $Agent 'IsHomeEdition')
                 resourceAlertDays = [int](& $Field $Agent 'ResourceAlertDays')
                 alertsInPeriod    = @($PeriodAlerts | Where-Object { ($_.DeviceGuid -and $_.DeviceGuid -eq $Agent.DeviceGuid) -or (-not $_.DeviceGuid -and "$($_.DeviceName)" -eq $Name) }).Count
-                health            = "$(if (& $Field $Agent 'HealthStatus') { & $Field $Agent 'HealthStatus' } else { 'Unknown' })"
-                healthNotes       = "$(& $Field $Agent 'HealthNotes')"
+                health            = "$(if ($Rating) { $Rating.HealthStatus } elseif (& $Field $Agent 'HealthStatus') { & $Field $Agent 'HealthStatus' } else { 'Unknown' })"
+                healthNotes       = "$(if ($Rating) { $Rating.HealthNotes } else { & $Field $Agent 'HealthNotes' })"
                 unsupported       = $(if ($Support) { $Support -eq 'Unsupported' } else { [bool]($Os -match $UnsupportedOs) })
             }
         }
@@ -303,7 +320,12 @@ function Get-CIPPCustomerReportData {
                 UpdatesBehind  = @($Active | Where-Object { $_.updateStatus -eq 'Behind' } | Sort-Object name)
                 UpdatesUnknown = @($Active | Where-Object { $_.updateStatus -notin @('Up to date', 'Behind') }).Count
                 SupportEnding  = @($Active | Where-Object { $_.support -eq 'Ending soon' } | Sort-Object name)
-                BelowBaseline  = @($Active | Where-Object { $_.hardwareTier -eq 'Below baseline' } | Sort-Object name)
+                BelowBaseline  = @($Active | Where-Object { $_.hardwareRating -eq 'Needs attention' } | Sort-Object name)
+                HardwareCheck  = @($Active | Where-Object { $_.hardwareRating -eq 'Check' } | Sort-Object name)
+                DriveThreshold = $DriveCheck
+                MemoryThreshold = (& $RuleValue 'memoryThreshold' 90)
+                WorkdayStart   = (& $RuleValue 'workdayStart' 8)
+                WorkdayEnd     = (& $RuleValue 'workdayEnd' 18)
                 MemoryPressure = @($Active | Where-Object { $_.memoryDays -gt 0 } | Sort-Object memoryDays -Descending)
                 StorageOver75  = @($Active | Where-Object { $_.drivesOver75 } | Sort-Object { - [int]$_.fullestDrive })
                 UpdatesFailing = @($Active | Where-Object { $_.updateStatus -eq 'Failing' } | Sort-Object name)

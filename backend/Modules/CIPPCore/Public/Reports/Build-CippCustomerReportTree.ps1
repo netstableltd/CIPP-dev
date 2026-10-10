@@ -142,12 +142,13 @@ function Build-CippCustomerReportTree {
             $D = $A.Devices
             $blocks.Add((New-CippReportPage -Title 'Your Computers' -Subtitle 'Every computer we look after, and how it is doing'))
             $NeedAttention = @($D.List | Where-Object { $_.health -eq 'Needs attention' -and ($null -eq $_.daysSinceSeen -or $_.daysSinceSeen -lt 30) }).Count
+            $ToCheck = @($D.List | Where-Object { $_.health -eq 'Check' -and ($null -eq $_.daysSinceSeen -or $_.daysSinceSeen -lt 30) }).Count
             $blocks.Add((New-CippReportParagraph -Text "We look after $(& $plural $D.Active 'computer') for $Name. Each one is checked for Windows updates, whether its version of Windows still gets security fixes, disk space, restarts, recurring performance alerts and whether its hardware is up to the job. The table shows where each computer stands today; the next pages explain the detail."))
             $blocks.Add((New-CippReportStatRow -Stats @(
                         @{ value = "$($D.Active)"; label = 'Computers' }
                         @{ value = "$($D.Healthy)"; label = 'In good shape'; colour = $okC }
+                        @{ value = "$ToCheck"; label = 'To check' }
                         @{ value = "$NeedAttention"; label = 'Need attention'; colour = $(if ($NeedAttention -gt 0) { $dangerC }) }
-                        @{ value = "$($D.UpToDate)"; label = 'Fully updated' }
                     )))
             $LastSeenText = {
                 param($Row)
@@ -164,6 +165,7 @@ function Build-CippCustomerReportTree {
                         user   = $_.user
                         windows = $_.version
                         spec   = $Spec
+                        hwTone = $(switch ($_.hardwareRating) { 'Good' { 'pass' } 'Check' { 'warn' } 'Needs attention' { 'fail' } default { '' } })
                         seen   = (& $LastSeenText $_)
                         status = $_.health
                         tone   = $(switch ($_.health) { 'Good' { 'pass' } 'Check' { 'warn' } 'Needs attention' { 'fail' } default { '' } })
@@ -173,7 +175,7 @@ function Build-CippCustomerReportTree {
                         @{ header = 'Computer'; key = 'name'; width = 1.5; bold = $true }
                         @{ header = 'User'; key = 'user'; width = 1.3 }
                         @{ header = 'Windows'; key = 'windows'; width = 1.3 }
-                        @{ header = 'Hardware'; key = 'spec'; width = 1.5 }
+                        @{ header = 'Hardware'; key = 'spec'; width = 1.5; toneField = 'hwTone' }
                         @{ header = 'Last seen'; key = 'seen'; width = 1 }
                         @{ header = 'Status'; key = 'status'; width = 1.1; toneField = 'tone' }
                     ) -Rows $Rows))
@@ -182,7 +184,7 @@ function Build-CippCustomerReportTree {
                     @{ name = $_.name; why = $Text; tone = $(if ($_.health -eq 'Needs attention') { 'fail' } else { 'warn' }) }
                 })
             if ($Why.Count -gt 0) {
-                $blocks.Add((New-CippReportTable -Title 'Why a computer needs attention' -Limit 100 -Columns @(
+                $blocks.Add((New-CippReportTable -Title 'What we found' -Limit 100 -Columns @(
                             @{ header = 'Computer'; key = 'name'; width = 1.4; bold = $true }
                             @{ header = 'What we found'; key = 'why'; width = 4.6; toneField = 'tone' }
                         ) -Rows $Why))
@@ -269,19 +271,23 @@ function Build-CippCustomerReportTree {
         if ($A -and $A.Devices.Total -gt 0) {
             $D = $A.Devices
             $blocks.Add((New-CippReportPage -Title 'Computer Health' -Subtitle 'Memory, storage and hardware'))
-            $blocks.Add((New-CippReportParagraph -Text 'This page looks for computers that are struggling or due an upgrade: ones that run out of memory during the working day, drives that are filling up, and hardware below our minimum standard of a processor with at least four cores that can run Windows 11.'))
+            $blocks.Add((New-CippReportParagraph -Text 'This page looks for computers that are struggling or due an upgrade: ones that run out of memory during the working day, drives that are filling up, and hardware that is below or close to our minimum standard.'))
             $Any = $false
+            $DrivePct = if ($null -ne $D.DriveThreshold) { [int]$D.DriveThreshold } else { 75 }
+            $DriveWords = if ($DrivePct -eq 75) { 'more than three-quarters full' } else { "more than $DrivePct% full" }
+            $MemPct = if ($D.MemoryThreshold) { [int]$D.MemoryThreshold } else { 90 }
+            $Hour = { param($H) $H = [int]$H; if ($H -eq 0 -or $H -eq 24) { 'midnight' } elseif ($H -eq 12) { 'midday' } elseif ($H -lt 12) { "$($H)am" } else { "$($H - 12)pm" } }
             $Mp = @($D.MemoryPressure)
             if ($Mp.Count -gt 0) {
                 $Any = $true
                 $blocks.Add((New-CippReportTable -Title 'Running out of memory during the working day' -Limit 30 -Columns @(
                             @{ header = 'Computer'; key = 'name'; width = 1.5; bold = $true }
-                            @{ header = 'Days over 90%'; key = 'days'; width = 1; align = 'right'; toneField = 'tone' }
+                            @{ header = "Days over $MemPct%"; key = 'days'; width = 1; align = 'right'; toneField = 'tone' }
                             @{ header = 'Highest'; key = 'peak'; width = 0.8; align = 'right' }
                             @{ header = 'Memory fitted'; key = 'ram'; width = 1; align = 'right' }
                             @{ header = 'Using most memory'; key = 'top'; width = 1.6 }
                         ) -Rows @($Mp | ForEach-Object { @{ name = $_.name; days = "$($_.memoryDays)"; tone = 'warn'; peak = "$($_.memoryPeak)%"; ram = $(if ($_.memoryGB) { "$($_.memoryGB) GB" }); top = $_.memoryTopProcess } })))
-                $blocks.Add((New-CippReportNote -Text "Days in $PeriodLabel when memory use went over 90% between 8am and 6pm on a weekday. Adding memory is usually the cheapest way to speed these computers up."))
+                $blocks.Add((New-CippReportNote -Text "Days in $PeriodLabel when memory use went over $MemPct% between $(& $Hour $(if ($null -ne $D.WorkdayStart) { $D.WorkdayStart } else { 8 })) and $(& $Hour $(if ($null -ne $D.WorkdayEnd) { $D.WorkdayEnd } else { 18 })) on a weekday. Adding memory is usually the cheapest way to speed these computers up."))
             }
             $Full = @($D.StorageOver75)
             if ($Full.Count -gt 0) {
@@ -292,22 +298,30 @@ function Build-CippCustomerReportTree {
                             @{ name = $Dev.name; drive = ($Drive -split ' ')[0]; full = "$Pct% full"; tone = $(if ($Pct -gt 90) { 'fail' } else { 'warn' }) }
                         }
                     })
-                $blocks.Add((New-CippReportTable -Title 'Drives more than three-quarters full' -Limit 40 -Columns @(
+                $blocks.Add((New-CippReportTable -Title "Drives $DriveWords" -Limit 40 -Columns @(
                             @{ header = 'Computer'; key = 'name'; width = 1.6; bold = $true }
                             @{ header = 'Drive'; key = 'drive'; width = 0.8 }
                             @{ header = 'Used'; key = 'full'; width = 1; align = 'right'; toneField = 'tone' }
                         ) -Rows $SRows))
-                $blocks.Add((New-CippReportNote -Text 'Once a drive is more than three-quarters full it is time to delete or archive old files, or fit a bigger drive. Over 90% full, Windows updates and everyday work start to fail.'))
+                $blocks.Add((New-CippReportNote -Text "Once a drive is $DriveWords it is time to delete or archive old files, or fit a bigger drive. Over 90% full, Windows updates and everyday work start to fail."))
             }
             $Bb = @($D.BelowBaseline)
-            if ($Bb.Count -gt 0) {
+            $Hc = @($D.HardwareCheck)
+            if (($Bb.Count + $Hc.Count) -gt 0) {
                 $Any = $true
-                $blocks.Add((New-CippReportTable -Title 'Below our hardware baseline' -Limit 50 -Columns @(
-                            @{ header = 'Computer'; key = 'name'; width = 1.4; bold = $true }
-                            @{ header = 'Processor'; key = 'cpu'; width = 2.2 }
-                            @{ header = 'Cores'; key = 'cores'; width = 0.6; align = 'right' }
-                            @{ header = 'Why'; key = 'why'; width = 2; toneField = 'tone' }
-                        ) -Rows @($Bb | ForEach-Object { @{ name = $_.name; cpu = $_.cpu; cores = "$($_.cores)"; why = $_.hardwareNotes; tone = 'fail' } })))
+                $HwRows = @(@($Bb) + @($Hc) | ForEach-Object {
+                        $Why = "$($_.hardwareNotes)"; if ($Why) { $Why = $Why.Substring(0, 1).ToUpper() + $Why.Substring(1) }
+                        @{ name = $_.name; cpu = ($_.cpu -replace ' \(c\. \d{4}\)', ''); cores = "$($_.cores)"; ram = $(if ($_.memoryGB) { "$($_.memoryGB) GB" }); rating = $(if ($_.hardwareRating -eq 'Needs attention') { 'Below minimum' } else { 'Close to minimum' }); why = $Why; tone = $(if ($_.hardwareRating -eq 'Needs attention') { 'fail' } else { 'warn' }) }
+                    })
+                $blocks.Add((New-CippReportTable -Title 'Hardware below or close to our minimum' -Limit 60 -Columns @(
+                            @{ header = 'Computer'; key = 'name'; width = 1.3; bold = $true }
+                            @{ header = 'Processor'; key = 'cpu'; width = 1.7 }
+                            @{ header = 'Cores'; key = 'cores'; width = 0.5; align = 'right' }
+                            @{ header = 'Memory'; key = 'ram'; width = 0.7; align = 'right' }
+                            @{ header = 'Rating'; key = 'rating'; width = 1.1; toneField = 'tone' }
+                            @{ header = 'Why'; key = 'why'; width = 1.8 }
+                        ) -Rows $HwRows))
+                $blocks.Add((New-CippReportNote -Text 'Close to minimum: fine for now, but worth replacing or upgrading at the next opportunity. Below minimum: slow for everyday work or unable to run a supported version of Windows; plan a replacement.'))
             }
             if (@($D.HomeEdition).Count -gt 0) {
                 $Any = $true
@@ -320,18 +334,15 @@ function Build-CippCustomerReportTree {
                             @{ header = 'Alerts'; key = 'alerts'; width = 1; align = 'right' }
                         ) -Rows @($D.AlertsByDevice | ForEach-Object { @{ name = $_.name; alerts = "$($_.alertsInPeriod)" } })))
             }
-            if ($Any) {
-                # Say which checks passed, so a short page still shows what was looked at.
-                $Passed = [System.Collections.Generic.List[string]]::new()
-                if ($Bb.Count -eq 0) { $Passed.Add("all $($D.Total) computers meet our hardware baseline (at least four processor cores and able to run Windows 11)") }
-                if ($Mp.Count -eq 0) { $Passed.Add('no computer ran out of memory during the working day') }
-                if ($Full.Count -eq 0) { $Passed.Add('no drive is more than three-quarters full') }
-                if ($Passed.Count -gt 0) {
-                    $Text = ($Passed -join '; ')
-                    $blocks.Add((New-CippReportClearBox -Title 'Also checked' -Content ($Text.Substring(0, 1).ToUpper() + $Text.Substring(1) + '.')))
-                }
-            } else {
-                $blocks.Add((New-CippReportClearBox -Title 'No health concerns' -Content 'Every computer meets our hardware baseline, no drive is more than three-quarters full, and no computer ran out of memory during the working day.'))
+            # Say which checks passed, so a short page still shows what was looked at.
+            $Passed = [System.Collections.Generic.List[string]]::new()
+            if (($Bb.Count + $Hc.Count) -eq 0) { $Passed.Add("all $(& $plural $D.Active 'computer') meet our hardware standard") }
+            elseif ($Bb.Count -eq 0) { $Passed.Add('no computer is below our minimum hardware standard') }
+            if ($Mp.Count -eq 0) { $Passed.Add('no computer ran out of memory during the working day') }
+            if ($Full.Count -eq 0) { $Passed.Add("no drive is $DriveWords") }
+            if ($Passed.Count -gt 0) {
+                $Text = ($Passed -join '; ')
+                $blocks.Add((New-CippReportClearBox -Title $(if ($Any) { 'Also checked' } else { 'No health concerns' }) -Content ($Text.Substring(0, 1).ToUpper() + $Text.Substring(1) + '.')))
             }
         }
         }

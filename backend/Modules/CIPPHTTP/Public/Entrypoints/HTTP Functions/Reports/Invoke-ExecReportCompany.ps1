@@ -34,6 +34,9 @@ function Invoke-ExecReportCompany {
     if (-not $Tenant) {
         return ([HttpResponseContext]@{ StatusCode = [HttpStatusCode]::BadRequest; Body = @{ Results = "Unknown tenant '$TenantId'." } })
     }
+    if (-not (Test-CIPPReportAccess -Request $Request -Tenant $Tenant)) {
+        return ([HttpResponseContext]@{ StatusCode = [HttpStatusCode]::Forbidden; Body = @{ Results = 'You do not have access to this tenant.' } })
+    }
 
     $Errors = [System.Collections.Generic.List[string]]::new()
     $EmailPattern = '^[^@\s]+@[^@\s]+\.[^@\s]+$'

@@ -11,10 +11,10 @@ BeforeAll {
     $Modules = Join-Path $RepoRoot 'Modules'
     Get-ChildItem (Get-ChildItem $Modules -Recurse -Directory -Filter 'Reporting' | Select-Object -First 1).FullName -Filter *.ps1 | ForEach-Object { . $_.FullName }
     . (Get-ChildItem $Modules -Recurse -Filter 'ConvertTo-CippReportPdf.ps1' | Select-Object -First 1).FullName
-    foreach ($Name in 'Get-AteraDeviceInsight', 'Get-AteraMemoryPressure', 'ConvertTo-AteraPatchSummary', 'ConvertTo-AteraLocalTime', 'Get-CIPPReportBreachData') {
+    foreach ($Name in 'Get-AteraDeviceInsight', 'Get-AteraMemoryPressure', 'ConvertTo-AteraPatchSummary', 'ConvertTo-AteraLocalTime', 'Get-CIPPReportBreachData', 'Get-AteraDeviceRating', 'ConvertTo-AteraCpuInfo', 'Resolve-AteraDeviceRules') {
         . (Get-ChildItem $Modules -Recurse -Filter "$Name.ps1" | Select-Object -First 1).FullName
     }
-    foreach ($Name in 'Get-CIPPReportBaselineSection', 'Get-CIPPReportPeriod', 'Get-CIPPCustomerReportData', 'Get-CIPPReportFindings', 'Build-CippCustomerReportTree', 'Build-CippReportPrecheckTree', 'Invoke-CIPPReportGeneration', 'ConvertFrom-CIPPReportSectionList', 'Get-CIPPReportSectionCatalog', 'Resolve-CIPPReportSections') {
+    foreach ($Name in 'Get-CIPPReportBaselineSection', 'Get-CIPPReportPeriod', 'Get-CIPPCustomerReportData', 'Get-CIPPReportFindings', 'Build-CippCustomerReportTree', 'Build-CippReportPrecheckTree', 'Invoke-CIPPReportGeneration', 'ConvertFrom-CIPPReportSectionList', 'Get-CIPPReportSectionCatalog', 'Resolve-CIPPReportSections', 'Get-CIPPReportDeviceRules') {
         . (Get-ChildItem $Modules -Recurse -Filter "$Name.ps1" | Select-Object -First 1).FullName
     }
 

@@ -1,0 +1,23 @@
+{
+  "_comment": "Default rules for rating computers in Reports (Good / Check / Needs attention). Edited in CIPP under Reports > Device Rules; saved changes are stored in the ReportSettings table and override these defaults. kind 'below': Needs attention when the value is below 'attention', Check when it is at or below 'check'. kind 'above': Check when the value is above 'check', Needs attention when it is above 'attention'. kind 'flag': 'severity' is attention, check or off. kind 'setting': a plain value. A blank (null) threshold is never triggered.",
+  "rules": [
+    { "id": "intelGeneration", "group": "Hardware", "kind": "below", "label": "Intel Core processor generation", "unit": "generation", "help": "8 = 8th gen (i5-8500). Intel Core Ultra and Core 3/5/7 count as 14th gen or later.", "check": 9, "attention": 8 },
+    { "id": "ryzenSeries", "group": "Hardware", "kind": "below", "label": "AMD Ryzen series", "unit": "series", "help": "3 = Ryzen 3000 series (Ryzen 3 3200G), 5 = 5000 series.", "check": 3, "attention": 3 },
+    { "id": "cores", "group": "Hardware", "kind": "below", "label": "Physical processor cores", "unit": "cores", "help": "Physical cores, not threads.", "check": 4, "attention": 4 },
+    { "id": "memoryGB", "group": "Hardware", "kind": "below", "label": "Memory fitted", "unit": "GB", "help": "Rounded to the nearest GB (8 GB fitted often shows as 7.8 GB).", "check": 8, "attention": 8 },
+    { "id": "windows11", "group": "Hardware", "kind": "flag", "label": "Processor cannot run Windows 11", "help": "From Microsoft's supported processor lists. Not applied to servers.", "severity": "attention" },
+    { "id": "entryLevelCpu", "group": "Hardware", "kind": "flag", "label": "Entry-level processor (Celeron, Pentium, Atom, Athlon, AMD A-series)", "help": "", "severity": "check" },
+    { "id": "windowsUnsupported", "group": "Windows", "kind": "flag", "label": "Windows version no longer gets security updates", "help": "", "severity": "attention" },
+    { "id": "windowsEnding", "group": "Windows", "kind": "below", "label": "Days until Windows security updates end", "unit": "days", "help": "", "check": 90, "attention": null },
+    { "id": "windowsHome", "group": "Windows", "kind": "flag", "label": "Windows Home edition", "help": "", "severity": "check" },
+    { "id": "securityUpdates", "group": "Updates", "kind": "above", "label": "Security updates waiting", "unit": "updates", "help": "From Atera's patch scan (or the build comparison when there is no scan).", "check": 0, "attention": null },
+    { "id": "updatesFailing", "group": "Updates", "kind": "above", "label": "Updates failing to install", "unit": "updates", "help": "Driver updates never count.", "check": 0, "attention": null },
+    { "id": "driveFull", "group": "Health", "kind": "above", "label": "Drive used", "unit": "%", "help": "Any fixed drive over 1 GB.", "check": 75, "attention": null },
+    { "id": "memoryDays", "group": "Health", "kind": "above", "label": "Working days with high memory use", "unit": "days", "help": "Days with a memory alert above the threshold below, during working hours on a weekday.", "check": 0, "attention": null },
+    { "id": "memoryThreshold", "group": "Health", "kind": "setting", "label": "High memory threshold", "unit": "%", "help": "Memory alerts at or above this count as high memory use.", "value": 90 },
+    { "id": "workdayStart", "group": "Health", "kind": "setting", "label": "Working day starts", "unit": "hour (0-23)", "help": "In the reports time zone (Reports > Settings).", "value": 8 },
+    { "id": "workdayEnd", "group": "Health", "kind": "setting", "label": "Working day ends", "unit": "hour (1-24)", "help": "", "value": 18 },
+    { "id": "notSeen", "group": "Health", "kind": "above", "label": "Days since last seen", "unit": "days", "help": "", "check": 7, "attention": 30 },
+    { "id": "notRestarted", "group": "Health", "kind": "above", "label": "Days without a restart", "unit": "days", "help": "Measured when the computer was last seen.", "check": 30, "attention": null }
+  ]
+}

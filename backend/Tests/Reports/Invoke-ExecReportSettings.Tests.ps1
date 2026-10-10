@@ -20,6 +20,9 @@ BeforeAll {
     function Get-CIPPTable { param($TableName) @{ TableName = $TableName } }
     function Get-CIPPAzDataTableEntity { param($TableName, $Filter) }
     function Add-CIPPAzDataTableEntity { param($TableName, $Entity, [switch]$Force) }
+    $script:AllowedTenants = @('AllTenants')
+    function Test-CIPPAccess { param($Request, [switch]$TenantList) $script:AllowedTenants }
+    . (Get-ChildItem -Path (Join-Path $RepoRoot 'Modules') -Recurse -Filter 'Test-CIPPReportAccess.ps1' -File | Select-Object -First 1 -ExpandProperty FullName)
     function Write-LogMessage { param($headers, $API, $tenant, $message, $Sev, $LogData) }
     function Get-CippException { param($Exception) @{ NormalizedError = "$Exception" } }
 
@@ -83,6 +86,15 @@ Describe 'Invoke-ExecReportSettings' {
     BeforeEach {
         $script:Saved = $null
         Mock Add-CIPPAzDataTableEntity { $script:Saved = $Entity }
+    }
+
+    It 'refuses a user limited to some tenants (the settings apply to every company)' {
+        $script:AllowedTenants = @('t1')
+        try {
+            $r = Invoke-ExecReportSettings -Request (New-SettingsRequest)
+            $r.StatusCode | Should -Be 403
+            $Saved | Should -BeNullOrEmpty
+        } finally { $script:AllowedTenants = @('AllTenants') }
     }
 
     It 'saves a valid request as one normalised row' {

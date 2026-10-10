@@ -133,19 +133,26 @@ function Get-CIPPReportFindings {
         }
         if (@($D.MemoryPressure).Count -gt 0) {
             $Mp = @($D.MemoryPressure)
-            Add-Finding 'devices-memory' 'Info' 'Device health' 'Memory over 90% in working hours' "$(& $Plural $Mp.Count 'device') ran above 90% memory during working hours this period (Atera memory alerts). A memory upgrade is the usual fix." @($Mp | ForEach-Object { "$($_.name) ($($_.memoryDays) day$(if ($_.memoryDays -ne 1) { 's' }), peak $($_.memoryPeak)%$(if ($_.memoryGB) { ", $($_.memoryGB) GB RAM" })$(if ($_.memoryTopProcess) { ", mostly $($_.memoryTopProcess)" }))" }) `
+            Add-Finding 'devices-memory' 'Info' 'Device health' "Memory over $(if ($D.MemoryThreshold) { $D.MemoryThreshold } else { 90 })% in working hours" "$(& $Plural $Mp.Count 'device') ran above $(if ($D.MemoryThreshold) { $D.MemoryThreshold } else { 90 })% memory during working hours this period (Atera memory alerts). A memory upgrade is the usual fix." @($Mp | ForEach-Object { "$($_.name) ($($_.memoryDays) day$(if ($_.memoryDays -ne 1) { 's' }), peak $($_.memoryPeak)%$(if ($_.memoryGB) { ", $($_.memoryGB) GB RAM" })$(if ($_.memoryTopProcess) { ", mostly $($_.memoryTopProcess)" }))" }) `
                 "Add more memory (RAM) to $(& $The $Mp.Count 'computer') that ran out of memory during the working day. Upgrading memory is usually inexpensive and makes a noticeable difference." @($Mp | ForEach-Object { "$($_.name)$(if ($_.memoryGB) { " ($($_.memoryGB) GB now)" })" })
         }
         $Full = @($D.StorageOver75)
         if ($Full.Count -gt 0) {
             $Critical = @($Full | Where-Object { $_.drivesOver90 })
-            Add-Finding 'devices-storage' $(if ($Critical.Count -gt 0) { 'Fix' } else { 'Info' }) 'Device health' 'Drives over 75% full' "$(& $Plural $Full.Count 'device') have a drive over 75% full$(if ($Critical.Count -gt 0) { "; $($Critical.Count) over 90%" })." @($Full | ForEach-Object { "$($_.name) ($($_.drivesOver75))" }) `
-                $(if ($Critical.Count -gt 0) { "Free up space now, or fit a bigger drive, on $(& $The $Full.Count 'computer') with a drive more than three-quarters full. A drive over 90% full stops updates and everyday work, so $(if ($Critical.Count -eq 1) { "$($Critical[0].name) needs" } else { 'these need' }) attention first." } else { "Free up space, by deleting or archiving old files, or fit a bigger drive in $(& $The $Full.Count 'computer') with a drive more than three-quarters full." }) @($Full | ForEach-Object { "$($_.name) ($($_.drivesOver75 -replace '%', '% full'))" })
+            $DrivePct = if ($null -ne $D.DriveThreshold) { [int]$D.DriveThreshold } else { 75 }
+            $DriveWords = if ($DrivePct -eq 75) { 'more than three-quarters full' } else { "more than $DrivePct% full" }
+            Add-Finding 'devices-storage' $(if ($Critical.Count -gt 0) { 'Fix' } else { 'Info' }) 'Device health' "Drives over $DrivePct% full" "$(& $Plural $Full.Count 'device') have a drive over $DrivePct% full$(if ($Critical.Count -gt 0) { "; $($Critical.Count) over 90%" })." @($Full | ForEach-Object { "$($_.name) ($($_.drivesOver75))" }) `
+                $(if ($Critical.Count -gt 0) { "Free up space now, or fit a bigger drive, on $(& $The $Full.Count 'computer') with a drive $DriveWords. A drive over 90% full stops updates and everyday work, so $(if ($Critical.Count -eq 1) { "$($Critical[0].name) needs" } else { 'these need' }) attention first." } else { "Free up space, by deleting or archiving old files, or fit a bigger drive in $(& $The $Full.Count 'computer') with a drive $DriveWords." }) @($Full | ForEach-Object { "$($_.name) ($($_.drivesOver75 -replace '%', '% full'))" })
         }
         if (@($D.BelowBaseline).Count -gt 0) {
             $Bb = @($D.BelowBaseline)
-            Add-Finding 'devices-below-baseline' 'Info' 'Device health' 'Below the hardware baseline' "$(& $Plural $Bb.Count 'device') are below the baseline (a quad-core processor that can run Windows 11)." @($Bb | ForEach-Object { "$($_.name) ($($_.hardwareNotes))" }) `
-                "Plan to replace or upgrade $(& $The $Bb.Count 'computer') below our minimum standard: a processor with at least four cores that can run Windows 11."
+            Add-Finding 'devices-below-baseline' 'Info' 'Device health' 'Below the minimum hardware standard' "$(& $Plural $Bb.Count 'device') are below the minimum hardware standard in the device rules (Reports > Device Rules)." @($Bb | ForEach-Object { "$($_.name) ($($_.hardwareNotes))" }) `
+                "Plan to replace or upgrade $(& $The $Bb.Count 'computer') below our minimum hardware standard." @($Bb | ForEach-Object { "$($_.name) ($($_.hardwareNotes))" })
+        }
+        if (@($D.HardwareCheck).Count -gt 0) {
+            $Hc = @($D.HardwareCheck)
+            Add-Finding 'devices-hardware-check' 'Info' 'Device health' 'Close to the minimum hardware standard' "$(& $Plural $Hc.Count 'device') are close to the minimum hardware standard (Reports > Device Rules)." @($Hc | ForEach-Object { "$($_.name) ($($_.hardwareNotes))" }) `
+                "Budget to replace or upgrade $(& $The $Hc.Count 'computer') close to our minimum hardware standard at the next opportunity." @($Hc | ForEach-Object { "$($_.name) ($($_.hardwareNotes))" })
         }
         if (@($D.HomeEdition).Count -gt 0) {
             Add-Finding 'devices-home-edition' 'Info' 'Device health' 'Windows Home edition on business devices' 'Home edition cannot join Entra ID or a domain and has no BitLocker management. An upgrade to Pro is a licence key change.' @($D.HomeEdition | ForEach-Object { $_.name }) `

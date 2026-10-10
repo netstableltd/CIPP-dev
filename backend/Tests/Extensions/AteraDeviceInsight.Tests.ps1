@@ -7,7 +7,7 @@
 
 BeforeAll {
     $RepoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSCommandPath))
-    foreach ($Name in 'Get-AteraDeviceInsight', 'Get-AteraMemoryPressure', 'ConvertTo-AteraPatchSummary', 'ConvertTo-AteraLocalTime') {
+    foreach ($Name in 'Get-AteraDeviceInsight', 'Get-AteraMemoryPressure', 'ConvertTo-AteraPatchSummary', 'ConvertTo-AteraLocalTime', 'Get-AteraDeviceRating', 'ConvertTo-AteraCpuInfo', 'Resolve-AteraDeviceRules') {
         . (Get-ChildItem -Path (Join-Path $RepoRoot 'Modules') -Recurse -Filter "$Name.ps1" | Select-Object -First 1 -ExpandProperty FullName)
     }
     $script:Now = [datetime]::new(2026, 10, 9, 12, 0, 0, [DateTimeKind]::Utc)
@@ -19,8 +19,8 @@ BeforeAll {
         [pscustomobject]@{ AgentID = [math]::Abs($Name.GetHashCode()); DeviceGuid = "guid-$Name"; MachineName = $Name; OS = $OS; OSBuild = $Build; OSType = 'Work Station'; Processor = $Cpu; ProcessorCoresCount = $Cores; Memory = $MemoryMB
             LastSeen = $Seen; LastRebootTime = $Reboot; SystemDrive = 'C:'; HardwareDisks = @([pscustomobject]@{ Drive = 'C:'; Free = $FreeMB; Total = $TotalMB }) }
     }
-    function Get-Insight([object[]]$Agents, [object[]]$Alerts = @()) {
-        @(Get-AteraDeviceInsight -Agents $Agents -Alerts $Alerts -Now $script:Now -Lifecycle $script:Lifecycle)
+    function Get-Insight([object[]]$Agents, [object[]]$Alerts = @(), $Rules) {
+        @(Get-AteraDeviceInsight -Agents $Agents -Alerts $Alerts -Now $script:Now -Lifecycle $script:Lifecycle -Rules $Rules)
     }
 }
 
@@ -94,21 +94,46 @@ Describe 'Get-AteraDeviceInsight' {
         $R[0].Windows11Ready | Should -Be $Ready
     }
 
-    It 'checks the hardware baseline (quad-core, can run Windows 11): <Case>' -ForEach @(
-        @{ Case = 'modern six-core meets it'; Cpu = '12th Gen Intel(R) Core(TM) i5-12400'; Cores = 6; MB = 16384; Tier = 'Meets baseline' }
-        @{ Case = 'memory does not matter'; Cpu = 'Intel(R) Core(TM) i5-8500T CPU @ 2.10GHz'; Cores = 6; MB = 4096; Tier = 'Meets baseline' }
-        @{ Case = 'a quad-core Ryzen 3 meets it'; Cpu = 'AMD Ryzen 3 3200G with Radeon Vega Graphics'; Cores = 4; MB = 8192; Tier = 'Meets baseline' }
-        @{ Case = 'two cores is below'; Cpu = 'Intel(R) Pentium(R) CPU N3540 @ 2.16GHz'; Cores = 2; MB = 8192; Tier = 'Below baseline' }
-        @{ Case = 'a CPU that cannot run Windows 11 is below'; Cpu = 'Intel(R) Core(TM) i7-6700 CPU @ 3.40GHz'; Cores = 4; MB = 16384; Tier = 'Below baseline' }
+    It 'rates hardware with the default device rules: <Case>' -ForEach @(
+        @{ Case = '12th gen i7, 12 cores, 32 GB is good'; Cpu = '12th Gen Intel(R) Core(TM) i7-12700'; Cores = 12; MB = 32509; Rating = 'Good'; Why = '' }
+        @{ Case = '10th gen i5, 6 cores, 16 GB is good'; Cpu = 'Intel(R) Core(TM) i5-10400F CPU @ 2.90GHz'; Cores = 6; MB = 16236; Rating = 'Good'; Why = '' }
+        @{ Case = 'Ryzen 5 5600G, 15 GB is good'; Cpu = 'AMD Ryzen 5 5600G with Radeon Graphics'; Cores = 6; MB = 15669; Rating = 'Good'; Why = '' }
+        @{ Case = '8th gen i3, 4 cores, 8 GB is check'; Cpu = 'Intel(R) Core(TM) i3-8100T CPU @ 3.10GHz'; Cores = 4; MB = 8024; Rating = 'Check'; Why = '8th gen Intel processor; 4-core processor; 8 GB memory' }
+        @{ Case = '9th gen i5 is check'; Cpu = 'Intel(R) Core(TM) i5-9600K CPU @ 3.70GHz'; Cores = 6; MB = 16247; Rating = 'Check'; Why = '9th gen Intel processor' }
+        @{ Case = 'Ryzen 3000 series is check'; Cpu = 'AMD Ryzen 3 3200G with Radeon Vega Graphics'; Cores = 4; MB = 14254; Rating = 'Check'; Why = 'Ryzen 3000 series processor; 4-core processor' }
+        @{ Case = '10th gen with 4 cores and 8 GB is check'; Cpu = 'Intel(R) Core(TM) i5-10300H CPU @ 2.50GHz'; Cores = 4; MB = 8023; Rating = 'Check'; Why = '4-core processor; 8 GB memory' }
+        @{ Case = '7th gen is needs attention'; Cpu = 'Intel(R) Core(TM) i7-7700 CPU @ 3.60GHz'; Cores = 4; MB = 16384; Rating = 'Needs attention'; Why = '7th gen Intel processor; processor cannot run Windows 11; 4-core processor' }
+        @{ Case = 'Ryzen 2000 is needs attention'; Cpu = 'AMD Ryzen 5 2600 Six-Core Processor'; Cores = 6; MB = 16384; Rating = 'Needs attention'; Why = 'Ryzen 2000 series processor' }
+        @{ Case = 'two cores is needs attention'; Cpu = '12th Gen Intel(R) Core(TM) i3-1215U'; Cores = 2; MB = 16384; Rating = 'Needs attention'; Why = '2-core processor' }
+        @{ Case = 'under 8 GB is needs attention'; Cpu = '12th Gen Intel(R) Core(TM) i5-12400'; Cores = 6; MB = 6144; Rating = 'Needs attention'; Why = '6 GB memory' }
+        @{ Case = 'Core Ultra is good'; Cpu = 'Intel(R) Core(TM) Ultra 5 125U'; Cores = 12; MB = 16384; Rating = 'Good'; Why = '' }
     ) {
         $R = Get-Insight @(New-Agent 'X' -Cpu $Cpu -Cores $Cores -MemoryMB $MB)
-        $R[0].HardwareTier | Should -Be $Tier
+        $R[0].HardwareRating | Should -Be $Rating
+        $R[0].HardwareNotes | Should -Be $Why
     }
 
-    It 'does not rate IoT machines like office computers' {
+    It 'rates the same hardware differently when the rules change' {
+        $Agent = New-Agent 'OLDER' -Cpu 'Intel(R) Core(TM) i5-8500T CPU @ 2.10GHz' -Cores 6 -MemoryMB 8059
+        (Get-Insight @($Agent))[0].HardwareRating | Should -Be 'Check'
+        $Strict = @(@{ id = 'intelGeneration'; check = 10; attention = 9 }, @{ id = 'memoryGB'; check = 16; attention = 16 })
+        $R = Get-Insight @($Agent) -Rules $Strict
+        $R[0].HardwareRating | Should -Be 'Needs attention'
+        $R[0].HardwareNotes | Should -Be '8th gen Intel processor; 8 GB memory'
+        $Relaxed = @(@{ id = 'intelGeneration'; check = $null; attention = 6 }, @{ id = 'memoryGB'; check = $null; attention = 4 })
+        (Get-Insight @($Agent) -Rules $Relaxed)[0].HardwareRating | Should -Be 'Good'
+    }
+
+    It 'rates IoT and LTSC machines like any other computer' {
         $R = Get-Insight @(New-Agent 'KIOSK' -OS 'Microsoft Windows 11 IoT Enterprise LTSC x64' -Build '26100.9445' -Cpu 'Intel(R) Core(TM) i3-8100T CPU @ 3.10GHz' -Cores 4 -MemoryMB 8192)
-        $R[0].HardwareTier | Should -Be 'Special purpose'
-        $R[0].HealthNotes | Should -Not -Match 'hardware'
+        $R[0].HardwareRating | Should -Be 'Check'
+    }
+
+    It 'turns a rule off with a blank threshold or severity off' {
+        $Agent = New-Agent 'HOME' -OS 'Microsoft Windows 11 Home x64'
+        (Get-Insight @($Agent))[0].HealthStatus | Should -Be 'Check'
+        (Get-Insight @($Agent) -Rules @(@{ id = 'windowsHome'; severity = 'off' }))[0].HealthStatus | Should -Be 'Good'
+        (Get-Insight @($Agent) -Rules @(@{ id = 'windowsHome'; severity = 'attention' }))[0].HealthStatus | Should -Be 'Needs attention'
     }
 
     It 'counts memory over 90% only on weekdays in working hours (UK time), with the peak and main process' {
@@ -130,14 +155,15 @@ Describe 'Get-AteraDeviceInsight' {
         $R[0].HealthNotes | Should -Match 'memory over 90% in working hours on 2 days'
     }
 
-    It 'flags drives over 75% full, and over 90% as needing attention' {
+    It 'flags drives over 75% full as Check by default, and as Needs attention above a set threshold' {
         $Agent = New-Agent 'DISKS'
         $Agent.HardwareDisks = @([pscustomobject]@{ Drive = 'C:'; Free = 100000; Total = 500000 }, [pscustomobject]@{ Drive = 'D:'; Free = 40000; Total = 1000000 }, [pscustomobject]@{ Drive = 'D:'; Free = 40000; Total = 1000000 }, [pscustomobject]@{ Drive = 'E:'; Free = 900000; Total = 1000000 }, [pscustomobject]@{ Drive = 'F:'; Free = 1; Total = 96 })
         $R = Get-Insight @($Agent)
         $R[0].DrivesOver75 | Should -Be 'C: 80%; D: 96%'
         $R[0].DrivesOver90 | Should -Be 'D: 96%'
         $R[0].FullestDrivePercent | Should -Be 96
-        $R[0].HealthStatus | Should -Be 'Needs attention'
+        $R[0].HealthStatus | Should -Be 'Check'
+        (Get-Insight @($Agent) -Rules @(@{ id = 'driveFull'; check = 75; attention = 90 }))[0].HealthStatus | Should -Be 'Needs attention'
         $R[0].HealthNotes | Should -Match 'D: 96% full'
         $R[0].HealthNotes | Should -Match 'C: 80% full'
     }
@@ -196,7 +222,8 @@ Describe 'Get-AteraDeviceInsight' {
         $R = Get-Insight $Fleet
         ($R | Where-Object MachineName -EQ 'A').HealthStatus | Should -Be 'Good'
         $L = $R | Where-Object MachineName -EQ 'LAPTOP'
-        $L.HealthStatus | Should -Be 'Needs attention'
+        # Every one of these is a Check item under the default rules.
+        $L.HealthStatus | Should -Be 'Check'
         $L.DaysSinceSeen | Should -Be 15
         $L.DaysSinceReboot | Should -Be 107
         $L.SystemDiskFreePercent | Should -Be 4

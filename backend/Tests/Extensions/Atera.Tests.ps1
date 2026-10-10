@@ -8,7 +8,7 @@
 BeforeAll {
     $RepoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSCommandPath))
     $AteraDir = Get-ChildItem -Path (Join-Path $RepoRoot 'Modules') -Recurse -Directory -Filter 'Atera' |
-        Where-Object { $_.FullName -match 'CippExtensions' } | Select-Object -First 1 -ExpandProperty FullName
+        Where-Object { $_.FullName -match 'CippExtensions' } | Select-Object -ExpandProperty FullName
     if (-not $AteraDir) { throw 'Could not locate the Atera extension folder' }
 
     function Get-ExtensionAPIKey { param($Extension) }

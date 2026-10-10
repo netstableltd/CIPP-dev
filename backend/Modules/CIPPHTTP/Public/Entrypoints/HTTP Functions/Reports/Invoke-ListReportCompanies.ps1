@@ -11,7 +11,7 @@ function Invoke-ListReportCompanies {
     param($Request, $TriggerMetadata)
 
     try {
-        $Body = @(Get-CIPPReportCompanies -TenantId $Request.Query.TenantId)
+        $Body = @(Test-CIPPReportAccess -Request $Request -Filter @(Get-CIPPReportCompanies -TenantId $Request.Query.TenantId))
         $StatusCode = [HttpStatusCode]::OK
     } catch {
         $ErrorMessage = Get-CippException -Exception $_

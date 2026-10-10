@@ -200,11 +200,11 @@ export const nativeMenuItems = [
             permissions: ['Tenant.Administration.*'],
           },
           {
-            title: "Service Health",
-            path: "/tenant/administration/service-health",
-            permissions: ["Tenant.Administration.*"],
+            title: 'Service Health',
+            path: '/tenant/administration/service-health',
+            permissions: ['Tenant.Administration.*'],
             // No docs page yet; the help link lands on the section until one is written.
-            docsPath: "tenant/administration",
+            docsPath: 'tenant/administration',
           },
         ],
       },
@@ -1050,12 +1050,27 @@ export const nativeMenuItems = [
         scope: 'global',
       },
       {
+        // Customer report drafts: review, change, approve and send.
+        title: 'Review',
+        path: '/reports/review',
+        permissions: ['CIPP.Reports.*'],
+        scope: 'global',
+      },
+      {
         // Same page as Tools > Report Builder: design templates here, then add them as
         // sections of a company's monthly report (Companies > Report sections).
         title: 'Report Builder',
         path: '/tools/report-builder/generated',
         roles: ['admin', 'superadmin'],
         permissions: ['CIPP.ReportBuilder.*'],
+        scope: 'global',
+      },
+      {
+        // How computers are rated Good / Check / Needs attention in the reports.
+        title: 'Device Rules',
+        path: '/reports/device-rules',
+        roles: ['admin', 'superadmin'],
+        permissions: ['CIPP.Reports.*'],
         scope: 'global',
       },
       {

@@ -35,18 +35,23 @@ function Get-AteraDeviceInsight {
         (ConvertTo-AteraPatchSummary). Failing = a non-driver update failed; driver updates are optional
         and never flag a device.
         MemoryGB, CpuSummary, CpuYear (approximate launch year), Windows11Ready ('Yes'|'No'|'Unknown')
-        HardwareTier      'Meets baseline' | 'Below baseline' | 'Special purpose' (IoT editions). The baseline is a
-                          processor with at least four cores that can run Windows 11 (servers: four cores).
-                          HardwareNotes gives the reasons when below.
+        CpuGeneration     Intel Core generation (8 = 8th gen) or Ryzen series (3 = 3000 series), from ConvertTo-AteraCpuInfo.
+        HardwareRating    'Good' | 'Check' | 'Needs attention' from the hardware device rules (Get-AteraDeviceRating);
+                          HardwareNotes gives the reasons. HardwareTier is the same as 'Meets baseline' |
+                          'Borderline' | 'Below baseline'.
         SystemDiskFreePercent, SystemDiskFreeGB
         Drives            Every fixed drive with its fullness, e.g. 'C: 82% full; D: 40% full'.
         FullestDrivePercent, DrivesOver75 ('C: 82%'), DrivesOver90.
-        MemoryHighDays    Distinct working days (weekdays 08:00-18:00 in -TimeZone) with a memory alert above 90%,
+        MemoryHighDays    Distinct working days (weekdays, working hours in -TimeZone) with a memory alert above the threshold,
                           with MemoryPeakPercent and MemoryTopProcess (Get-AteraMemoryPressure).
         DaysSinceSeen, DaysSinceReboot
         AlertCount, ResourceAlertDays (distinct days with CPU or memory alerts), DiskAlertDays - over the
                           alerts passed in (the sync passes 90 days).
-        HealthStatus      'Good' | 'Check' | 'Needs attention', with HealthNotes giving the reasons.
+        HealthStatus      'Good' | 'Check' | 'Needs attention', with HealthNotes giving the reasons: the worst of every
+                          device rule (Reports > Device Rules; defaults in Config/DeviceRatingRules.json).
+
+    .PARAMETER Rules
+        Device rules (Get-CIPPReportDeviceRules). Defaults from Config/DeviceRatingRules.json when omitted.
 
     .PARAMETER Patches
         Optional hashtable of DeviceGuid -> output of ConvertTo-AteraPatchSummary.
@@ -77,8 +82,12 @@ function Get-AteraDeviceInsight {
         [datetime]$Now = (Get-Date).ToUniversalTime(),
         $Lifecycle,
         [hashtable]$Patches = @{},
-        [string]$TimeZone = 'Europe/London'
+        [string]$TimeZone = 'Europe/London',
+        $Rules
     )
+
+    $RuleSet = Resolve-AteraDeviceRules -Rules $Rules
+    $RuleValue = { param($Id, $Default) if ($RuleSet[$Id] -and $null -ne $RuleSet[$Id].value -and "$($RuleSet[$Id].value)" -ne '') { [int]$RuleSet[$Id].value } else { $Default } }
 
     if (-not $Lifecycle) {
         $Root = if ($env:CIPPRootPath) { $env:CIPPRootPath } else { Join-Path $PSScriptRoot '../../../..' }
@@ -138,12 +147,9 @@ function Get-AteraDeviceInsight {
     }
 
     $MemoryPressure = @{}
-    foreach ($M in @(Get-AteraMemoryPressure -Alerts $Alerts -TimeZone $TimeZone)) {
+    foreach ($M in @(Get-AteraMemoryPressure -Alerts $Alerts -TimeZone $TimeZone -Threshold (& $RuleValue 'memoryThreshold' 90) -WorkdayStart (& $RuleValue 'workdayStart' 8) -WorkdayEnd (& $RuleValue 'workdayEnd' 18))) {
         $MemoryPressure[$(if ($M.DeviceGuid) { "g:$($M.DeviceGuid)" } else { "n:$($M.DeviceName)" })] = $M
     }
-
-    $IntelYear = @{ 1 = 2010; 2 = 2011; 3 = 2012; 4 = 2013; 5 = 2015; 6 = 2015; 7 = 2017; 8 = 2018; 9 = 2019; 10 = 2020; 11 = 2021; 12 = 2022; 13 = 2023; 14 = 2024 }
-    $AmdYear = @{ 1 = 2017; 2 = 2018; 3 = 2019; 4 = 2020; 5 = 2021; 6 = 2022; 7 = 2023; 8 = 2024; 9 = 2024 }
 
     foreach ($Agent in $Agents) {
         $Os = "$($Agent.OS)"
@@ -200,57 +206,8 @@ function Get-AteraDeviceInsight {
         # Hardware
         $MemoryGB = if ($Agent.Memory) { [int][math]::Round([double]$Agent.Memory / 1024) } else { $null }
         $Cores = if ($Agent.ProcessorCoresCount) { [int]$Agent.ProcessorCoresCount } else { $null }
-        $Cpu = ("$($Agent.Processor)" -replace '\((R|TM|tm|r)\)', '' -replace '\s+', ' ').Trim()
-        $CpuSummary = $Cpu; $CpuYear = $null; $Win11 = 'Unknown'; $Entry_Level = $false; $Very_Old = $false
-        if ($Cpu -match 'Core Ultra (X?\d)') {
-            $CpuSummary = "Intel Core Ultra $($Matches[1])"; $CpuYear = 2024; $Win11 = 'Yes'
-        } elseif ($Cpu -match 'Core ([3579]) (\d)\d{2}[A-Z]') {
-            # Intel Core 3/5/7 (Series 1 and later, 2023+): 'Core 7 150U'
-            $CpuSummary = "Intel Core $($Matches[1])"; $CpuYear = 2023; $Win11 = 'Yes'
-            if ($Matches[1] -eq '3') { $Entry_Level = $true }
-        } elseif ($Cpu -match 'Core (i[3579]) CPU [A-Z]? ?(\d{3})\b') {
-            # 1st generation (2010): 'Core i7 CPU L 640', 'Core i3 CPU M 380', 'Core i7 CPU 860'
-            $CpuSummary = "Intel Core $($Matches[1]), 1st gen"; $CpuYear = 2010; $Win11 = 'No'
-            if ($Matches[1] -eq 'i3') { $Entry_Level = $true }
-        } elseif ($Cpu -match 'Core (i[3579])[- ](\d{3,5})([A-Z]\w*)?') {
-            $Family = $Matches[1]; $Model = $Matches[2]; $Suffix = "$($Matches[3])"
-            $Gen = if ($Model.Length -eq 5) { [int]$Model.Substring(0, 2) } elseif ($Model.Length -eq 4 -and $Suffix -match '^G\d' -and $Model -match '^1[01]') { [int]$Model.Substring(0, 2) } elseif ($Model.Length -eq 4) { [int]$Model.Substring(0, 1) } else { 1 }
-            if ($Cpu -match '(\d{1,2})th Gen') { $Gen = [int]$Matches[1] }
-            $CpuYear = $IntelYear[$Gen]
-            $Win11 = if ($Gen -ge 8) { 'Yes' } else { 'No' }
-            $CpuSummary = "Intel Core $Family, $Gen$(switch ($Gen) { 1 { 'st' } 2 { 'nd' } 3 { 'rd' } default { 'th' } }) gen"
-            if ($Family -eq 'i3') { $Entry_Level = $true }
-        } elseif ($Cpu -match 'Ryzen (\d)( PRO)? (\d)(\d{3})([A-Z]*)') {
-            $Tier = [int]$Matches[1]; $Series = [int]$Matches[3]; $AmdSuffix = "$($Matches[5])"
-            $CpuYear = $AmdYear[$Series]
-            # Ryzen 1000 and the 2000-series APUs (2200G/2400G, 2x00U/H - first-generation Zen) are not on
-            # Microsoft's Windows 11 list; 2000-series desktop CPUs (Zen+) and later are.
-            $Win11 = if ($Series -ge 3 -or ($Series -eq 2 -and $AmdSuffix -notmatch '^(G|GE|U|H|HS)$')) { 'Yes' } else { 'No' }
-            $CpuSummary = "AMD Ryzen $Tier $($Series)000 series"
-            if ($Tier -le 3) { $Entry_Level = $true }
-        } elseif ($Cpu -match 'Xeon.*\bE[357]-\d{4}\w?\s*v(\d)') {
-            $CpuYear = @{ 1 = 2011; 2 = 2012; 3 = 2013; 4 = 2015; 5 = 2015; 6 = 2017 }[[int]$Matches[1]]
-            $CpuSummary = "Intel Xeon (v$($Matches[1]))"; $Win11 = 'No'
-        } elseif ($Cpu -match 'Xeon.*\bE\d{4,5}\b') {
-            $CpuSummary = 'Intel Xeon'; $CpuYear = 2010; $Win11 = 'No'
-        } elseif ($Cpu -match 'AMD FX') {
-            $CpuSummary = 'AMD FX'; $CpuYear = 2012; $Win11 = 'No'
-        } elseif ($Cpu -match 'Celeron|Pentium|Atom|Athlon|AMD A\d|Core2|Core 2') {
-            $CpuSummary = "$(($Cpu -split ' CPU| @')[0])"; $Entry_Level = $true; $Very_Old = $Cpu -match 'Core ?2|Atom'
-            if ($Very_Old) { $Win11 = 'No' }
-        }
-        if ($CpuYear) { $CpuSummary = "$CpuSummary (c. $CpuYear)" }
-
-        # Baseline: a processor with at least four cores that can run Windows 11 (servers: four cores).
-        $Below = [System.Collections.Generic.List[string]]::new()
-        if ($null -ne $Cores -and $Cores -lt 4) { $Below.Add("$Cores-core processor") }
-        if (-not $IsServer -and $Win11 -eq 'No') { $Below.Add('processor cannot run Windows 11') }
-        $HardwareTier = if ($Below.Count -gt 0) { 'Below baseline' } else { 'Meets baseline' }
-        $HardwareNotes = @($Below) -join '; '
-        if ($Os -match 'IoT') {
-            # IoT editions run machines and kiosks, sized for one job: not rated like office computers.
-            $HardwareTier = 'Special purpose'; $HardwareNotes = ''
-        }
+        $CpuInfo = ConvertTo-AteraCpuInfo -Processor "$($Agent.Processor)"
+        $CpuSummary = $CpuInfo.Summary; $CpuYear = $CpuInfo.Year; $Win11 = $CpuInfo.Win11
 
         # Disk (system drive, sizes in MB)
         $SystemDrive = if ($Agent.SystemDrive) { "$($Agent.SystemDrive)".TrimEnd('\') } else { 'C:' }
@@ -266,7 +223,9 @@ function Get-AteraDeviceInsight {
         $DriveRows = @(@($Agent.HardwareDisks) | Where-Object { $_ -and [double]$_.Total -ge 1024 } | Group-Object { "$($_.Drive)".TrimEnd('\').ToUpperInvariant() } | ForEach-Object { $_.Group[0] } | ForEach-Object {
                 [pscustomobject]@{ Drive = "$($_.Drive)".TrimEnd('\'); Percent = [int][math]::Round(100 * (1 - [double]$_.Free / [double]$_.Total)); FreeGB = [int][math]::Round([double]$_.Free / 1024); TotalGB = [int][math]::Round([double]$_.Total / 1024) }
             } | Sort-Object Drive)
-        $Over75 = @($DriveRows | Where-Object { $_.Percent -gt 75 })
+        # DrivesOver75 lists drives over the 'Drive used' Check threshold (75% unless changed in the device rules).
+        $DriveCheck = if ($RuleSet['driveFull'] -and "$($RuleSet['driveFull'].check)" -ne '') { [double]$RuleSet['driveFull'].check } else { 75 }
+        $Over75 = @($DriveRows | Where-Object { $_.Percent -gt $DriveCheck })
         $Over90 = @($DriveRows | Where-Object { $_.Percent -gt 90 })
 
         $Seen = & $ToDate $Agent.LastSeen
@@ -284,27 +243,8 @@ function Get-AteraDeviceInsight {
         $ResourceDays = @($DeviceAlerts | Where-Object { "$($_.Title)" -match 'CPU|Memory|RAM' } | ForEach-Object { & $DayOf $_ } | Where-Object { $_ } | Sort-Object -Unique).Count
         $DiskDays = @($DeviceAlerts | Where-Object { "$($_.Title)" -match 'Disk' } | ForEach-Object { & $DayOf $_ } | Where-Object { $_ } | Sort-Object -Unique).Count
 
-        # Overall health
-        $Attention = [System.Collections.Generic.List[string]]::new()
-        $Check = [System.Collections.Generic.List[string]]::new()
-        if ($Support -eq 'Unsupported') { $Attention.Add("$VersionName no longer gets security updates") }
-        elseif ($Support -eq 'Ending soon') { $Check.Add("$VersionName security updates end $Ends") }
-        if ($UpdateStatus -eq 'Behind') {
-            $Attention.Add($(if ($Patch -and [int]$Patch.SecurityUpdatesWaiting -gt 0) { "$($Patch.SecurityUpdatesWaiting) security update$(if ([int]$Patch.SecurityUpdatesWaiting -ne 1) { 's' }) waiting" } else { 'behind on Windows updates' }))
-        } elseif ($UpdateStatus -eq 'Failing') { $Attention.Add("update failing to install ($($Patch.UpdatesFailing))") }
-        if ($null -ne $DaysSeen -and $DaysSeen -gt 30) { $Attention.Add("not seen for $DaysSeen days") }
-        elseif ($null -ne $DaysSeen -and $DaysSeen -gt 7) { $Check.Add("not seen for $DaysSeen days") }
-        if ($null -ne $DaysReboot -and $DaysReboot -gt 30 -and ($null -eq $DaysSeen -or $DaysSeen -le 30)) {
-            $Attention.Add($(if ($null -ne $DaysSeen -and $DaysSeen -gt 7) { "had not restarted for $DaysReboot days when last seen" } else { "not restarted for $DaysReboot days" }))
-        }
-        foreach ($D in $Over90) { $Attention.Add("$($D.Drive) $($D.Percent)% full") }
-        foreach ($D in @($Over75 | Where-Object { $_.Percent -le 90 })) { $Check.Add("$($D.Drive) $($D.Percent)% full") }
         $Mem = if ($Agent.DeviceGuid -and $MemoryPressure.ContainsKey("g:$($Agent.DeviceGuid)")) { $MemoryPressure["g:$($Agent.DeviceGuid)"] } elseif ($MemoryPressure.ContainsKey("n:$($Agent.MachineName)")) { $MemoryPressure["n:$($Agent.MachineName)"] } else { $null }
-        if ($Mem) { $Check.Add("memory over 90% in working hours on $($Mem.Days) day$(if ($Mem.Days -ne 1) { 's' })") }
-        if ($HardwareTier -eq 'Below baseline') { $Attention.Add("below hardware baseline ($HardwareNotes)") }
         $IsHome = $Os -match '\bHome\b'
-        if ($IsHome) { $Check.Add('Windows Home edition') }
-        $Health = if ($Attention.Count -gt 0) { 'Needs attention' } elseif ($Check.Count -gt 0) { 'Check' } else { 'Good' }
 
         $Out = [ordered]@{}
         foreach ($Property in $Agent.PSObject.Properties) { $Out[$Property.Name] = $Property.Value }
@@ -318,8 +258,6 @@ function Get-AteraDeviceInsight {
         $Out.CpuSummary = $CpuSummary
         $Out.CpuYear = $CpuYear
         $Out.Windows11Ready = $Win11
-        $Out.HardwareTier = $HardwareTier
-        $Out.HardwareNotes = $HardwareNotes
         $Out.UpdateSource = $UpdateSource
         $Out.PatchScanDate = $(if ($Patch) { "$($Patch.PatchScanDate)" } else { '' })
         $Out.SecurityUpdatesWaiting = $(if ($Patch) { [int]$Patch.SecurityUpdatesWaiting } else { $null })
@@ -345,8 +283,14 @@ function Get-AteraDeviceInsight {
         $Out.AlertCount = $DeviceAlerts.Count
         $Out.ResourceAlertDays = $ResourceDays
         $Out.DiskAlertDays = $DiskDays
-        $Out.HealthStatus = $Health
-        $Out.HealthNotes = (@($Attention) + @($Check)) -join '; '
+        # Ratings from the device rules (Reports > Device Rules).
+        $Rating = Get-AteraDeviceRating -Device ([pscustomobject]$Out) -Rules $RuleSet
+        $Out.CpuGeneration = $CpuInfo.Generation
+        $Out.HardwareRating = $Rating.HardwareRating
+        $Out.HardwareTier = $Rating.HardwareTier
+        $Out.HardwareNotes = $Rating.HardwareNotes
+        $Out.HealthStatus = $Rating.HealthStatus
+        $Out.HealthNotes = $Rating.HealthNotes
         [pscustomobject]$Out
     }
 }

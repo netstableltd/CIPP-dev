@@ -16,9 +16,8 @@ Feature work for upstream PRs is split out from `preview/reports` into `feat/*` 
 
 ## Dev instance
 
-- Azure resource group `CIPP-dev` (separate from production), deployed with upstream's `deployment/cipp-deploy.bicep` (`baseName=cippdev`).
-- Runs the image built from `preview/reports`.
-- Shares the production **CIPP-SAM** and **CIPP-SSO** app registrations (credentials copied into the dev Key Vault), so it sees every tenant. Because of that it runs with `CIPP_SAM_READONLY=true` (see below).
+- A separate Azure deployment from production, deployed with upstream's `deployment/cipp-deploy.bicep`, running the image built from `preview/reports`. (Environment details are kept in private notes, not in this public repo.)
+- When a dev instance borrows production's SAM app registration it runs with `CIPP_SAM_READONLY=true` (see below).
 - Starts with empty CIPP settings: no standards, alerts or scheduled tasks are copied from production, so nothing runs twice against customer tenants.
 
 ## Fork-only settings

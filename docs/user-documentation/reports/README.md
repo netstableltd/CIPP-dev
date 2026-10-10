@@ -10,6 +10,14 @@ The **Reports** area produces a branded monthly report for each customer, and an
 [companies.md](companies.md)
 {% endcontent-ref %}
 
+{% content-ref url="review.md" %}
+[review.md](review.md)
+{% endcontent-ref %}
+
+{% content-ref url="device-rules.md" %}
+[device-rules.md](device-rules.md)
+{% endcontent-ref %}
+
 {% content-ref url="settings.md" %}
 [settings.md](settings.md)
 {% endcontent-ref %}
@@ -23,9 +31,9 @@ Each company's report is one PDF assembled from an ordered list of **sections**.
 | Section | What it shows | Data |
 | --- | --- | --- |
 | Summary | Headline figures, overall status and an optional note from your team | All |
-| Your computers | Every computer with its user, Windows version, hardware, last seen and a status (Good / Check / Needs attention), and why any need attention | RMM |
+| Your computers | Every computer with its user, Windows version, hardware, last seen and a status (Good / Check / Needs attention, from the [Device Rules](device-rules.md)), and why | RMM |
 | Updates | Security and other Microsoft updates waiting or failing on each computer (from the RMM's patch scan), last security update, and the date each Windows version stops receiving security fixes | RMM |
-| Computer health | Memory over 90% during working hours (add RAM), drives over 75% full (clear space or a bigger drive), computers below the hardware baseline (a quad-core processor that can run Windows 11), Windows Home | RMM |
+| Computer health | High memory use during working hours (add RAM), drives filling up (clear space or a bigger drive), hardware below or close to the minimum in the [Device Rules](device-rules.md), Windows Home | RMM |
 | Monitoring alerts | Alerts in the month by severity and the most common | RMM |
 | Support requests | Tickets opened and resolved, who raised them, time spent | PSA |
 | Purchases | Items bought this month and over the last 12 months, from invoices | PSA |
@@ -46,7 +54,11 @@ The pre-check runs the same data through a set of rules and sorts findings into:
 * **Fix** - should be sorted before the report goes out; if still open, it appears in the customer's Recommendations.
 * **Info** - worth knowing; items with customer wording appear under "To plan for".
 
-Rules include admins or users without enforced MFA, a Secure Score drop, unassigned licences, addresses in data breaches, devices not seen for 30 days, unsupported or soon-unsupported Windows, security updates waiting or failing, memory over 90% in working hours, drives over 75% full, hardware below the baseline, Windows Home, devices not restarted for 30 days, mailboxes 80% full, domains missing SPF/DKIM/DMARC, old urgent tickets, closed tickets with no time, and contracts ending.
+Rules include admins or users without enforced MFA, a Secure Score drop, unassigned licences, addresses in data breaches, devices not seen for 30 days, unsupported or soon-unsupported Windows, security updates waiting or failing, high memory use in working hours, drives filling up, hardware below or close to the minimum, Windows Home, devices not restarted for 30 days, mailboxes 80% full, domains missing SPF/DKIM/DMARC, old urgent tickets, closed tickets with no time, and contracts ending.
+
+## Review before sending
+
+Create a draft of a company's report, change the note, sections and recommendations, approve it and send it from [Review](review.md).
 
 ## Test runs
 
@@ -54,4 +66,4 @@ Every company has **Test customer report** and **Test pre-check** actions. They 
 
 ## Menu
 
-The Reports menu holds Companies, the Report Builder and Settings. Turn on **Reports Menu** under CIPP > Application Settings > Features to also move every area's Reports group (Identity, Tenant, Security, Intune, Email...) under Reports. Pages keep their addresses.
+The Reports menu holds Companies, Review, the Report Builder, Device Rules and Settings. Turn on **Reports Menu** under CIPP > Application Settings > Features to also move every area's Reports group (Identity, Tenant, Security, Intune, Email...) under Reports. Pages keep their addresses.

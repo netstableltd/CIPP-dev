@@ -365,6 +365,8 @@
     * [Global Address List](user-documentation/email/reports/global-address-list.md)
 * [Reports](user-documentation/reports/README.md)
   * [Companies](user-documentation/reports/companies.md)
+  * [Review](user-documentation/reports/review.md)
+  * [Device Rules](user-documentation/reports/device-rules.md)
   * [Settings](user-documentation/reports/settings.md)
 * [Tools](user-documentation/tools/README.md)
   * [Tenant Tools](user-documentation/tools/tenant-tools/README.md)

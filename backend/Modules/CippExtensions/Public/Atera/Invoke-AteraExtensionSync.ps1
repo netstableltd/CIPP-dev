@@ -7,7 +7,8 @@ function Invoke-AteraExtensionSync {
     .DESCRIPTION
         Runs account-wide rather than once per tenant: Atera's alerts endpoint cannot be filtered
         by customer, so a per-tenant sync would re-read the whole alert history for every tenant.
-        One run costs roughly 60-70 API calls for a typical MSP.
+        One run costs about 100 list calls plus two per device of a mapped customer (about 470 calls for
+        250 devices), well under Atera's rate limit.
 
         For each tenant mapped on Integrations > Atera > Tenant Mapping, these Reporting DB
         collections are replaced:
@@ -26,7 +27,7 @@ function Invoke-AteraExtensionSync {
                             Atera invoices) over the last PurchaseWindowDays days. Skipped with a warning
                             if the API key cannot read billing.
 
-        Long free-text fields are truncated to keep rows small. The run summary is stored in the
+        Long alert messages are truncated to keep rows small, and ticket comment text is not stored. The run summary is stored in the
         AteraSettings table (RowKey 'LastSync') for the Reports and Integrations pages.
 
     .PARAMETER WindowDays
@@ -118,7 +119,9 @@ function Invoke-AteraExtensionSync {
         }
         $TimeZone = 'Europe/London'
         try { if (Get-Command Get-CIPPReportSettings -ErrorAction SilentlyContinue) { $TimeZone = (Get-CIPPReportSettings).TimeZone } } catch {}
-        $AgentRows = @(Get-AteraDeviceInsight -Agents $Agents -Alerts $Alerts -Patches $Patches -TimeZone $TimeZone) | Select-Object *, @{ n = 'id'; e = { "$($_.AgentID)" } }
+        $DeviceRules = $null
+        try { if (Get-Command Get-CIPPReportDeviceRules -ErrorAction SilentlyContinue) { $DeviceRules = (Get-CIPPReportDeviceRules).Rules } } catch {}
+        $AgentRows = @(Get-AteraDeviceInsight -Agents $Agents -Alerts $Alerts -Patches $Patches -TimeZone $TimeZone -Rules $DeviceRules) | Select-Object *, @{ n = 'id'; e = { "$($_.AgentID)" } }
         $ContractRows = $Contracts | Select-Object *, @{ n = 'id'; e = { "$($_.ContractID)" } }
         $AlertRows = foreach ($Alert in $Alerts) {
             $Row = $Alert | Select-Object * -ExcludeProperty AlertMessage
@@ -128,9 +131,7 @@ function Invoke-AteraExtensionSync {
         }
         $TicketRows = foreach ($Ticket in $Tickets) {
             $Row = $Ticket | Select-Object * -ExcludeProperty FirstComment, LastEndUserComment, LastTechnicianComment
-            $Row | Add-Member -NotePropertyName FirstComment -NotePropertyValue (Limit-Text $Ticket.FirstComment 1000) -Force
-            $Row | Add-Member -NotePropertyName LastEndUserComment -NotePropertyValue (Limit-Text $Ticket.LastEndUserComment 500) -Force
-            $Row | Add-Member -NotePropertyName LastTechnicianComment -NotePropertyValue (Limit-Text $Ticket.LastTechnicianComment 500) -Force
+            # Ticket comment text is not kept: reports don't use it and it can contain passwords users email in.
             $Row | Add-Member -NotePropertyName id -NotePropertyValue "$($Ticket.TicketID)" -Force
             # Atera leaves TotalDurationMinutes at 0 and records time in TotalDurationSeconds; a minutes
             # figure makes the time usable in Report Builder tables and sums.

@@ -25,6 +25,10 @@ function Invoke-ExecReportSettings {
         return $Field
     }
 
+    if (-not (Test-CIPPReportAccess -Request $Request -AllTenants)) {
+        return ([HttpResponseContext]@{ StatusCode = [HttpStatusCode]::Forbidden; Body = @{ Results = 'Report settings apply to every company, so changing them needs access to all tenants.' } })
+    }
+
     $Errors = [System.Collections.Generic.List[string]]::new()
     $EmailPattern = '^[^@\s]+@[^@\s]+\.[^@\s]+$'
 

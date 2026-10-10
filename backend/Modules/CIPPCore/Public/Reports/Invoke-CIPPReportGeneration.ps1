@@ -33,6 +33,15 @@ function Invoke-CIPPReportGeneration {
     .PARAMETER Summary
         Optional note shown on the first page of a customer report.
 
+    .PARAMETER Overrides
+        Manual changes from reviewing a draft (Resolve-CIPPReportOverrides): Note (replaces -Summary),
+        HiddenSections, HiddenFindings, FindingText, FindingItems and Extra recommendations. They change
+        the customer report only.
+
+    .PARAMETER Draft
+        A draft for review on Reports > Review: rendered exactly as the customer will see it (so the
+        approved PDF is the one sent), stored with '(draft)' in its name. Nothing is emailed.
+
     .FUNCTIONALITY
         Internal
     #>
@@ -45,8 +54,19 @@ function Invoke-CIPPReportGeneration {
         [switch]$Test,
         [string]$Summary,
         [string]$RequestedBy = 'CIPP',
-        $Headers
+        $Headers,
+        $Overrides,
+        [switch]$Draft
     )
+    $OverrideValue = {
+        param($Name)
+        if ($null -eq $Overrides) { return $null }
+        if ($Overrides -is [System.Collections.IDictionary]) { return $Overrides[$Name] }
+        if ($Overrides.PSObject.Properties.Name -contains $Name) { return $Overrides.$Name }
+        $null
+    }
+    if ($Draft) { $SendTo = '' }
+    if ("$(& $OverrideValue 'Note')".Trim()) { $Summary = "$(& $OverrideValue 'Note')".Trim() }
 
     $Tenant = Get-Tenants -IncludeErrors | Where-Object { $_.defaultDomainName -eq $TenantFilter -or $_.customerId -eq $TenantFilter } | Select-Object -First 1
     if (-not $Tenant) { throw "Unknown tenant '$TenantFilter'." }
@@ -80,9 +100,13 @@ function Invoke-CIPPReportGeneration {
             $CompanySections = (Get-CIPPAzDataTableEntity @CompanyTable -Filter "PartitionKey eq 'Company' and RowKey eq '$($Tenant.customerId)'").Sections
         } catch {}
         $SectionPlan = Resolve-CIPPReportSections -TenantFilter $Domain -CompanySections $CompanySections -DefaultSections $Settings.DefaultSections -Period $PeriodInfo
+        $PlannedSections = @($SectionPlan.Sections)
+        $HiddenSections = @(& $OverrideValue 'HiddenSections' | Where-Object { $_ } | ForEach-Object { "$_" })
+        if ($HiddenSections.Count -gt 0) { $SectionPlan.Sections = @($SectionPlan.Sections | Where-Object { $HiddenSections -notcontains $_ }) }
+        $CustomerFindings = if ($null -ne $Overrides) { @(Resolve-CIPPReportOverrides -Findings $Findings -Overrides $Overrides) } else { $Findings }
         $Baseline = $null
         if ($SectionPlan.Sections -contains 'm365-baseline') { $Baseline = Get-CIPPReportBaselineSection -TenantFilter $Domain -TenantName $Data.TenantName }
-        $Tree = Build-CippCustomerReportTree -Data $Data -Findings $Findings -Summary $Summary -Sections $SectionPlan.Sections -ExtraSections $SectionPlan.ExtraSections -Baseline $Baseline
+        $Tree = Build-CippCustomerReportTree -Data $Data -Findings $CustomerFindings -Summary $Summary -Sections $SectionPlan.Sections -ExtraSections $SectionPlan.ExtraSections -Baseline $Baseline
         $ReportName = 'Monthly IT Report'
         $PresetKey = 'customerReport'
     } else {
@@ -90,7 +114,9 @@ function Invoke-CIPPReportGeneration {
         $ReportName = 'Report Pre-check'
         $PresetKey = 'reportPrecheck'
     }
-    if ($Test) {
+    # A draft is rendered exactly as the customer will receive it, so the PDF that is approved is the
+    # PDF that is sent; only its stored name says it is a draft.
+    if ($Test -and -not $Draft) {
         $Tree.Variables.coverlabel = "$($Tree.Variables.coverlabel) $([char]0x2014) TEST"
         $Tree.Variables.coverfooternote = 'TEST REPORT - sent for checking only'
     }
@@ -105,12 +131,12 @@ function Invoke-CIPPReportGeneration {
 
     $Bytes = ConvertTo-CippReportPdf -Blocks $Tree.Blocks -Variables $Tree.Variables -TenantName $Data.TenantName -TenantFilter $Domain -ReportName $ReportName -BrandingPresetId $PresetId -GeneratedOn $GeneratedOn
     $SafeName = ($Data.TenantName -replace '[^\w\- ]', '').Trim() -replace '\s+', '-'
-    $FileName = "$SafeName-$($ReportName -replace '\s+', '-')-$($PeriodInfo.Key)$(if ($Test) { '-TEST' }).pdf"
+    $FileName = "$SafeName-$($ReportName -replace '\s+', '-')-$($PeriodInfo.Key)$(if ($Test -and -not $Draft) { '-TEST' }).pdf"
     $Base64 = [Convert]::ToBase64String($Bytes)
 
     # -- Store so it shows in Generated Reports --------------------------------------------
     $ReportGUID = [string](New-Guid).Guid
-    $TemplateName = "$ReportName $([char]0x2014) $($PeriodInfo.Label)$(if ($Test) { ' (TEST)' })"
+    $TemplateName = "$ReportName $([char]0x2014) $($PeriodInfo.Label)$(if ($Draft) { ' (draft)' } elseif ($Test) { ' (TEST)' })"
     $ReportTable = Get-CIPPTable -TableName 'ReportBuilderReports'
     Add-CIPPAzDataTableEntity @ReportTable -Force -Entity @{
         PartitionKey = $Domain
@@ -203,5 +229,12 @@ function Invoke-CIPPReportGeneration {
         FileName   = $FileName
         Findings   = $Findings
         Sent       = @($Sent)
+        TenantId   = [string]$Tenant.customerId
+        TenantName = [string]$Data.TenantName
+        Domain     = $Domain
+        PeriodKey  = $PeriodInfo.Key
+        PeriodLabel = $PeriodInfo.Label
+        Sections   = $(if ($SectionPlan) { @($PlannedSections) } else { @() })
+        Bytes      = $Bytes
     }
 }

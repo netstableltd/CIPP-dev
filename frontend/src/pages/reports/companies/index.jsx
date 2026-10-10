@@ -142,6 +142,17 @@ const Page = () => {
       multiPost: false,
     },
     {
+      label: 'Create draft for review',
+      type: 'POST',
+      url: '/api/ExecReportDraft',
+      icon: <CippIcons.Description />,
+      data: { Action: '!Generate', TenantId: 'TenantId' },
+      fields: testFields.filter((f) => f.name === 'Period'),
+      confirmText:
+        'Create the customer report for [displayName] as a draft? Review and change it under Reports > Review before it is approved and sent. Nothing is emailed.',
+      multiPost: false,
+    },
+    {
       label: 'Test pre-check',
       type: 'POST',
       url: '/api/ExecReportTestRun',

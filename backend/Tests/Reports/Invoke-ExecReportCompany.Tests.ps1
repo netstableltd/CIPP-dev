@@ -30,6 +30,9 @@ BeforeAll {
         if ($BuiltInOnly) { return $BuiltIn }
         $BuiltIn + @([pscustomobject]@{ value = 'template:abc-1'; label = 'Board pack (Report Builder)' })
     }
+    $script:AllowedTenants = @('AllTenants')
+    function Test-CIPPAccess { param($Request, [switch]$TenantList) $script:AllowedTenants }
+    . (Get-ChildItem -Path (Join-Path $RepoRoot 'Modules') -Recurse -Filter 'Test-CIPPReportAccess.ps1' -File | Select-Object -First 1 -ExpandProperty FullName)
     function Write-LogMessage { param($headers, $API, $tenant, $tenantId, $message, $Sev, $LogData) }
     function Get-CippException { param($Exception) @{ NormalizedError = "$Exception" } }
 
@@ -106,6 +109,22 @@ Describe 'Invoke-ExecReportCompany' {
         Mock Get-CIPPAzDataTableEntity {
             [pscustomobject]@{ PartitionKey = 'Company'; RowKey = 't1'; Enabled = $false; Recipients = 'boss@contoso.com'; DeliveryMode = 'Auto'; Timestamp = 'x' }
         }
+    }
+
+    It 'refuses a user who has no access to the tenant, and writes nothing' {
+        $script:AllowedTenants = @('t9')
+        try {
+            $r = Invoke-ExecReportCompany -Request (New-CompanyRequest @{ TenantId = 't1'; Action = 'Enable' })
+            $r.StatusCode | Should -Be 403
+            $Saved | Should -BeNullOrEmpty
+        } finally { $script:AllowedTenants = @('AllTenants') }
+    }
+
+    It 'allows a user limited to that tenant' {
+        $script:AllowedTenants = @('t1')
+        try {
+            (Invoke-ExecReportCompany -Request (New-CompanyRequest @{ TenantId = 't1'; Action = 'Enable' })).StatusCode | Should -Be 200
+        } finally { $script:AllowedTenants = @('AllTenants') }
     }
 
     It 'Enable only flips Enabled and keeps the other saved fields' {

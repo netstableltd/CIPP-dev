@@ -37,6 +37,10 @@ function Invoke-ExecReportTestRun {
     if ($Errors.Count -gt 0) {
         return ([HttpResponseContext]@{ StatusCode = [HttpStatusCode]::BadRequest; Body = @{ Results = ($Errors -join ' ') } })
     }
+    $Tenant = Get-Tenants -IncludeErrors | Where-Object { $_.customerId -eq $TenantId -or $_.defaultDomainName -eq $TenantId } | Select-Object -First 1
+    if (-not (Test-CIPPReportAccess -Request $Request -Tenant $Tenant)) {
+        return ([HttpResponseContext]@{ StatusCode = [HttpStatusCode]::Forbidden; Body = @{ Results = 'You do not have access to this tenant.' } })
+    }
 
     try {
         $User = ([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($Headers.'x-ms-client-principal')) | ConvertFrom-Json).userDetails
