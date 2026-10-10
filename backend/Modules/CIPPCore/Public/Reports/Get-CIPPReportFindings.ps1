@@ -47,7 +47,7 @@ function Get-CIPPReportFindings {
     }
     $Plural = { param($n, $word) "$n $word$(if ($n -ne 1) { 's' })" }
     # 'the computer' / 'the 3 computers' for customer wording (plural adds s, or es after s/x/ch/sh).
-    $The = { param($n, $word) if ($n -eq 1) { "the $word" } else { "the $n $($word)$(if ($word -match '(s|x|ch|sh)$') { 'es' } else { 's' })" } }
+    $The = { param($n, $word) if ($n -eq 1) { "the $word" } elseif ($word -eq 'person') { "the $n people" } else { "the $n $($word)$(if ($word -match '(s|x|ch|sh)$') { 'es' } else { 's' })" } }
     $Are = { param($n) if ($n -eq 1) { 'is' } else { 'are' } }
 
     # ---------------------------------------------------------------- data quality

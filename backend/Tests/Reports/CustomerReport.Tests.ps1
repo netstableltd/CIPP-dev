@@ -311,25 +311,29 @@ Describe 'Computers, updates, purchases and email' {
         ($F | Where-Object Id -EQ 'devices-storage').Severity | Should -Be 'Fix'
     }
     It 'shows breached addresses without passwords, current accounts first, with HIBP details' {
-        $script:CippHibpCatalog = @{ 'linkedin' = @{ title = 'LinkedIn'; date = '2012-05-05'; classes = @('Email addresses', 'Passwords') }; 'adobe' = @{ title = 'Adobe'; date = '2013-10-04'; classes = @('Email addresses', 'Password hints') } }
+        $script:CippHibpCatalog = @{ 'linkedin' = @{ title = 'LinkedIn'; date = '2012-05-05'; classes = @('Email addresses', 'Passwords') }; 'adobe' = @{ title = 'Adobe'; date = '2013-10-04'; classes = @('Email addresses', 'Password hints') }; 'myfitnesspal' = @{ title = 'MyFitnessPal'; date = '2018-02-01'; classes = @('Passwords') } }
         $script:CippHibpCatalogAt = Get-Date
         function Get-BreachInfo { param($TenantFilter) @(
                 [pscustomobject]@{ email = 'Bob@contoso.com'; password = 'SECRET1'; sources = 'LinkedIn'; clientDomain = 'contoso.com' }
                 [pscustomobject]@{ email = 'bob@contoso.com'; password = 'SECRET2'; sources = 'Adobe'; clientDomain = 'contoso.com' }
                 [pscustomobject]@{ email = 'gone@contoso.com'; password = 'SECRET3'; sources = @('Adobe'); clientDomain = 'contoso.com' }
+                [pscustomobject]@{ email = 'amy@contoso.com'; password = ''; sources = 'MyFitnessPal.com, SomeSite.co.uk'; clientDomain = 'contoso.com' }
             ) }
-        $Br = Get-CIPPReportBreachData -TenantFilter 'contoso.com' -Users @([pscustomobject]@{ userPrincipalName = 'bob@contoso.com'; mail = 'bob@contoso.com' })
+        $Br = Get-CIPPReportBreachData -TenantFilter 'contoso.com' -Users @([pscustomobject]@{ userPrincipalName = 'bob@contoso.com'; mail = 'bob@contoso.com' }, [pscustomobject]@{ userPrincipalName = 'amy@contoso.com' })
         $Br.Source | Should -Be 'Live'
-        $Br.Total | Should -Be 2
-        $Br.Current | Should -Be 1
-        $Br.WithPasswords | Should -Be 1
-        $Br.Accounts[0].email | Should -Be 'bob@contoso.com'
-        @($Br.Accounts[0].breaches).title | Should -Be @('Adobe', 'LinkedIn')
-        $Br.Accounts[1].current | Should -BeFalse
+        $Br.Total | Should -Be 3
+        $Br.Current | Should -Be 2
+        $Br.WithPasswords | Should -Be 2
+        @($Br.Accounts).email | Should -Be @('amy@contoso.com', 'bob@contoso.com', 'gone@contoso.com')
+        @($Br.Accounts[1].breaches).title | Should -Be @('Adobe', 'LinkedIn')
+        # 'MyFitnessPal.com' matches HIBP's MyFitnessPal; an unknown site is kept as given
+        @($Br.Accounts[0].breaches).title | Should -Be @('MyFitnessPal', 'SomeSite.co.uk')
+        $Br.Accounts[2].current | Should -BeFalse
         ($Br | ConvertTo-Json -Depth 10) | Should -Not -Match 'SECRET'
         $D2 = $Data.Clone(); $D2.Breaches = $Br
         $F2 = Get-CIPPReportFindings -Data $D2 -AteraEnabled $true
-        ($F2 | Where-Object Id -EQ 'accounts-breached').CustomerItems | Should -Be @('bob@contoso.com')
+        ($F2 | Where-Object Id -EQ 'accounts-breached').CustomerItems | Should -Be @('amy@contoso.com', 'bob@contoso.com')
+        ($F2 | Where-Object Id -EQ 'accounts-breached').Customer | Should -Match '^Ask the 2 people whose'
         $T = Build-CippCustomerReportTree -Data $D2 -Findings $F2 -Sections @('breaches')
         $Json = $T.Blocks | ConvertTo-Json -Depth 10
         $Json | Should -Match 'Adobe \(2013\), LinkedIn \(2012\)'
