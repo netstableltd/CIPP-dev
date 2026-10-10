@@ -65,11 +65,13 @@ function Get-CIPPReportBreachData {
         $script:CippHibpCatalog = @{}
         try {
             # Oldest first, so a newer breach of the same site wins a shared key.
-            foreach ($B in @(Invoke-RestMethod -Uri 'https://haveibeenpwned.com/api/v3/breaches' -Headers @{ 'User-Agent' = 'CIPP-Reports' } -TimeoutSec 60) | Sort-Object AddedDate) {
+            # Invoke-RestMethod returns a JSON array as one object; piping it through ForEach-Object unrolls it.
+            $Catalogue = @(Invoke-RestMethod -Uri 'https://haveibeenpwned.com/api/v3/breaches' -Headers @{ 'User-Agent' = 'CIPP-Reports' } -TimeoutSec 60 | ForEach-Object { $_ })
+            foreach ($B in @($Catalogue | Sort-Object AddedDate)) {
                 $Entry = @{ title = "$($B.Title)"; date = "$($B.BreachDate)"; classes = @($B.DataClasses) }
                 foreach ($Key in @((& $Norm $B.Name), (& $Norm $B.Title), (& $Norm $B.Domain), (& $Bare $B.Name), (& $Bare $B.Title), (& $Bare $B.Domain))) { if ($Key) { $script:CippHibpCatalog[$Key] = $Entry } }
             }
-            $script:CippHibpCatalogAt = Get-Date
+            if ($script:CippHibpCatalog.Count -gt 0) { $script:CippHibpCatalogAt = Get-Date }
         } catch { Write-Information "HIBP breach catalogue unavailable: $($_.Exception.Message)" }
     }
 

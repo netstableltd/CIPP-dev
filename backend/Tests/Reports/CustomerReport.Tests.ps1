@@ -340,6 +340,13 @@ Describe 'Computers, updates, purchases and email' {
         $Json | Should -Match 'No longer in use'
         $Json | Should -Not -Match 'SECRET'
     }
+    It 'downloads the HIBP catalogue (returned as one array object) and matches by domain-style names' {
+        $script:CippHibpCatalog = $null; $script:CippHibpCatalogAt = $null
+        Mock Invoke-RestMethod { , @([pscustomobject]@{ Name = 'MyFitnessPal'; Title = 'MyFitnessPal'; Domain = 'myfitnesspal.com'; BreachDate = '2018-02-01'; AddedDate = '2019-02-21'; DataClasses = @('Passwords') }, [pscustomobject]@{ Name = 'Collection1'; Title = 'Collection #1'; Domain = ''; BreachDate = '2019-01-07'; AddedDate = '2019-01-16'; DataClasses = @('Passwords') }) }
+        function Get-BreachInfo { param($TenantFilter) @([pscustomobject]@{ email = 'a@contoso.com'; sources = 'MyFitnessPal.com, Collection 1' }) }
+        $Br = Get-CIPPReportBreachData -TenantFilter 'contoso.com'
+        @($Br.Accounts[0].breaches).title | Should -Be @('Collection #1', 'MyFitnessPal')
+    }
     It 'falls back to CIPP''s cached breach results when the live lookup fails' {
         function Get-BreachInfo { throw 'unreachable' }
         Mock Get-CIPPAzDataTableEntity { @([pscustomobject]@{ PartitionKey = 'contoso.com'; RowKey = 'contoso.com'; Timestamp = [datetime]'2026-10-01'; breaches = '[{"email":"bob@contoso.com","password":"X","sources":"LinkedIn"}]' }) } -ParameterFilter { $TableName -eq 'UserBreaches' }
