@@ -224,7 +224,8 @@ export const CippReportDraftEditor = ({ id, onClosed }) => {
                 <Stack
                   direction="row"
                   spacing={1}
-                  sx={{ flexWrap: 'wrap', gap: 1 }}
+                  useFlexGap
+                  sx={{ flexWrap: 'wrap' }}
                 >
                   {editable && (
                     <Button

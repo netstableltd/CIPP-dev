@@ -37,6 +37,9 @@
       "name": "CIPP > Setup"
     },
     {
+      "name": "CommunityAdditions"
+    },
+    {
       "name": "Email-Exchange > Administration"
     },
     {
@@ -86,6 +89,9 @@
     },
     {
       "name": "Identity > Reports"
+    },
+    {
+      "name": "Reports"
     },
     {
       "name": "Security > Compliance-DLP"
@@ -17288,6 +17294,82 @@
         "x-cipp-any-tenant": true
       }
     },
+    "/api/ExecClaudeConnector": {
+      "post": {
+        "summary": "ExecClaudeConnector",
+        "operationId": "ExecClaudeConnector",
+        "tags": [
+          "CommunityAdditions"
+        ],
+        "description": "Community Additions > Standard Processes > Claude for Microsoft 365. Action AddApps adds Anthropic's two Claude apps to the tenant (tenantFilter). Action Apply (after a Global Administrator has approved Microsoft's consent page for both) limits Claude to the chosen Users: through the access group GroupName (default SG-Claude-Users) or, with AssignUsersDirectly, user by user. LockUserConsent also stops users approving apps themselves and turns on admin consent requests. RemoveOtherDirect removes direct assignments for people not in the group. See Set-CIPPClaudeConnector.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Action": {
+                    "type": "string"
+                  },
+                  "AssignUsersDirectly": {
+                    "type": "string"
+                  },
+                  "GroupName": {
+                    "type": "string"
+                  },
+                  "LockUserConsent": {
+                    "type": "string"
+                  },
+                  "RemoveOtherDirect": {
+                    "type": "string"
+                  },
+                  "tenantFilter": {
+                    "$ref": "#/components/schemas/LabelValue"
+                  },
+                  "Users": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "tenantFilter"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResults"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "Tenant.Application.ReadWrite"
+      }
+    },
     "/api/ExecCloneTemplate": {
       "post": {
         "summary": "ExecCloneTemplate",
@@ -21925,6 +22007,7 @@
             "schema": {
               "type": "string",
               "enum": [
+                "Atera",
                 "HaloPSA",
                 "Hudu",
                 "HuduFields",
@@ -21942,6 +22025,7 @@
             "schema": {
               "type": "string",
               "enum": [
+                "Atera",
                 "HaloPSA",
                 "NinjaOne"
               ]
@@ -21954,6 +22038,7 @@
             "schema": {
               "type": "string",
               "enum": [
+                "Atera",
                 "HaloPSA",
                 "HaloPSAFields",
                 "HaloPSARequestSources",
@@ -22133,6 +22218,7 @@
             "schema": {
               "type": "string",
               "enum": [
+                "Atera",
                 "Gradient",
                 "Hudu",
                 "NinjaOne"
@@ -22190,7 +22276,7 @@
         "tags": [
           "CIPP > Extensions"
         ],
-        "description": "Tests the stored credentials for a configured third-party integration and reports whether CIPP can connect. extensionName selects which one: HaloPSA, Gradient, NinjaOne, PWPush, Hudu, Sherweb, HIBP or GitHub.",
+        "description": "Tests the stored credentials for a configured third-party integration and reports whether CIPP can connect. extensionName selects which one: HaloPSA, Gradient, NinjaOne, PWPush, Hudu, Sherweb, Atera, HIBP or GitHub.",
         "parameters": [
           {
             "name": "extensionName",
@@ -22199,6 +22285,7 @@
             "schema": {
               "type": "string",
               "enum": [
+                "Atera",
                 "CIPP-API",
                 "GitHub",
                 "Gradient",
@@ -32811,6 +32898,403 @@
           }
         ],
         "x-cipp-role": "CIPP.ReportBuilder.ReadWrite"
+      }
+    },
+    "/api/ExecReportCompany": {
+      "post": {
+        "summary": "ExecReportCompany",
+        "operationId": "ExecReportCompany",
+        "tags": [
+          "Reports"
+        ],
+        "description": "Saves Reports settings for one company (tenant). Only the fields present in the request are changed, so the same endpoint serves the edit dialog and bulk actions such as enabling reporting. Action=Enable or Action=Disable is a shortcut for Enabled.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Action": {
+                    "type": "string"
+                  },
+                  "DeliveryMode": {
+                    "type": "string"
+                  },
+                  "Enabled": {
+                    "type": "string"
+                  },
+                  "Notes": {
+                    "type": "string"
+                  },
+                  "PausedUntil": {
+                    "type": "string"
+                  },
+                  "ReportDay": {
+                    "type": "string"
+                  },
+                  "ScheduleMode": {
+                    "type": "string"
+                  },
+                  "Sections": {
+                    "type": "string"
+                  },
+                  "tenantFilter": {
+                    "type": "string"
+                  },
+                  "TenantId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResults"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "CIPP.Reports.ReadWrite",
+        "x-cipp-any-tenant": true
+      }
+    },
+    "/api/ExecReportDeviceRules": {
+      "post": {
+        "summary": "ExecReportDeviceRules",
+        "operationId": "ExecReportDeviceRules",
+        "tags": [
+          "Reports"
+        ],
+        "description": "Saves the device rules used to rate computers in Reports. Body: { Rules: [ { id, check, attention, severity, value } ] }, or { Action: 'Reset' } to go back to the defaults. Only known rule ids and fields are stored; a blank threshold means the rule never triggers at that level.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Action": {
+                    "type": "string"
+                  },
+                  "Rules": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResults"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "CIPP.Reports.ReadWrite",
+        "x-cipp-any-tenant": true
+      }
+    },
+    "/api/ExecReportDraft": {
+      "post": {
+        "summary": "ExecReportDraft",
+        "operationId": "ExecReportDraft",
+        "tags": [
+          "Reports"
+        ],
+        "description": "Works with customer report drafts (Reports > Review). Action: Generate (TenantId + Period; creates or regenerates the draft, with Overrides when given), Approve, Reopen (back to draft), Send (emails the approved PDF to the company's recipients; needs \"Allow sending\" on in Reports > Settings) or Discard. Id is the draft's id for the last four.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Action": {
+                    "type": "string"
+                  },
+                  "Id": {
+                    "type": "string"
+                  },
+                  "Overrides": {
+                    "type": "object",
+                    "properties": {
+                      "Extra": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "plan": {
+                              "type": "boolean"
+                            },
+                            "text": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "FindingItems": {
+                        "type": "string"
+                      },
+                      "FindingText": {
+                        "type": "string"
+                      },
+                      "HiddenFindings": {
+                        "type": "string"
+                      },
+                      "HiddenSections": {
+                        "type": "string"
+                      },
+                      "Note": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "Period": {
+                    "$ref": "#/components/schemas/LabelValue"
+                  },
+                  "TenantId": {
+                    "$ref": "#/components/schemas/LabelValue"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResults"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "409": {
+            "description": "Conflict - the resource already exists or is in a conflicting state"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "CIPP.Reports.ReadWrite",
+        "x-cipp-any-tenant": true
+      }
+    },
+    "/api/ExecReportSettings": {
+      "post": {
+        "summary": "ExecReportSettings",
+        "operationId": "ExecReportSettings",
+        "tags": [
+          "Reports"
+        ],
+        "description": "Saves the global Reports settings. Validates addresses, schedule values and delivery mode before writing.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "CustomerSendEnabled": {
+                    "type": "boolean"
+                  },
+                  "DefaultDeliveryMode": {
+                    "type": "string"
+                  },
+                  "DefaultSections": {
+                    "type": "string",
+                    "description": "Ordered list of sections for the main report; blank = all built-in sections."
+                  },
+                  "PrecheckLeadDays": {
+                    "type": "string"
+                  },
+                  "PrecheckRecipients": {
+                    "type": "string"
+                  },
+                  "ReportDay": {
+                    "type": "string"
+                  },
+                  "ReportDayMode": {
+                    "type": "string"
+                  },
+                  "SendTime": {
+                    "type": "string"
+                  },
+                  "TimeZone": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResults"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "CIPP.Reports.ReadWrite",
+        "x-cipp-any-tenant": true
+      }
+    },
+    "/api/ExecReportTestRun": {
+      "post": {
+        "summary": "ExecReportTestRun",
+        "operationId": "ExecReportTestRun",
+        "tags": [
+          "Reports"
+        ],
+        "description": "Generates a customer report or pre-check for one company on demand (the Test button). The PDF is stored under Generated Reports and, if SendTo is given, emailed only to those addresses - never to the company's customer recipients. ReportType is Customer or Precheck; Period is LastMonth, ThisMonth or yyyy-MM.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Period": {
+                    "type": "string"
+                  },
+                  "ReportType": {
+                    "type": "string"
+                  },
+                  "SendTo": {
+                    "type": "string"
+                  },
+                  "tenantFilter": {
+                    "type": "string"
+                  },
+                  "TenantId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Not described statically: this endpoint returns the upstream response as-is, so its fields are determined by the upstream API rather than by CIPP. Call the endpoint to see the actual shape, or add a response schema in backend/Config/openapi-overrides."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "CIPP.Reports.ReadWrite",
+        "x-cipp-any-tenant": true
       }
     },
     "/api/ExecReprocessUserLicenses": {
@@ -44559,6 +45043,63 @@
         ],
         "x-cipp-role": "CIPP.SuperAdmin.Read",
         "x-cipp-any-tenant": true
+      }
+    },
+    "/api/ListClaudeConnector": {
+      "get": {
+        "summary": "ListClaudeConnector",
+        "operationId": "ListClaudeConnector",
+        "tags": [
+          "CommunityAdditions"
+        ],
+        "description": "Community Additions > Standard Processes > Claude for Microsoft 365: how far the tenant (tenantFilter) is through setting up Anthropic's Claude connector. Read-only. GroupName is the access group to look for (default SG-Claude-Users).",
+        "parameters": [
+          {
+            "name": "GroupName",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/tenantFilter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "description": "Not described statically: this endpoint returns the upstream response as-is, so its fields are determined by the upstream API rather than by CIPP. Call the endpoint to see the actual shape, or add a response schema in backend/Config/openapi-overrides."
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "Tenant.Application.Read"
       }
     },
     "/api/ListCommunityRepos": {
@@ -57198,6 +57739,352 @@
           }
         ],
         "x-cipp-role": "CIPP.ReportBuilder.Read"
+      }
+    },
+    "/api/ListReportCompanies": {
+      "get": {
+        "summary": "ListReportCompanies",
+        "operationId": "ListReportCompanies",
+        "tags": [
+          "Reports"
+        ],
+        "description": "Lists every tenant as a Reports company: whether reporting is on, recipients, delivery and schedule modes (with the effective values after applying global defaults), Atera mapping and data status. Pass TenantId for a single company.",
+        "parameters": [
+          {
+            "name": "TenantId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "description": "Derived from the columns the CIPP UI renders. The response may carry more; these are the ones known to exist.",
+                    "properties": {
+                      "AteraCustomer": {
+                        "x-cipp-field-source": "frontend"
+                      },
+                      "DataStatus": {
+                        "x-cipp-field-source": "frontend"
+                      },
+                      "displayName": {
+                        "x-cipp-field-source": "frontend"
+                      },
+                      "EffectiveDeliveryMode": {
+                        "x-cipp-field-source": "frontend"
+                      },
+                      "Enabled": {
+                        "x-cipp-field-source": "frontend"
+                      },
+                      "Recipients": {
+                        "x-cipp-field-source": "frontend"
+                      },
+                      "ScheduleMode": {
+                        "x-cipp-field-source": "frontend"
+                      },
+                      "SectionsSummary": {
+                        "x-cipp-field-source": "frontend"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "CIPP.Reports.Read",
+        "x-cipp-any-tenant": true
+      }
+    },
+    "/api/ListReportDeviceRules": {
+      "get": {
+        "summary": "ListReportDeviceRules",
+        "operationId": "ListReportDeviceRules",
+        "tags": [
+          "Reports"
+        ],
+        "description": "Returns the device rules used to rate computers in Reports (Good / Check / Needs attention): every rule with its current and default thresholds.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "description": "Not described statically: this endpoint returns the upstream response as-is, so its fields are determined by the upstream API rather than by CIPP. Call the endpoint to see the actual shape, or add a response schema in backend/Config/openapi-overrides."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "CIPP.Reports.Read",
+        "x-cipp-any-tenant": true
+      }
+    },
+    "/api/ListReportDrafts": {
+      "get": {
+        "summary": "ListReportDrafts",
+        "operationId": "ListReportDrafts",
+        "tags": [
+          "Reports"
+        ],
+        "description": "Lists customer report drafts awaiting review, approved or sent (Reports > Review), newest month first. Pass Id (the draft's RowKey) for one draft with its findings, sections and saved changes.",
+        "parameters": [
+          {
+            "name": "Id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "description": "Derived from the fields written into the storage table it reads, and the columns the CIPP UI renders. Fields taken from the storage writers may be omitted by this endpoint, and the response may carry computed fields not listed here.",
+                    "properties": {
+                      "ApprovedAt": {
+                        "x-cipp-field-source": "storage"
+                      },
+                      "ApprovedBy": {
+                        "x-cipp-field-source": "storage,frontend"
+                      },
+                      "Changes": {
+                        "x-cipp-field-source": "frontend"
+                      },
+                      "Company": {
+                        "type": "string",
+                        "x-cipp-field-source": "storage,frontend"
+                      },
+                      "ETag": {
+                        "type": "string",
+                        "x-cipp-field-source": "storage"
+                      },
+                      "FileName": {
+                        "type": "string",
+                        "x-cipp-field-source": "storage"
+                      },
+                      "Findings": {
+                        "type": "string",
+                        "x-cipp-field-source": "storage"
+                      },
+                      "GeneratedAt": {
+                        "x-cipp-field-source": "storage,frontend"
+                      },
+                      "GeneratedBy": {
+                        "type": "string",
+                        "x-cipp-field-source": "storage"
+                      },
+                      "Overrides": {
+                        "type": "string",
+                        "x-cipp-field-source": "storage"
+                      },
+                      "PartitionKey": {
+                        "x-cipp-field-source": "storage"
+                      },
+                      "PeriodKey": {
+                        "type": "string",
+                        "x-cipp-field-source": "storage"
+                      },
+                      "PeriodLabel": {
+                        "type": "string",
+                        "x-cipp-field-source": "storage,frontend"
+                      },
+                      "Recommendations": {
+                        "x-cipp-field-source": "frontend"
+                      },
+                      "ReportGUID": {
+                        "type": "string",
+                        "x-cipp-field-source": "storage"
+                      },
+                      "RowKey": {
+                        "x-cipp-field-source": "storage"
+                      },
+                      "Sections": {
+                        "type": "string",
+                        "x-cipp-field-source": "storage"
+                      },
+                      "SentAt": {
+                        "x-cipp-field-source": "storage,frontend"
+                      },
+                      "SentBy": {
+                        "x-cipp-field-source": "storage"
+                      },
+                      "SentTo": {
+                        "x-cipp-field-source": "storage"
+                      },
+                      "Status": {
+                        "x-cipp-field-source": "storage,frontend"
+                      },
+                      "Tenant": {
+                        "type": "string",
+                        "x-cipp-field-source": "storage"
+                      },
+                      "TenantId": {
+                        "type": "string",
+                        "x-cipp-field-source": "storage"
+                      },
+                      "Timestamp": {
+                        "type": "string",
+                        "x-cipp-field-source": "storage"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "CIPP.Reports.Read",
+        "x-cipp-any-tenant": true
+      }
+    },
+    "/api/ListReportSections": {
+      "get": {
+        "summary": "ListReportSections",
+        "operationId": "ListReportSections",
+        "tags": [
+          "Reports"
+        ],
+        "description": "Lists the sections a company's main report can include: the built-in customer report sections and every Report Builder template (value 'template:<GUID>').",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "description": "Not described statically: this endpoint returns the upstream response as-is, so its fields are determined by the upstream API rather than by CIPP. Call the endpoint to see the actual shape, or add a response schema in backend/Config/openapi-overrides."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "CIPP.Reports.Read",
+        "x-cipp-any-tenant": true
+      }
+    },
+    "/api/ListReportSettings": {
+      "get": {
+        "summary": "ListReportSettings",
+        "operationId": "ListReportSettings",
+        "tags": [
+          "Reports"
+        ],
+        "description": "Returns the global Reports settings (pre-check recipients, default schedule, delivery mode and the customer-send master switch), with defaults for anything not yet saved.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "description": "Not described statically: this endpoint returns the upstream response as-is, so its fields are determined by the upstream API rather than by CIPP. Call the endpoint to see the actual shape, or add a response schema in backend/Config/openapi-overrides."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "CIPP.Reports.Read",
+        "x-cipp-any-tenant": true
       }
     },
     "/api/ListResellerRelationshipLink": {

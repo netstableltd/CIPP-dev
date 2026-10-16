@@ -1083,6 +1083,25 @@ export const nativeMenuItems = [
     ],
   },
   {
+    // Additions contributed by the community. Standard Processes: repeatable jobs in a customer
+    // tenant as guided pages (src/data/standardProcesses.js).
+    title: 'Community Additions',
+    type: 'header',
+    icon: (
+      <SvgIcon>
+        <CippIcons.Diversity1 />
+      </SvgIcon>
+    ),
+    permissions: ['Tenant.Application.*'],
+    items: [
+      {
+        title: 'Standard Processes',
+        path: '/community/standard-processes',
+        permissions: ['Tenant.Application.*'],
+      },
+    ],
+  },
+  {
     title: 'Tools',
     type: 'header',
     icon: (
