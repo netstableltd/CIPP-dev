@@ -338,17 +338,29 @@ namespace CIPP.Reporting
             if (!string.IsNullOrEmpty(ctx.GeneratedOn))
                 Line(San(ctx.GeneratedOn).ToUpperInvariant(), 0, headerTop + (headerH - dateLine) / 2, ctx.ContentWidth - leftPad, 9, coverText, OfficeTextAlignment.Right);
 
+            var heroW = ctx.ContentWidth + 2 * ReportStyles.PagePadding - 2 * coverPad;
+            // Branding's cover note wins and the report's own wording is the fallback (client ReportDocument),
+            // so a configured note is not silently ignored by every report that words its own. Like the client,
+            // the note is held to the footer's length once its variables are filled.
+            var note = "CONFIDENTIAL & PROPRIETARY";
+            if (!string.IsNullOrEmpty(ctx.Theme.CoverFooterText)) note = ctx.Theme.CoverFooterText;
+            else if (ctx.Variables.TryGetValue("coverfooternote", out var cfn) && !string.IsNullOrWhiteSpace(cfn)) note = cfn;
+            var noteLines = WrapLines(San(ReportTheme.ApplyFooter(note, ctx.Variables)).ToUpperInvariant(), heroW, 9, bold: false, tracking: 1);
+            var noteTop = ctx.ContentHeight + ReportStyles.PagePadding - coverPad - noteLines.Count * 9 * lineBox;
+            // Optional reading panel (%coverpanel% "true"): over a busy cover photo, a soft white card behind
+            // the cover text from the label chip down to just above the footer note, with the small lines
+            // under the tenant in the cover text colour instead of the muted subtitle grey. Opt-in per report,
+            // so covers that already read well are unchanged.
+            var coverPanel = ctx.CoverImage is { Length: > 0 }
+                && ctx.Variables.TryGetValue("coverpanel", out var cpv) && string.Equals(cpv?.Trim(), "true", StringComparison.OrdinalIgnoreCase);
+            var metaColour = coverPanel ? coverText : subtitleC;
+
             var coverLabel = (ctx.Variables.TryGetValue("coverlabel", out var cl) && !string.IsNullOrWhiteSpace(cl)) ? cl : "ASSESSMENT REPORT";
             coverLabel = San(coverLabel).ToUpperInvariant();
             var chipW = Math.Min(w - leftPad * 2, 26 + coverLabel.Length * 6.4);
             // Client coverLabel: the 10pt label on its natural line inside 8pt of padding, so a 27pt pill.
             var chipH = 8 + ReportStyles.CoverLabel * lineBox + 8;
             var y = headerTop + headerH + headerGap + heroPad;   // client coverHero content top (chip)
-            var chip = OfficeShape.RoundedRectangle(chipW, chipH, chipH / 2); chip.FillColor = OC(primary);
-            dw.AddShape(chip, leftPad, y);
-            Line(coverLabel, leftPad, y + 8, chipW, ReportStyles.CoverLabel, ctx.Theme.OnPrimary, OfficeTextAlignment.Center, true);
-            y += chipH + 30;                          // client coverLabel marginBottom 30
-
             // Cover title: an explicit covertitle/coveraccent override (client coverTitle/coverAccent, e.g.
             // the BEC report's "BEC Compromise" / "Analysis") else the report name split on its last word.
             string lead, accent;
@@ -367,6 +379,40 @@ namespace CIPP.Reporting
             // Helvetica Bold capitals average about 0.7em, so the size that fits is the box over that.
             double FitTitle(string s) => Math.Min(ReportStyles.CoverTitle, (w - leftPad) / Math.Max(1, s.Length * 0.7));
             var titleSize = Math.Min(FitTitle(lead), FitTitle(accent));
+            if (coverPanel)
+            {
+                const double panelPad = 16;
+                var panelTop = y - panelPad;
+                var panelW = Math.Min(w - 2 * (leftPad - panelPad), heroW + 2 * panelPad);
+                // The text block's height, worked out the way it is drawn below: chip, title, subtitle,
+                // tenant, meta lines and meta note.
+                var textH = chipH + 30;
+                if (!string.IsNullOrEmpty(lead)) textH += titleSize * lineBox;
+                if (!string.IsNullOrEmpty(accent)) textH += titleSize * lineBox;
+                if (!string.IsNullOrEmpty(lead) || !string.IsNullOrEmpty(accent)) textH += 20;
+                if (ctx.Variables.TryGetValue("coversubtitle", out var pcs) && !string.IsNullOrWhiteSpace(pcs))
+                    textH += WrapLines(San(pcs), Math.Min(400, heroW), ReportStyles.CoverSubtitle, false).Count * ReportStyles.CoverSubtitle * 1.5 + 40;
+                var panelTenant = (ctx.Variables.TryGetValue("covertenant", out var pct) && !string.IsNullOrWhiteSpace(pct)) ? pct : ctx.TenantName;
+                if (!string.IsNullOrEmpty(panelTenant))
+                    textH += WrapLines(San(panelTenant), Math.Min(500, heroW), 18, true).Count * 18 * lineBox + 8;
+                if (ctx.Variables.TryGetValue("covermeta", out var pcm) && !string.IsNullOrWhiteSpace(pcm))
+                    foreach (var line in pcm.Replace("\r", "").Split('\n'))
+                        textH += WrapLines(San(line), heroW, 12, false).Count * 12 * lineBox + 4;
+                if (ctx.Variables.TryGetValue("covermetanote", out var pcmn) && !string.IsNullOrWhiteSpace(pcmn))
+                    textH += 8 + WrapLines(San(pcmn), heroW, 11, false).Count * 11 * lineBox;
+                var panelH = Math.Min(noteTop - 12, y + textH + panelPad) - panelTop;
+                if (panelH > 0)
+                {
+                    var panelShape = OfficeShape.RoundedRectangle(panelW, panelH, 10);
+                    panelShape.FillColor = OC(ReportColours.White); panelShape.FillOpacity = 0.88;
+                    dw.AddShape(panelShape, leftPad - panelPad, panelTop);
+                }
+            }
+            var chip = OfficeShape.RoundedRectangle(chipW, chipH, chipH / 2); chip.FillColor = OC(primary);
+            dw.AddShape(chip, leftPad, y);
+            Line(coverLabel, leftPad, y + 8, chipW, ReportStyles.CoverLabel, ctx.Theme.OnPrimary, OfficeTextAlignment.Center, true);
+            y += chipH + 30;                          // client coverLabel marginBottom 30
+
             if (!string.IsNullOrEmpty(lead)) { Line(lead, leftPad, y, w - leftPad, titleSize, coverText, OfficeTextAlignment.Left, true); y += titleSize * lineBox; }
             if (!string.IsNullOrEmpty(accent)) { Line(accent, leftPad, y, w - leftPad, titleSize, primary, OfficeTextAlignment.Left, true); y += titleSize * lineBox; }
             if (!string.IsNullOrEmpty(lead) || !string.IsNullOrEmpty(accent)) y += 20;  // client title marginBottom 20
@@ -377,15 +423,6 @@ namespace CIPP.Reporting
             // above it (coverFooter marginTop) and spills a cover that outgrows the page onto a second one;
             // the cover here is one fixed drawing, so the block may run into that 32pt - a landscape cover
             // with a logo needs it for the tenant line - and only a line that would touch the note is dropped.
-            var heroW = ctx.ContentWidth + 2 * ReportStyles.PagePadding - 2 * coverPad;
-            // Branding's cover note wins and the report's own wording is the fallback (client ReportDocument),
-            // so a configured note is not silently ignored by every report that words its own. Like the client,
-            // the note is held to the footer's length once its variables are filled.
-            var note = "CONFIDENTIAL & PROPRIETARY";
-            if (!string.IsNullOrEmpty(ctx.Theme.CoverFooterText)) note = ctx.Theme.CoverFooterText;
-            else if (ctx.Variables.TryGetValue("coverfooternote", out var cfn) && !string.IsNullOrWhiteSpace(cfn)) note = cfn;
-            var noteLines = WrapLines(San(ReportTheme.ApplyFooter(note, ctx.Variables)).ToUpperInvariant(), heroW, 9, bold: false, tracking: 1);
-            var noteTop = ctx.ContentHeight + ReportStyles.PagePadding - coverPad - noteLines.Count * 9 * lineBox;
             // Draws `text` wrapped to `width` on `pitch`-point lines from the client line top `top` and returns
             // the height of the lines drawn. Each line is placed like any other cover line: react-pdf seats the
             // baseline 0.9x the size under the line top even in a taller line (the subtitle's 21pt one).
@@ -417,9 +454,9 @@ namespace CIPP.Reporting
             // then a note 8pt under them.
             if (ctx.Variables.TryGetValue("covermeta", out var cm) && !string.IsNullOrWhiteSpace(cm))
                 foreach (var line in cm.Replace("\r", "").Split('\n'))
-                    y += Wrapped(San(line), y, heroW, 12, 12 * lineBox, subtitleC) + 4;
+                    y += Wrapped(San(line), y, heroW, 12, 12 * lineBox, metaColour) + 4;
             if (ctx.Variables.TryGetValue("covermetanote", out var cmn) && !string.IsNullOrWhiteSpace(cmn))
-                Wrapped(San(cmn), y + 8, heroW, 11, 11 * lineBox, subtitleC);
+                Wrapped(San(cmn), y + 8, heroW, 11, 11 * lineBox, metaColour);
 
             for (var i = 0; i < noteLines.Count; i++)
                 Line(noteLines[i], 0, noteTop + i * 9 * lineBox, w, 9, ctx.Theme.Palette["footer"], OfficeTextAlignment.Center);

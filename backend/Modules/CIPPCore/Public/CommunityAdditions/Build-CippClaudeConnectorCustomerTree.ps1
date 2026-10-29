@@ -176,6 +176,8 @@ function Build-CippClaudeConnectorCustomerTree {
             covermetanote      = 'Information for you'
             coverfooternote    = "Prepared for $TenantName"
             coverfallbackimage = '/reportImages/city.jpg'
+            # A white panel behind the cover text, so it reads over the branding's cover photo.
+            coverpanel         = 'true'
             footerlabel        = "$TenantName $([char]0x2014) Claude for Microsoft 365"
         }
     }
