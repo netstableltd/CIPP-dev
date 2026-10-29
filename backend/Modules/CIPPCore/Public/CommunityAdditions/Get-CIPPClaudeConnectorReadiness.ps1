@@ -8,8 +8,11 @@ function Get-CIPPClaudeConnectorReadiness {
         Used for the customer information PDF and the information box on the Claude for Microsoft 365
         standard process.
 
-        Backup        Enterprise apps from known Microsoft 365 backup products (Barracuda Cloud-to-Cloud
-                      Backup is checked for by name; others are listed if found).
+        Backup        Enterprise apps from known Microsoft 365 backup products. Barracuda Cloud-to-Cloud Backup
+                      is recognised by its app ID (its enterprise app is called just 'Cloud-to-Cloud-Backup');
+                      others by publisher or name together with a backup word, and are listed if found.
+                      'Barracuda M365 Link' and 'BarracudaONE' are Barracuda's portal and email links, not
+                      backup.
         EntraP1       An enabled licence with the AAD_PREMIUM or AAD_PREMIUM_P2 service plan.
         Defender      Enabled licences with a Defender for Business / Endpoint / Office 365 service plan.
         Suite         Microsoft 365 Business Premium, E5 or E3, if the tenant has one.
@@ -37,6 +40,11 @@ function Get-CIPPClaudeConnectorReadiness {
     }
     $BackupVendors = '(?i)\b(barracuda|datto|backupify|veeam|avepoint|acronis|dropsuite|spanning|skykick|keepit|redstor|cloudally|commvault|metallic|druva|axcient|unitrends|cove data protection|n-able|msp360|synology|kaseya 365|arcserve|afi\.ai)\b'
     $BackupWords = '(?i)backup|back-up|cloud.?to.?cloud|saas protection|data protection|recovery'
+    # Known backup apps by app ID: name shown, and whether it is Barracuda's.
+    $KnownBackupApps = @{
+        '09e6e8ef-2c94-4106-89dd-d0a7e500a886' = @{ Name = 'Barracuda Cloud-to-Cloud Backup'; Barracuda = $true }
+    }
+    $BarracudaOwner = 'b893e0b8-2743-4fa7-81eb-0155a9060350'
     $MicrosoftOwners = @('f8cdef31-a31e-4b4a-93e4-5f571e91255a', '72f988bf-86f1-41af-91ab-2d7cd011db47', '33e01921-4d64-4f8c-a055-5bdaffd5e33d', 'cdc5aeea-15c5-4db6-b079-fcadd2505dc2')
 
     # --- Licences ------------------------------------------------------------------------------------------
@@ -60,16 +68,25 @@ function Get-CIPPClaudeConnectorReadiness {
     # --- Backup --------------------------------------------------------------------------------------------
     $Backup = $null
     try {
-        $Sps = @(New-GraphGetRequest -uri 'https://graph.microsoft.com/v1.0/servicePrincipals?$select=displayName,appId,appOwnerOrganizationId,accountEnabled&$top=999' -tenantid $TenantFilter)
+        $Sps = @(New-GraphGetRequest -uri 'https://graph.microsoft.com/v1.0/servicePrincipals?$select=displayName,appId,appOwnerOrganizationId,publisherName,accountEnabled&$top=999' -tenantid $TenantFilter)
         # Every tenant has Microsoft's own enterprise apps; none back means the read didn't reach the tenant.
         if (@($Sps | Where-Object { $_.displayName }).Count -eq 0) { throw 'No enterprise apps returned' }
-        $Apps = @($Sps | Where-Object {
-                $_.displayName -match $BackupVendors -and $_.displayName -match $BackupWords -and
-                "$($_.appOwnerOrganizationId)" -notin $MicrosoftOwners -and $_.accountEnabled -ne $false
-            } | ForEach-Object { "$($_.displayName)" } | Sort-Object -Unique)
+        $Matched = @($Sps | Where-Object { $_.accountEnabled -ne $false -and "$($_.appOwnerOrganizationId)" -notin $MicrosoftOwners } | ForEach-Object {
+                $Sp = $_
+                $Known = $KnownBackupApps["$($Sp.appId)"]
+                $Vendor = "$($Sp.displayName) $($Sp.publisherName)" -match $BackupVendors
+                if ($Known) {
+                    [pscustomobject]@{ Name = $Known.Name; Barracuda = [bool]$Known.Barracuda }
+                } elseif ($Vendor -and "$($Sp.displayName)" -match $BackupWords) {
+                    $IsBarracuda = "$($Sp.appOwnerOrganizationId)" -eq $BarracudaOwner -or "$($Sp.displayName) $($Sp.publisherName)" -match '(?i)barracuda'
+                    $Name = if ($IsBarracuda -and "$($Sp.displayName)" -notmatch '(?i)barracuda') { "Barracuda $($Sp.displayName)" } else { "$($Sp.displayName)" }
+                    [pscustomobject]@{ Name = $Name; Barracuda = [bool]$IsBarracuda }
+                }
+            })
+        $Apps = @($Matched | ForEach-Object { $_.Name } | Sort-Object -Unique)
         $Backup = [pscustomobject]@{
             Found     = ($Apps.Count -gt 0)
-            Barracuda = [bool]($Apps | Where-Object { $_ -match '(?i)barracuda' })
+            Barracuda = [bool]($Matched | Where-Object { $_.Barracuda })
             Products  = $Apps
         }
     } catch { Write-Verbose "Couldn't read enterprise apps: $($_.Exception.Message)" }

@@ -19,7 +19,7 @@ The box at the top of the page is for when a customer asks for Claude. It shows 
 
 | Check | How CIPP finds it |
 | --- | --- |
-| Third-party backup | An enterprise app from a Microsoft 365 backup product. Barracuda Cloud-to-Cloud Backup is named when found; other products (Datto, Veeam, AvePoint, Acronis, Dropsuite, SkyKick and others) are listed. A backup that doesn't use an enterprise app isn't found. |
+| Third-party backup | An enterprise app from a Microsoft 365 backup product. Barracuda Cloud-to-Cloud Backup is recognised by its app ID (`09e6e8ef-2c94-4106-89dd-d0a7e500a886`; in Entra it is called just *Cloud-to-Cloud-Backup*). Barracuda's other apps (*Barracuda M365 Link*, *BarracudaONE*) are not backup and don't count; other products (Datto, Veeam, AvePoint, Acronis, Dropsuite, SkyKick and others) are listed. A backup that doesn't use an enterprise app isn't found. |
 | Entra ID P1 | An active licence with the `AAD_PREMIUM` or `AAD_PREMIUM_P2` service plan. |
 | Microsoft Defender | An active licence with Defender for Business, Defender for Endpoint, or Defender for Office 365. |
 | Business Premium | A Microsoft 365 Business Premium licence (E3 and E5 are named too). |

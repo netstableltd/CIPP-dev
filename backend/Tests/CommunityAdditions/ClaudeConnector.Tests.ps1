@@ -47,8 +47,9 @@ BeforeAll {
             Sps     = @{}
             Grants  = [System.Collections.Generic.List[object]]::new()
             AllSps  = @(
-                [pscustomobject]@{ displayName = 'Barracuda Cloud-to-Cloud Backup'; appOwnerOrganizationId = 'b1'; accountEnabled = $true }
-                [pscustomobject]@{ displayName = 'Barracuda Email Protection'; appOwnerOrganizationId = 'b1'; accountEnabled = $true }
+                # What Barracuda's backup really looks like in a tenant: no 'Barracuda' in the name.
+                [pscustomobject]@{ displayName = 'Cloud-to-Cloud-Backup'; appId = '09e6e8ef-2c94-4106-89dd-d0a7e500a886'; publisherName = 'Barracuda Networks, Inc.'; appOwnerOrganizationId = 'b893e0b8-2743-4fa7-81eb-0155a9060350'; accountEnabled = $true }
+                [pscustomobject]@{ displayName = 'Barracuda M365 Link'; appId = '96641992-2be0-4e39-812f-59929b0e3690'; publisherName = 'Barracuda Networks, Inc.'; appOwnerOrganizationId = 'b893e0b8-2743-4fa7-81eb-0155a9060350'; accountEnabled = $true }
                 [pscustomobject]@{ displayName = 'Microsoft Graph'; appOwnerOrganizationId = 'f8cdef31-a31e-4b4a-93e4-5f571e91255a'; accountEnabled = $true }
             )
             Assign  = @{}
@@ -423,7 +424,10 @@ Describe 'Get-CIPPClaudeConnectorReadiness' {
     }
     It 'reports what is missing' {
         New-FakeTenant
-        $script:T.AllSps = @([pscustomobject]@{ displayName = 'Barracuda Email Protection'; appOwnerOrganizationId = 'b1'; accountEnabled = $true })
+        $script:T.AllSps = @(
+            [pscustomobject]@{ displayName = 'Barracuda M365 Link'; publisherName = 'Barracuda Networks, Inc.'; appOwnerOrganizationId = 'b893e0b8-2743-4fa7-81eb-0155a9060350'; accountEnabled = $true }
+            [pscustomobject]@{ displayName = 'BarracudaONE (prod)'; publisherName = 'Barracuda Networks, Inc.'; appOwnerOrganizationId = 'b893e0b8-2743-4fa7-81eb-0155a9060350'; accountEnabled = $true }
+        )
         $script:T.Skus = @([pscustomobject]@{ skuPartNumber = 'O365_BUSINESS_PREMIUM'; capabilityStatus = 'Enabled'; servicePlans = @([pscustomobject]@{ servicePlanName = 'EXCHANGE_S_STANDARD'; provisioningStatus = 'Success' }) })
         $R = Get-CIPPClaudeConnectorReadiness -TenantFilter 'contoso.com'
         $R.Backup.Found | Should -BeFalse
@@ -442,10 +446,11 @@ Describe 'Get-CIPPClaudeConnectorReadiness' {
     }
     It 'names another backup product' {
         New-FakeTenant
-        $script:T.AllSps = @([pscustomobject]@{ displayName = 'Datto SaaS Protection'; appOwnerOrganizationId = 'd1'; accountEnabled = $true })
+        $script:T.AllSps = @([pscustomobject]@{ displayName = 'SaaS Protection'; publisherName = 'Datto, Inc.'; appOwnerOrganizationId = 'd1'; accountEnabled = $true })
         $R = Get-CIPPClaudeConnectorReadiness -TenantFilter 'contoso.com'
         $R.Backup.Found | Should -BeTrue
         $R.Backup.Barracuda | Should -BeFalse
+        @($R.Backup.Products) | Should -Be @('SaaS Protection')
     }
 }
 
