@@ -17449,6 +17449,68 @@
         "x-cipp-role": "Tenant.Application.Read"
       }
     },
+    "/api/ExecClaudeConnectorGuide": {
+      "post": {
+        "summary": "ExecClaudeConnectorGuide",
+        "operationId": "ExecClaudeConnectorGuide",
+        "tags": [
+          "CommunityAdditions"
+        ],
+        "description": "Community Additions > Standard Processes > Claude for Microsoft 365: the connection guide added to the end of the setup summary PDF. Action Upload saves a Word document (FileName, Data as base64 or a data URL; .docx, up to 10 MB), checking first that it can be read; Action Remove deletes it. The guide is kept in this CIPP instance, not in the code.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Action": {
+                    "type": "string"
+                  },
+                  "Data": {
+                    "type": "string"
+                  },
+                  "FileName": {
+                    "type": "string",
+                    "description": "Just the name: browsers can send a path (\"C:\\fakepath\\guide.docx\")."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResults"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "CIPP.AppSettings.ReadWrite"
+      }
+    },
     "/api/ExecClaudeConnectorSummaryPdf": {
       "post": {
         "summary": "ExecClaudeConnectorSummaryPdf",
@@ -17456,7 +17518,7 @@
         "tags": [
           "CommunityAdditions"
         ],
-        "description": "Community Additions > Standard Processes > Claude for Microsoft 365: the end-of-setup summary PDF for the tenant (tenantFilter). Read from the tenant: who can use Claude and at what level, what Claude can read, the safeguards in place, anything not finished, and what happens next. GroupName is the access group (default SG-Claude-Users). Optional ContactName (who it is addressed to) and PreparedBy (who it is from). Returns application/pdf with the CIPP branding.",
+        "description": "Community Additions > Standard Processes > Claude for Microsoft 365: the end-of-setup summary PDF for the tenant (tenantFilter). Read from the tenant: who can use Claude and at what level, what Claude can read, the safeguards in place, anything not finished, and what happens next. GroupName is the access group (default SG-Claude-Users). Optional ContactName (who it is addressed to) and PreparedBy (who it is from). The uploaded connection guide (ExecClaudeConnectorGuide) is added at the end unless IncludeGuide is false. Returns application/pdf with the CIPP branding.",
         "requestBody": {
           "required": true,
           "content": {
@@ -17468,6 +17530,9 @@
                     "type": "string"
                   },
                   "GroupName": {
+                    "type": "string"
+                  },
+                  "IncludeGuide": {
                     "type": "string"
                   },
                   "PreparedBy": {
@@ -45204,7 +45269,7 @@
         "tags": [
           "CommunityAdditions"
         ],
-        "description": "Community Additions > Standard Processes > Claude for Microsoft 365: how far the tenant (tenantFilter) is through setting up Anthropic's Claude connector. Read-only. Also returns what the tenant already has (Readiness: backup, Entra ID P1, Defender, Business Premium), what Claude can read and change (Access) and the options (Options: read areas and access levels). GroupName is the access group to look for (default SG-Claude-Users).",
+        "description": "Community Additions > Standard Processes > Claude for Microsoft 365: how far the tenant (tenantFilter) is through setting up Anthropic's Claude connector. Read-only. Also returns what the tenant already has (Readiness: backup, Entra ID P1, Defender, Business Premium), what Claude can read and change (Access) the options (Options: read areas and access levels) and the uploaded connection guide, if any (Guide). GroupName is the access group to look for (default SG-Claude-Users).",
         "parameters": [
           {
             "name": "GroupName",

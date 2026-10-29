@@ -24,6 +24,10 @@ function Build-CippClaudeConnectorSummaryTree {
     .PARAMETER GeneratedOn
         The date shown in the text ("as of ...").
 
+    .PARAMETER Guide
+        Optional output of ConvertFrom-CIPPDocxGuide: the MSP's connection guide, added at the end on its
+        own page.
+
     .OUTPUTS
         @{ Blocks; Variables }
 
@@ -36,7 +40,9 @@ function Build-CippClaudeConnectorSummaryTree {
         [Parameter(Mandatory)]$Status,
         [string]$ContactName,
         [string]$PreparedBy,
-        [string]$GeneratedOn
+        [string]$GeneratedOn,
+        # Optional: a connection guide converted by ConvertFrom-CIPPDocxGuide, added at the end.
+        $Guide
     )
 
     $Config = Get-CIPPClaudeConnectorAccessConfig
@@ -134,12 +140,18 @@ function Build-CippClaudeConnectorSummaryTree {
     }
 
     $blocks.Add((New-CippReportBullets -Title 'What happens next' -Items @(
-                @{ label = 'Connect'; text = 'Each person opens the connector settings in Claude (Settings > Connectors, or Customize > Connectors in the desktop app), connects Microsoft 365 and signs in with their work account.' }
+                @{ label = 'Connect'; text = $(if ($Guide -and @($Guide.Blocks).Count -gt 0) { 'Each person connects Microsoft 365 in Claude and signs in with their work account. The guide at the end of this document shows how, step by step.' } else { 'Each person opens the connector settings in Claude (Settings > Connectors, or Customize > Connectors in the desktop app), connects Microsoft 365 and signs in with their work account.' }) }
                 @{ label = 'Check before it acts'; text = 'In the Claude desktop app, Claude asks before it sends an email, invite or Teams message. Read what it is about to do before approving.' }
                 @{ label = 'Changes'; text = 'To add or remove people, or change what Claude can do, email us. Changes take effect straight away; people may need to reconnect Microsoft 365 in Claude.' }
                 @{ label = 'Something odd?'; text = 'If Claude does something unexpected, or an email seems to be trying to instruct it, tell us straight away.' }
             )))
     if ($PreparedBy) { $blocks.Add((New-CippReportParagraph -Html "<p>Kind regards,<br/>$(& $enc $PreparedBy)</p>")) }
+
+    # ------------------------------------------------------------------ the MSP's connection guide
+    if ($Guide -and @($Guide.Blocks).Count -gt 0) {
+        $blocks.Add((New-CippReportPage -Title $(if ($Guide.Title) { $Guide.Title } else { 'Connecting Claude to Microsoft 365' }) -Subtitle $Guide.Subtitle))
+        foreach ($B in @($Guide.Blocks)) { $blocks.Add($B) }
+    }
 
     @{
         Blocks    = @($blocks)

@@ -782,6 +782,57 @@ namespace CIPP.Reporting
 
         public static void Hr(ReportContext ctx, PdfContentBuilder item) => item.HR();
 
+        // -- pictures (block types "image" and "imagerow") --
+        // A screenshot or photo in the body, e.g. a how-to guide's steps. `image` is a data URL or a bundled
+        // /reportImages/ path; `width` is in points (default: the picture's own size at 96 dpi). It is never
+        // wider than the content or taller than half a page, keeps its aspect ratio, is centred, and an
+        // unreadable picture is skipped rather than failing the report.
+        private const double ImageGap = 10;
+
+        private static (byte[] bytes, double w, double h)? FitImage(ReportContext ctx, string? data, double? width, double maxWidth)
+        {
+            var bytes = DecodeImage(data);
+            if (bytes is null || ImageContentType(bytes) is null) return null;
+            var (pxW, pxH) = ImageSize(bytes);
+            if (pxW <= 0 || pxH <= 0) return null;
+            var w = Math.Min(width is > 0 ? width.Value : pxW * 0.75, maxWidth);
+            var h = w * pxH / pxW;
+            var maxH = ctx.ContentHeight * 0.5;
+            if (h > maxH) { w *= maxH / h; h = maxH; }
+            return (bytes, Math.Round(w, 1), Math.Round(h, 1));
+        }
+
+        public static void ImageBlock(ReportContext ctx, PdfContentBuilder item, string? data, double? width, string? caption)
+        {
+            var fit = FitImage(ctx, data, width, ctx.ContentWidth - 2);
+            if (fit is null) return;
+            item.Image(fit.Value.bytes, fit.Value.w, fit.Value.h, PdfAlign.Center);
+            if (!string.IsNullOrWhiteSpace(caption))
+                item.Paragraph(b => { b.Italic(true).FontSize(ReportStyles.TableCell); EmitInline(b, caption!, ReportColours.Faint, ReportStyles.TableCell); },
+                    PdfAlign.Center, null, new PdfParagraphStyle { SpacingBefore = 4 });
+            item.Spacer(ImageGap);
+        }
+
+        // Pictures side by side (a row of screenshots): equal columns, each picture fitted to its column.
+        public static void ImageRow(ReportContext ctx, PdfContentBuilder item, List<object?> images)
+        {
+            var nodes = images.Where(n => n is not null).ToList();
+            if (nodes.Count == 0) return;
+            const double gap = 12;
+            var colWidth = (ctx.ContentWidth - gap * (nodes.Count - 1)) / nodes.Count;
+            var pct = 100.0 / nodes.Count;
+            item.Row(r =>
+            {
+                r.Gap(gap);
+                foreach (var node in nodes)
+                {
+                    var fit = FitImage(ctx, ReportNode.RowStr(node, "image"), ParseNumber(ReportNode.RowStr(node, "width")), colWidth - 2);
+                    r.PercentColumn(pct, col => { if (fit is not null) col.Image(fit.Value.bytes, fit.Value.w, fit.Value.h, PdfAlign.Center); });
+                }
+            });
+            item.Spacer(ImageGap);
+        }
+
         // A small italic aside after a truncated list (client styles.truncationNote): 8pt faint italic,
         // indented to the table's inner padding.
         public static void Note(ReportContext ctx, PdfContentBuilder item, string text)
@@ -2127,6 +2178,12 @@ namespace CIPP.Reporting
                     return;
                 case "paragraphindent":
                     IndentedParagraph(ctx, item, content);
+                    return;
+                case "image":
+                    ImageBlock(ctx, item, block.Str("image"), block.Num("width"), block.Str("caption"));
+                    return;
+                case "imagerow":
+                    ImageRow(ctx, item, block.ListOf("images") ?? new List<object?>());
                     return;
                 case "note":
                     Note(ctx, item, content);

@@ -560,3 +560,126 @@ Describe 'Build-CippClaudeConnectorSummaryTree' {
         $J | Should -Match 'not yet limited to named people'
     }
 }
+
+Describe 'Connection guide' {
+    BeforeAll {
+        $Root = Join-Path (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSCommandPath))) 'Modules'
+        foreach ($Name in 'ConvertFrom-CIPPDocxGuide', 'Get-CIPPClaudeConnectorGuide', 'Invoke-ExecClaudeConnectorGuide', 'Build-CippClaudeConnectorSummaryTree') {
+            . (Get-ChildItem -Path $Root -Recurse -Filter "$Name.ps1" -File | Select-Object -First 1 -ExpandProperty FullName)
+        }
+        Add-Type -AssemblyName System.IO.Compression
+        function Get-CIPPTable { param($TableName) @{ TableName = $TableName } }
+        function Add-CIPPAzDataTableEntity { param($TableName, $Entity, [switch]$Force) }
+        function Get-CIPPAzDataTableEntity { param($TableName, $Filter) }
+        function Remove-CIPPAzDataTableEntity { param($TableName, $Entity, [switch]$Force) }
+
+        # A made-up guide built the way Word stores one.
+        $script:NewDocx = {
+            param([string]$BodyXml)
+            $W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+            $Doc = "<?xml version=`"1.0`"?><w:document xmlns:w=`"$W`" xmlns:r=`"http://schemas.openxmlformats.org/officeDocument/2006/relationships`" xmlns:a=`"http://schemas.openxmlformats.org/drawingml/2006/main`" xmlns:wp=`"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing`"><w:body>$BodyXml<w:sectPr/></w:body></w:document>"
+            $Rels = '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId9" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/></Relationships>'
+            $Png = [Convert]::FromBase64String('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==')
+            $Ms = [System.IO.MemoryStream]::new()
+            $Zip = [System.IO.Compression.ZipArchive]::new($Ms, [System.IO.Compression.ZipArchiveMode]::Create, $true)
+            foreach ($E in @(@('word/document.xml', [Text.Encoding]::UTF8.GetBytes($Doc)), @('word/_rels/document.xml.rels', [Text.Encoding]::UTF8.GetBytes($Rels)), @('word/media/image1.png', $Png))) {
+                $S = $Zip.CreateEntry($E[0]).Open(); $S.Write($E[1], 0, $E[1].Length); $S.Dispose()
+            }
+            $Zip.Dispose()
+            , $Ms.ToArray()
+        }
+        $P = {
+            param($Text, [switch]$Bold, [string]$Style, [switch]$List)
+            $Ppr = ''
+            if ($Style -or $List) {
+                $Ppr = '<w:pPr>'
+                if ($Style) { $Ppr += '<w:pStyle w:val="' + $Style + '"/>' }
+                if ($List) { $Ppr += '<w:numPr><w:numId w:val="1"/></w:numPr>' }
+                $Ppr += '</w:pPr>'
+            }
+            $Rpr = if ($Bold) { '<w:rPr><w:b/></w:rPr>' } else { '' }
+            '<w:p>' + $Ppr + '<w:r>' + $Rpr + '<w:t xml:space="preserve">' + $Text + '</w:t></w:r></w:p>'
+        }
+        $Img = '<w:p><w:r><w:drawing><wp:inline><wp:extent cx="1270000" cy="635000"/><a:graphic><a:graphicData><a:blip r:embed="rId9"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>'
+        $script:Body = @(
+            (& $P 'CONTOSO HOW-TO' -Bold)
+            (& $P 'Connecting Claude')
+            (& $P 'Three short steps.')
+            '<w:p><w:r><w:t xml:space="preserve">Intro with </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>bold</w:t></w:r><w:r><w:t xml:space="preserve"> text.</w:t></w:r></w:p>'
+            (& $P 'Adding it' -Style 'Heading2')
+            (& $P "$([char]0xA0)1$([char]0xA0)$([char]0xA0)Open Settings" -Bold)
+            $Img
+            (& $P 'First example' -List)
+            (& $P 'Second example' -List)
+            "<w:tbl><w:tr><w:tc>$(& $P 'Important: backups' -Bold)$(& $P 'Keep a backup.')</w:tc></w:tr></w:tbl>"
+            "<w:tbl><w:tr><w:tc>$Img</w:tc><w:tc>$Img</w:tc></w:tr></w:tbl>"
+        ) -join ''
+    }
+
+    It 'turns a Word guide into report blocks' {
+        $G = ConvertFrom-CIPPDocxGuide -Bytes (& $script:NewDocx $script:Body)
+        $G.Title | Should -Be 'Connecting Claude'
+        $G.Subtitle | Should -Be 'Three short steps.'
+        $G.Images | Should -Be 3
+        $Types = @($G.Blocks | ForEach-Object { $_.type })
+        $Types | Should -Be @('blank', 'blank', 'blank', 'image', 'richbullets', 'infobox', 'imagerow')
+        $G.Blocks[0].content | Should -Be '<p>Intro with <b>bold</b> text.</p>'
+        $G.Blocks[1].title | Should -Be 'Adding it'
+        $G.Blocks[2].title | Should -Be '1. Open Settings'
+        $G.Blocks[3].image | Should -Match '^data:image/png;base64,'
+        $G.Blocks[3].width | Should -Be 100
+        @($G.Blocks[4].items.text) | Should -Be @('First example', 'Second example')
+        $G.Blocks[5].title | Should -Be 'Important: backups'
+        $G.Blocks[5].tone | Should -Be 'warn'
+        $G.Blocks[5].content | Should -Be 'Keep a backup.'
+        @($G.Blocks[6].images).Count | Should -Be 2
+    }
+
+    It 'refuses a file that is not a Word document' {
+        { ConvertFrom-CIPPDocxGuide -Bytes ([Text.Encoding]::UTF8.GetBytes('not a zip')) } | Should -Throw '*not a Word document*'
+    }
+
+    It 'is added to the end of the summary, and the summary points to it' {
+        New-FakeTenant -GroupExists -ReadOnlyConsent
+        $Status = Get-CIPPClaudeConnectorStatus -TenantFilter 'contoso.com'
+        $G = ConvertFrom-CIPPDocxGuide -Bytes (& $script:NewDocx $script:Body)
+        $Tree = Build-CippClaudeConnectorSummaryTree -TenantName 'Contoso Ltd' -Status $Status -Guide $G
+        $Pages = @($Tree.Blocks | Where-Object { $_.type -eq 'page' })
+        $Pages[-1].title | Should -Be 'Connecting Claude'
+        $Tree.Blocks[-1].type | Should -Be 'imagerow'
+        ($Tree.Blocks | ConvertTo-Json -Depth 10) | Should -Match 'guide at the end of this document'
+    }
+
+    Context 'upload and remove' {
+        BeforeEach {
+            $script:Saved = $null
+            $script:Removed = $false
+            Mock Get-CIPPTable { @{ TableName = 'CommunityProcesses' } }
+            Mock Add-CIPPAzDataTableEntity { $script:Saved = $Entity }
+            Mock Get-CIPPAzDataTableEntity { if ($script:Saved) { [pscustomobject]$script:Saved } }
+            Mock Remove-CIPPAzDataTableEntity { $script:Removed = $true; $script:Saved = $null }
+        }
+        It 'saves a readable guide and reports it' {
+            $Data = [Convert]::ToBase64String((& $script:NewDocx $script:Body))
+            $R = Invoke-ExecClaudeConnectorGuide -Request @{ Body = @{ Action = 'Upload'; FileName = 'C:\fakepath\How-to.docx'; Data = "data:application/octet-stream;base64,$Data" }; Headers = @{}; Params = @{} }
+            $R.StatusCode | Should -Be 200
+            $script:Saved.FileName | Should -Be 'How-to.docx'
+            $script:Saved.Title | Should -Be 'Connecting Claude'
+            $R.Body.Results | Should -Match '3 pictures'
+            (Get-CIPPClaudeConnectorGuide).Title | Should -Be 'Connecting Claude'
+            (Get-CIPPClaudeConnectorGuide -IncludeFile).Bytes.Length | Should -BeGreaterThan 0
+        }
+        It 'refuses other files' {
+            (Invoke-ExecClaudeConnectorGuide -Request @{ Body = @{ Action = 'Upload'; FileName = 'guide.pdf'; Data = 'AAAA' }; Headers = @{}; Params = @{} }).StatusCode | Should -Be 400
+            (Invoke-ExecClaudeConnectorGuide -Request @{ Body = @{ Action = 'Upload'; FileName = 'guide.docx'; Data = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('nope')) }; Headers = @{}; Params = @{} }).StatusCode | Should -Be 400
+            $script:Saved | Should -BeNullOrEmpty
+        }
+        It 'removes the guide' {
+            $script:Saved = @{ PartitionKey = 'ClaudeM365'; RowKey = 'Guide'; Docx = 'AA==' }
+            $R = Invoke-ExecClaudeConnectorGuide -Request @{ Body = @{ Action = 'Remove' }; Headers = @{}; Params = @{} }
+            $R.StatusCode | Should -Be 200
+            $script:Removed | Should -BeTrue
+            Get-CIPPClaudeConnectorGuide | Should -BeNullOrEmpty
+        }
+    }
+}

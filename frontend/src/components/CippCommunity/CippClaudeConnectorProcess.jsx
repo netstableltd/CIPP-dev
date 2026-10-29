@@ -33,6 +33,7 @@ import { CippClaudeStepResults } from './CippClaudeStepResults'
 import { CippClaudeCustomerInfo } from './CippClaudeCustomerInfo'
 import { CippClaudeAccessStep } from './CippClaudeAccessStep'
 import { CippClaudePdfCard, claudePdfFileName } from './CippClaudePdfCard'
+import { CippClaudeGuideUpload } from './CippClaudeGuideUpload'
 
 export const DEFAULT_GROUP = 'SG-Claude-Users'
 const POLL_MS = 5000
@@ -134,6 +135,7 @@ export const CippClaudeConnectorProcess = ({ tenant }) => {
   const values = useWatch({ control: formControl.control })
   const [statusGroup, setStatusGroup] = useState(DEFAULT_GROUP)
   const [pollUntil, setPollUntil] = useState(0)
+  const [includeGuide, setIncludeGuide] = useState(true)
   const usersLoadedFor = useRef(null)
   const validTenant = Boolean(tenant) && tenant !== 'AllTenants'
 
@@ -540,7 +542,11 @@ export const CippClaudeConnectorProcess = ({ tenant }) => {
 
       <CippClaudePdfCard
         url="/api/ExecClaudeConnectorSummaryPdf"
-        body={{ tenantFilter: tenant, GroupName: statusGroup }}
+        body={{
+          tenantFilter: tenant,
+          GroupName: statusGroup,
+          IncludeGuide: Boolean(s?.Guide) && includeGuide,
+        }}
         title="Summary for the customer"
         description="A branded PDF to send when setup is done, read from the tenant as it is now: who can use Claude and at what level, what Claude can read, the safeguards in place, anything not finished, and what they do next."
         dialogTitle="Claude for Microsoft 365: setup summary"
@@ -548,7 +554,14 @@ export const CippClaudeConnectorProcess = ({ tenant }) => {
           'Claude_setup_summary',
           s?.Tenant ?? tenant
         )}
-      />
+      >
+        <CippClaudeGuideUpload
+          tenant={tenant}
+          guide={s?.Guide}
+          include={includeGuide}
+          onIncludeChange={setIncludeGuide}
+        />
+      </CippClaudePdfCard>
     </Stack>
   )
 }

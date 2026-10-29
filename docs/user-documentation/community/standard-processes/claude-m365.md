@@ -83,6 +83,21 @@ When setup is done, **Summary for the customer** at the bottom of the page makes
 
 **Addressed to** and **From** are optional, as for the information PDF.
 
+### Connection guide
+
+Your own step-by-step guide for users, as a Word document, can go at the end of the summary. Upload it with **Upload guide (.docx)** on the summary card; it is kept in this CIPP instance (not in the code) and used for every customer. **Replace guide** swaps it, **Remove** deletes it, and **Add the connection guide to the end of the summary** leaves it out of one PDF.
+
+The document is redrawn in the PDF's own style rather than attached as it is:
+
+* the opening lines: a short all-capitals label is dropped, the next line becomes the page title and the one after it the subtitle;
+* headings (Word heading styles, or a short all-bold line) and numbered steps such as "1  Open Settings" become section headings;
+* paragraphs keep bold and italic; bulleted and numbered lists become bullet lists;
+* pictures appear at their size in the document; pictures side by side in a table appear side by side;
+* a one-cell table (a boxed note) becomes a callout, shown as a warning when its first line contains "important", "warning", "caution" or "note";
+* other tables become tables; headers, footers and comments are left out.
+
+Uploading checks that the document can be read first. Changing the guide needs `CIPP.AppSettings` Read/Write.
+
 Every step checks what is already there, so running the process again only changes what is missing. Each change is written to the CIPP log under `ExecClaudeConnector`.
 
 ## Permissions
@@ -98,6 +113,7 @@ Sources: Anthropic's [Connect to Microsoft 365](https://claude.com/docs/third-pa
 | `ListClaudeConnector` | GET | `tenantFilter`, `GroupName` (optional) |
 | `ExecClaudeConnector` | POST | `tenantFilter`, `Action` (`AddApps`, `Apply` or `Access`), `Users` (user ids or sign-in names), `GroupName`, `AssignUsersDirectly`, `LockUserConsent`, `RemoveOtherDirect`; for `Apply` and `Access`: `ReadAreas` (`mail`, `calendar`, `files`, `teams`, `meetings`), `TenantLevel` (`read`, `drafts`, `assistant`, `full`), `PeopleLevels` (`[{ User, Level }]`) |
 | `ExecClaudeConnectorCustomerPdf` | POST | `tenantFilter`, `ContactName`, `PreparedBy` (both optional). Returns `application/pdf`. |
-| `ExecClaudeConnectorSummaryPdf` | POST | `tenantFilter`, `GroupName`, `ContactName`, `PreparedBy` (all but `tenantFilter` optional). Returns `application/pdf`. |
+| `ExecClaudeConnectorSummaryPdf` | POST | `tenantFilter`, `GroupName`, `ContactName`, `PreparedBy`, `IncludeGuide` (all but `tenantFilter` optional). Returns `application/pdf`. |
+| `ExecClaudeConnectorGuide` | POST | `Action` (`Upload` or `Remove`); for `Upload`: `FileName` (.docx) and `Data` (base64 or a data URL, up to 10 MB). |
 
 `ExecClaudeConnector` returns `Results`, a list of steps with `Step`, `Status` (`Success`, `Info`, `Warning` or `Error`) and `Message`, and `Success` (no step failed).
