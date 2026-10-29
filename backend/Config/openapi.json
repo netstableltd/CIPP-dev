@@ -17449,6 +17449,79 @@
         "x-cipp-role": "Tenant.Application.Read"
       }
     },
+    "/api/ExecClaudeConnectorSummaryPdf": {
+      "post": {
+        "summary": "ExecClaudeConnectorSummaryPdf",
+        "operationId": "ExecClaudeConnectorSummaryPdf",
+        "tags": [
+          "CommunityAdditions"
+        ],
+        "description": "Community Additions > Standard Processes > Claude for Microsoft 365: the end-of-setup summary PDF for the tenant (tenantFilter). Read from the tenant: who can use Claude and at what level, what Claude can read, the safeguards in place, anything not finished, and what happens next. GroupName is the access group (default SG-Claude-Users). Optional ContactName (who it is addressed to) and PreparedBy (who it is from). Returns application/pdf with the CIPP branding.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ContactName": {
+                    "type": "string"
+                  },
+                  "GroupName": {
+                    "type": "string"
+                  },
+                  "PreparedBy": {
+                    "type": "string"
+                  },
+                  "tenantFilter": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "tenantFilter"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/tenantFilter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Not described statically: this endpoint returns the upstream response as-is, so its fields are determined by the upstream API rather than by CIPP. Call the endpoint to see the actual shape, or add a response schema in backend/Config/openapi-overrides."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "Tenant.Application.Read"
+      }
+    },
     "/api/ExecCloneTemplate": {
       "post": {
         "summary": "ExecCloneTemplate",

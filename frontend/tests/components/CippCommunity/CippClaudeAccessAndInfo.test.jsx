@@ -330,3 +330,33 @@ describe('CippClaudeCustomerInfo', () => {
     )
   })
 })
+
+describe('CippClaudePdfCard', () => {
+  it('downloads the setup summary with the names and group', async () => {
+    const { CippClaudePdfCard, claudePdfFileName } =
+      await import('../../../src/components/CippCommunity/CippClaudePdfCard')
+    renderWithProviders(
+      <CippClaudePdfCard
+        url="/api/ExecClaudeConnectorSummaryPdf"
+        body={{ tenantFilter: 'contoso.com', GroupName: 'SG-Claude-Users' }}
+        title="Summary for the customer"
+        description="d"
+        fileName={claudePdfFileName('Claude_setup_summary', 'Contoso Ltd')}
+      />
+    )
+    fireEvent.change(screen.getByLabelText('From (optional)'), {
+      target: { value: 'Dave' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Download PDF' }))
+    expect(downloadServerPdf).toHaveBeenCalledWith(
+      '/api/ExecClaudeConnectorSummaryPdf',
+      {
+        tenantFilter: 'contoso.com',
+        GroupName: 'SG-Claude-Users',
+        ContactName: '',
+        PreparedBy: 'Dave',
+      },
+      'Claude_setup_summary_Contoso_Ltd.pdf'
+    )
+  })
+})

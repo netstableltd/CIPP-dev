@@ -520,3 +520,43 @@ Describe 'Invoke-ListClaudeConnector options' {
         $R.Body.Readiness.Backup.Barracuda | Should -BeTrue
     }
 }
+
+Describe 'Build-CippClaudeConnectorSummaryTree' {
+    BeforeAll {
+        . (Get-ChildItem -Path (Join-Path (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSCommandPath))) 'Modules') -Recurse -Filter 'Build-CippClaudeConnectorSummaryTree.ps1' -File | Select-Object -First 1 -ExpandProperty FullName)
+        $script:Json = { param($Tree) $Tree.Blocks | ConvertTo-Json -Depth 10 }
+    }
+    It 'summarises a finished setup from the tenant status' {
+        New-FakeTenant -GroupExists -ReadOnlyConsent
+        $null = Set-CIPPClaudeConnector -TenantFilter 'contoso.com' -Action Apply -Users 'jo@contoso.com', 'sam@contoso.com' -LockUserConsent -TenantLevel 'read' -PeopleLevels @(@{ User = 'jo@contoso.com'; Level = 'assistant' })
+        $Status = Get-CIPPClaudeConnectorStatus -TenantFilter 'contoso.com'
+        $Tree = Build-CippClaudeConnectorSummaryTree -TenantName 'Contoso Ltd' -Status $Status -ContactName 'Jo' -GeneratedOn '29 October 2026'
+        @($Tree.Blocks | Where-Object { $_.type -eq 'page' } | ForEach-Object { $_.title }) | Should -Be @("What we've set up", 'Keeping it safe')
+        $People = ($Tree.Blocks | Where-Object { $_.type -eq 'richtable' -and $_.title -eq 'Who can use Claude' }).rows
+        ($People | Where-Object { $_.person -like 'Jo*' }).level | Should -Be 'Level 3: Personal assistant'
+        ($People | Where-Object { $_.person -like 'Sam*' }).level | Should -Be 'Level 1: Read only'
+        $J = & $script:Json $Tree
+        $J | Should -Match 'Dear Jo'
+        $J | Should -Not -Match 'Still to finish'
+        $Guards = ($Tree.Blocks | Where-Object { $_.type -eq 'richtable' -and $_.title -eq 'Safeguards' }).rows
+        ($Guards | Where-Object { $_.what -eq 'Named people only' }).status | Should -Be 'In place'
+        ($Guards | Where-Object { $_.what -eq 'No unapproved apps' }).status | Should -Be 'In place'
+        ($Guards | Where-Object { $_.what -eq 'Third-party backup' }).status | Should -Be 'In place'
+        $Tree.Variables.coverpanel | Should -Be 'true'
+    }
+    It 'says what is not finished' {
+        New-FakeTenant -NoConsent
+        $Status = Get-CIPPClaudeConnectorStatus -TenantFilter 'contoso.com'
+        $J = & $script:Json (Build-CippClaudeConnectorSummaryTree -TenantName 'Contoso Ltd' -Status $Status)
+        $J | Should -Match 'Still to finish'
+        $J | Should -Match "admin consent for Claude hasn't been given"
+        $J | Should -Match 'Nobody can use Claude yet'
+    }
+    It 'warns when consent left everyone with full access' {
+        New-FakeTenant -GroupExists
+        $Status = Get-CIPPClaudeConnectorStatus -TenantFilter 'contoso.com'
+        $J = & $script:Json (Build-CippClaudeConnectorSummaryTree -TenantName 'Contoso Ltd' -Status $Status)
+        $J | Should -Match 'Everyone currently has full access'
+        $J | Should -Match 'not yet limited to named people'
+    }
+}

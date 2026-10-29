@@ -42,6 +42,7 @@
   "levels": [
     {
       "id": "read",
+      "summary": "Search and read their email, calendar, files and Teams. Can't change anything.",
       "number": 1,
       "name": "Read only",
       "tagline": "Research and catching up",
@@ -66,6 +67,7 @@
     },
     {
       "id": "drafts",
+      "summary": "Also writes drafts, and moves, labels and deletes email in their own mailbox.",
       "number": 2,
       "name": "Drafts and tidy-up",
       "tagline": "Claude prepares, you press Send",
@@ -90,6 +92,7 @@
     },
     {
       "id": "assistant",
+      "summary": "Also sends and forwards email, manages meetings, out-of-office and mail rules.",
       "number": 3,
       "name": "Personal assistant",
       "tagline": "Claude acts on the person's behalf",
@@ -116,6 +119,7 @@
     },
     {
       "id": "full",
+      "summary": "Also changes OneDrive and SharePoint files, and posts in Teams.",
       "number": 4,
       "name": "Full access",
       "tagline": "Handing Claude the keys",

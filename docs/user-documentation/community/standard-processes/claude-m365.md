@@ -74,11 +74,20 @@ The top of the page shows where the tenant is: whether each app is there, has ad
    * if the tenant uses Conditional Access, include the two Claude apps in its MFA policy;
    * optionally, for the Claude desktop app, hide write tools on some devices with the managed configuration's `toolPolicy`.
 
+## Summary for the customer
+
+When setup is done, **Summary for the customer** at the bottom of the page makes a branded PDF to send them, read from the tenant as it is at that moment:
+
+* **What we've set up**: how many people can use Claude, everyone's level and how many have a higher one; a table of each person with their level and what Claude can do for them; what Claude can read; and a **Still to finish** box if consent hasn't been given, Claude isn't limited to named people yet, or everyone still has full access from the consent page.
+* **Keeping it safe**: named people only, no unapproved apps, app requests reviewed, third-party backup and Microsoft Defender, each *In place* or *Not in place*, with a recommendation for anything missing; and what happens next (connecting Microsoft 365 in Claude, approving before it sends, asking us for changes, reporting anything odd).
+
+**Addressed to** and **From** are optional, as for the information PDF.
+
 Every step checks what is already there, so running the process again only changes what is missing. Each change is written to the CIPP log under `ExecClaudeConnector`.
 
 ## Permissions
 
-Viewing the setup and making the customer PDF need `Tenant.Application` Read; making changes needs `Tenant.Application` Read/Write. CIPP uses its own access to the tenant (GDAP) for everything except the consent page.
+Viewing the setup and making the customer PDFs need `Tenant.Application` Read; making changes needs `Tenant.Application` Read/Write. CIPP uses its own access to the tenant (GDAP) for everything except the consent page.
 
 Sources: Anthropic's [Connect to Microsoft 365](https://claude.com/docs/third-party/claude-desktop/connectors-m365) and [Microsoft 365 connector security guide](https://support.claude.com/en/articles/12684923).
 
@@ -89,5 +98,6 @@ Sources: Anthropic's [Connect to Microsoft 365](https://claude.com/docs/third-pa
 | `ListClaudeConnector` | GET | `tenantFilter`, `GroupName` (optional) |
 | `ExecClaudeConnector` | POST | `tenantFilter`, `Action` (`AddApps`, `Apply` or `Access`), `Users` (user ids or sign-in names), `GroupName`, `AssignUsersDirectly`, `LockUserConsent`, `RemoveOtherDirect`; for `Apply` and `Access`: `ReadAreas` (`mail`, `calendar`, `files`, `teams`, `meetings`), `TenantLevel` (`read`, `drafts`, `assistant`, `full`), `PeopleLevels` (`[{ User, Level }]`) |
 | `ExecClaudeConnectorCustomerPdf` | POST | `tenantFilter`, `ContactName`, `PreparedBy` (both optional). Returns `application/pdf`. |
+| `ExecClaudeConnectorSummaryPdf` | POST | `tenantFilter`, `GroupName`, `ContactName`, `PreparedBy` (all but `tenantFilter` optional). Returns `application/pdf`. |
 
 `ExecClaudeConnector` returns `Results`, a list of steps with `Step`, `Status` (`Success`, `Info`, `Warning` or `Error`) and `Message`, and `Success` (no step failed).

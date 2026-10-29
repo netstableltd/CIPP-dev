@@ -232,7 +232,6 @@ export const CippClaudeAccessStep = ({ tenant, status, disabled }) => {
                 render={({ field }) => (
                   <TextField
                     select
-                    size="small"
                     label="Level"
                     value={field.value ?? ''}
                     onChange={(e) => field.onChange(e.target.value)}

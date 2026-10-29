@@ -1,33 +1,10 @@
-import { useState } from 'react'
-import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material'
+import { Chip, Stack } from '@mui/material'
 import {
   CheckCircle,
-  Download,
   HelpOutlined,
-  PictureAsPdf,
   RadioButtonUnchecked,
 } from '@mui/icons-material'
-import {
-  ServerPdfPane,
-  downloadServerPdf,
-  useServerPdf,
-} from '../CippPdf/useServerPdf'
-
-const PDF_URL = '/api/ExecClaudeConnectorCustomerPdf'
+import { CippClaudePdfCard, claudePdfFileName } from './CippClaudePdfCard'
 
 /**
  * What we recommend having before giving Claude access, from ListClaudeConnector's Readiness.
@@ -91,9 +68,6 @@ export const claudeReadinessItems = (readiness) => {
   ]
 }
 
-const fileNameFor = (name) =>
-  `Claude_for_Microsoft_365_${String(name || 'customer').replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
-
 /**
  * Information for the customer: what they already have, and a branded PDF explaining the access
  * options to send them (ExecClaudeConnectorCustomerPdf).
@@ -104,156 +78,47 @@ export const CippClaudeCustomerInfo = ({
   readiness,
   loading,
 }) => {
-  const [contactName, setContactName] = useState('')
-  const [preparedBy, setPreparedBy] = useState('')
-  const [previewOpen, setPreviewOpen] = useState(false)
-  const [downloading, setDownloading] = useState(false)
-  const [downloadError, setDownloadError] = useState(null)
-
-  const body = {
-    tenantFilter: tenant,
-    ContactName: contactName.trim(),
-    PreparedBy: preparedBy.trim(),
-  }
-  const pdf = useServerPdf({ url: PDF_URL, body, enabled: previewOpen })
-  const fileName = fileNameFor(tenantName ?? tenant)
-
-  const download = () => {
-    setDownloading(true)
-    setDownloadError(null)
-    downloadServerPdf(PDF_URL, body, fileName)
-      .catch((status) =>
-        setDownloadError(
-          `The PDF couldn't be made (${status || 'network error'}).`
-        )
-      )
-      .finally(() => setDownloading(false))
-  }
-
   const items = claudeReadinessItems(readiness)
-
   return (
-    <Card variant="outlined" aria-label="Information for the customer">
-      <CardContent>
-        <Stack spacing={2}>
-          <Box>
-            <Typography variant="h6">Information for the customer</Typography>
-            <Typography variant="body2" color="text.secondary">
-              A branded PDF to send when a customer asks for Claude: what we
-              recommend having first, filled in from their tenant, the four
-              access levels with pros and cons, and what to reply with.
-            </Typography>
-          </Box>
-
-          <Stack
-            direction="row"
-            spacing={1}
-            useFlexGap
-            sx={{ flexWrap: 'wrap' }}
-          >
-            {items.map((i) => (
-              <Chip
-                key={i.key}
-                variant="outlined"
-                color={
-                  i.have === true
-                    ? 'success'
-                    : i.have === false
-                      ? 'warning'
-                      : 'default'
-                }
-                icon={
-                  i.have === true ? (
-                    <CheckCircle />
-                  ) : i.have === false ? (
-                    <RadioButtonUnchecked />
-                  ) : (
-                    <HelpOutlined />
-                  )
-                }
-                label={
-                  loading ? `${i.label}: checking…` : `${i.label}: ${i.detail}`
-                }
-              />
-            ))}
-          </Stack>
-
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-            <TextField
-              size="small"
-              label="Addressed to (optional)"
-              value={contactName}
-              onChange={(e) => setContactName(e.target.value)}
-              slotProps={{ htmlInput: { maxLength: 100 } }}
-              sx={{ minWidth: 240 }}
-            />
-            <TextField
-              size="small"
-              label="From (optional)"
-              value={preparedBy}
-              onChange={(e) => setPreparedBy(e.target.value)}
-              slotProps={{ htmlInput: { maxLength: 100 } }}
-              sx={{ minWidth: 240 }}
-            />
-          </Stack>
-
-          <Stack
-            direction="row"
-            spacing={1.5}
-            useFlexGap
-            sx={{ flexWrap: 'wrap' }}
-          >
-            <Button
-              variant="contained"
-              startIcon={<PictureAsPdf />}
-              onClick={() => setPreviewOpen(true)}
-            >
-              Preview PDF
-            </Button>
-            <Button
-              variant="outlined"
-              startIcon={<Download />}
-              onClick={download}
-              disabled={downloading}
-            >
-              {downloading ? 'Making PDF…' : 'Download PDF'}
-            </Button>
-          </Stack>
-          {downloadError && <Alert severity="error">{downloadError}</Alert>}
-        </Stack>
-      </CardContent>
-
-      <Dialog
-        open={previewOpen}
-        onClose={() => setPreviewOpen(false)}
-        fullWidth
-        maxWidth="lg"
-      >
-        <DialogTitle>
-          Claude for Microsoft 365: customer information
-        </DialogTitle>
-        <DialogContent sx={{ height: '75vh', p: 0 }}>
-          <ServerPdfPane
-            pdfUrl={pdf.pdfUrl}
-            loading={pdf.loading}
-            error={pdf.error}
-            errorText="The PDF couldn't be made. Check the tenant and try again."
-            title="Customer information PDF"
+    <CippClaudePdfCard
+      url="/api/ExecClaudeConnectorCustomerPdf"
+      body={{ tenantFilter: tenant }}
+      title="Information for the customer"
+      description="A branded PDF to send when a customer asks for Claude: what we recommend having first, filled in from their tenant, the four access levels with pros and cons, and what to reply with."
+      dialogTitle="Claude for Microsoft 365: customer information"
+      fileName={claudePdfFileName(
+        'Claude_for_Microsoft_365',
+        tenantName ?? tenant
+      )}
+    >
+      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+        {items.map((i) => (
+          <Chip
+            key={i.key}
+            variant="outlined"
+            color={
+              i.have === true
+                ? 'success'
+                : i.have === false
+                  ? 'warning'
+                  : 'default'
+            }
+            icon={
+              i.have === true ? (
+                <CheckCircle />
+              ) : i.have === false ? (
+                <RadioButtonUnchecked />
+              ) : (
+                <HelpOutlined />
+              )
+            }
+            label={
+              loading ? `${i.label}: checking…` : `${i.label}: ${i.detail}`
+            }
           />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPreviewOpen(false)}>Close</Button>
-          <Button
-            variant="contained"
-            startIcon={<Download />}
-            disabled={!pdf.pdfUrl}
-            onClick={() => pdf.download(fileName)}
-          >
-            Download
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Card>
+        ))}
+      </Stack>
+    </CippClaudePdfCard>
   )
 }
 

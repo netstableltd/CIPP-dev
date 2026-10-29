@@ -32,6 +32,7 @@ import { CippFormUserSelector } from '../CippComponents/CippFormUserSelector'
 import { CippClaudeStepResults } from './CippClaudeStepResults'
 import { CippClaudeCustomerInfo } from './CippClaudeCustomerInfo'
 import { CippClaudeAccessStep } from './CippClaudeAccessStep'
+import { CippClaudePdfCard, claudePdfFileName } from './CippClaudePdfCard'
 
 export const DEFAULT_GROUP = 'SG-Claude-Users'
 const POLL_MS = 5000
@@ -536,6 +537,18 @@ export const CippClaudeConnectorProcess = ({ tenant }) => {
           </StepContent>
         </Step>
       </Stepper>
+
+      <CippClaudePdfCard
+        url="/api/ExecClaudeConnectorSummaryPdf"
+        body={{ tenantFilter: tenant, GroupName: statusGroup }}
+        title="Summary for the customer"
+        description="A branded PDF to send when setup is done, read from the tenant as it is now: who can use Claude and at what level, what Claude can read, the safeguards in place, anything not finished, and what they do next."
+        dialogTitle="Claude for Microsoft 365: setup summary"
+        fileName={claudePdfFileName(
+          'Claude_setup_summary',
+          s?.Tenant ?? tenant
+        )}
+      />
     </Stack>
   )
 }
