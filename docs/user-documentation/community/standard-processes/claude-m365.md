@@ -13,9 +13,40 @@ Anthropic's Claude connector for Microsoft 365 lets people use their mail, calen
 
 This process adds both apps and makes them **assignment-only**, so only the people you choose can use Claude with the tenant's data. Open it from **Community Additions > Standard Processes > Claude for Microsoft 365** with the customer's tenant selected.
 
+## Information for the customer
+
+The box at the top of the page is for when a customer asks for Claude. It shows what the tenant already has of what we recommend first, and makes a branded PDF to send them:
+
+| Check | How CIPP finds it |
+| --- | --- |
+| Third-party backup | An enterprise app from a Microsoft 365 backup product. Barracuda Cloud-to-Cloud Backup is named when found; other products (Datto, Veeam, AvePoint, Acronis, Dropsuite, SkyKick and others) are listed. A backup that doesn't use an enterprise app isn't found. |
+| Entra ID P1 | An active licence with the `AAD_PREMIUM` or `AAD_PREMIUM_P2` service plan. |
+| Microsoft Defender | An active licence with Defender for Business, Defender for Endpoint, or Defender for Office 365. |
+| Business Premium | A Microsoft 365 Business Premium licence (E3 and E5 are named too). |
+
+The PDF (**Preview PDF** or **Download PDF**) uses the CIPP branding and has:
+
+* the request: there are various ways to give Claude access, and we recommend starting with limited access;
+* **Before you start**: a third-party backup, Entra ID P1 and Microsoft Defender, each with whether the customer has it, and a note on Microsoft 365 Business Premium as our default;
+* **Access levels**: a comparison table, then each level with what Claude can and can't do and its pros and cons (two levels to a page);
+* **Next steps**: how we keep it safe, and a list to copy into their reply: who, a level for everyone, higher levels for named people, anything Claude shouldn't read, and quotes for anything missing.
+
+**Addressed to** and **From** are optional names for the letter.
+
+## Access levels
+
+| Level | Claude can | Graph permissions added |
+| --- | --- | --- |
+| 1. Read only | Search and read email, calendar, files and Teams | none |
+| 2. Drafts and tidy-up | Also write drafts; move, label and delete email in the person's own mailbox | `Mail.ReadWrite` |
+| 3. Personal assistant | Also send and forward email, manage meetings, out-of-office and mail rules | `Mail.Send`, `Calendars.ReadWrite`, `MailboxSettings.ReadWrite` |
+| 4. Full access | Also change OneDrive and SharePoint files, and post in Teams | `Files.ReadWrite.All`, `ChatMessage.Send`, `ChannelMessage.Send`, `Chat.Create` |
+
+The levels, their wording in the PDF and their permissions are in `backend/Config/ClaudeConnectorAccess.json`. Claude can only ever do what the person using it could do themselves; Claude can read shared mailboxes but can't change them at any level.
+
 ## Current setup
 
-The top of the page shows where the tenant is: whether each app is there, has admin consent, requires assignment and who is assigned; the access group and its members; whether users can approve apps themselves; whether admin consent requests are on; and whether the tenant has Entra ID P1. **Check again** re-reads it.
+The top of the page shows where the tenant is: whether each app is there, has admin consent, requires assignment and who is assigned; the access group and its members; whether users can approve apps themselves; whether admin consent requests are on; everyone's access level and what Claude can read, and anyone with their own level; and whether the tenant has Entra ID P1. **Check again** re-reads it.
 
 ## Steps
 
@@ -31,22 +62,32 @@ The top of the page shows where the tenant is: whether each app is there, has ad
    With **Also stop users approving apps themselves** on (the default), CIPP also:
    * removes users' permission to consent to apps themselves. If CIPP's *Require admin consent for applications* standard already manages this, it is left alone. Apps people approved before are not removed (Entra > Enterprise apps > Permissions);
    * turns on **admin consent requests** with Global Administrators as reviewers. Existing reviewers are kept.
-4. **Finish in Claude** (by hand):
+   The people list starts with whoever can use Claude now (the group's members, or the people assigned directly).
+4. **Choose what Claude can read and change.** **Save access** sets, on the *M365 MCP Server for Claude* app's Microsoft Graph permissions:
+   * **What Claude can read, for everyone**: email, calendar, OneDrive and SharePoint files, Teams chats and channels, Teams meetings. Switching one off removes its read permissions for everyone.
+   * **Access level for everyone**: the write permissions of everyone are set to exactly the chosen level's.
+   * **Higher levels for named people**: each person gets their own grant with only the permissions their level adds on top of everyone's. Removing a person from the list, or choosing a level no higher than everyone's, removes their grant. A person also needs to be one of the people who can use Claude (step 3).
+
+   Microsoft's consent page approves every permission Anthropic's app asks for, including the write ones, so straight after step 2 everyone has Level 4. The page warns about this and starts the choice at Level 1. **If anyone approves the consent page again, save this step again.** A write permission that also reads (for example `Mail.ReadWrite`) lets Claude read that area for the person even if the area is switched off; the results say so.
+5. **Finish in Claude** (by hand):
    * in Claude, as an owner of the customer's Team or Enterprise organisation: Organisation settings > Connectors > add Microsoft 365;
    * if the tenant uses Conditional Access, include the two Claude apps in its MFA policy;
-   * to stop Claude sending email or changing files, remove those Graph permissions from the apps in Entra.
+   * optionally, for the Claude desktop app, hide write tools on some devices with the managed configuration's `toolPolicy`.
 
 Every step checks what is already there, so running the process again only changes what is missing. Each change is written to the CIPP log under `ExecClaudeConnector`.
 
 ## Permissions
 
-Viewing the setup needs `Tenant.Application` Read; making changes needs `Tenant.Application` Read/Write. CIPP uses its own access to the tenant (GDAP) for everything except the consent page.
+Viewing the setup and making the customer PDF need `Tenant.Application` Read; making changes needs `Tenant.Application` Read/Write. CIPP uses its own access to the tenant (GDAP) for everything except the consent page.
+
+Sources: Anthropic's [Connect to Microsoft 365](https://claude.com/docs/third-party/claude-desktop/connectors-m365) and [Microsoft 365 connector security guide](https://support.claude.com/en/articles/12684923).
 
 ## API
 
 | Endpoint | Method | Parameters |
 | --- | --- | --- |
 | `ListClaudeConnector` | GET | `tenantFilter`, `GroupName` (optional) |
-| `ExecClaudeConnector` | POST | `tenantFilter`, `Action` (`AddApps` or `Apply`), `Users` (user ids or sign-in names), `GroupName`, `AssignUsersDirectly`, `LockUserConsent`, `RemoveOtherDirect` |
+| `ExecClaudeConnector` | POST | `tenantFilter`, `Action` (`AddApps`, `Apply` or `Access`), `Users` (user ids or sign-in names), `GroupName`, `AssignUsersDirectly`, `LockUserConsent`, `RemoveOtherDirect`; for `Apply` and `Access`: `ReadAreas` (`mail`, `calendar`, `files`, `teams`, `meetings`), `TenantLevel` (`read`, `drafts`, `assistant`, `full`), `PeopleLevels` (`[{ User, Level }]`) |
+| `ExecClaudeConnectorCustomerPdf` | POST | `tenantFilter`, `ContactName`, `PreparedBy` (both optional). Returns `application/pdf`. |
 
 `ExecClaudeConnector` returns `Results`, a list of steps with `Step`, `Status` (`Success`, `Info`, `Warning` or `Error`) and `Message`, and `Success` (no step failed).

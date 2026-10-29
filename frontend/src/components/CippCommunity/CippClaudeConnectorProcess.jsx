@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Alert,
   Box,
@@ -20,24 +20,43 @@ import {
 } from '@mui/material'
 import {
   CheckCircle,
-  Error as ErrorIcon,
   Info as InfoIcon,
   OpenInNew,
   RadioButtonUnchecked,
   Refresh,
-  Warning,
 } from '@mui/icons-material'
 import { useForm, useWatch } from 'react-hook-form'
 import { ApiGetCall, ApiPostCall } from '../../api/ApiCall'
 import { CippFormComponent } from '../CippComponents/CippFormComponent'
 import { CippFormUserSelector } from '../CippComponents/CippFormUserSelector'
+import { CippClaudeStepResults } from './CippClaudeStepResults'
+import { CippClaudeCustomerInfo } from './CippClaudeCustomerInfo'
+import { CippClaudeAccessStep } from './CippClaudeAccessStep'
 
 export const DEFAULT_GROUP = 'SG-Claude-Users'
 const POLL_MS = 5000
 const POLL_FOR_MS = 5 * 60 * 1000
 
 /**
- * Which of the four steps are done, from ListClaudeConnector's status.
+ * People who can use Claude now, as user-picker values: the access group's members, or the people
+ * assigned to the apps directly.
+ * @param {object} status
+ */
+export const claudeCurrentUsers = (status) => {
+  if (status?.Group?.Exists && (status.Group.Members ?? []).length > 0) {
+    return status.Group.Members.map((m) => ({
+      value: m.Id,
+      label: m.Upn ? `${m.Name} (${m.Upn})` : m.Name,
+    }))
+  }
+  const server = (status?.Apps ?? []).find((a) => a.Key === 'Server')
+  return (server?.Assigned ?? [])
+    .filter((a) => a.Type === 'User')
+    .map((a) => ({ value: a.PrincipalId, label: a.Name }))
+}
+
+/**
+ * Which of the steps are done, from ListClaudeConnector's status.
  * @param {object} status
  */
 export const claudeConnectorProgress = (status) => {
@@ -50,8 +69,19 @@ export const claudeConnectorProgress = (status) => {
   const locked =
     status?.UserConsent?.Allowed === false &&
     status?.AdminConsentRequests?.Enabled === true
-  const active = !added ? 0 : !consented ? 1 : !restricted ? 2 : 3
-  return { added, consented, restricted, locked, active }
+  const level = status?.Access?.Level
+  const accessSet =
+    consented && Boolean(level) && !['full', 'custom'].includes(level)
+  const active = !added
+    ? 0
+    : !consented
+      ? 1
+      : !restricted
+        ? 2
+        : !accessSet
+          ? 3
+          : 4
+  return { added, consented, restricted, locked, accessSet, active }
 }
 
 /**
@@ -69,13 +99,6 @@ export const claudeConnectorApplyBody = (tenant, values) => ({
   RemoveOtherDirect: Boolean(values.removeOtherDirect),
 })
 
-const statusIcon = {
-  Success: <CheckCircle color="success" fontSize="small" />,
-  Info: <InfoIcon color="info" fontSize="small" />,
-  Warning: <Warning color="warning" fontSize="small" />,
-  Error: <ErrorIcon color="error" fontSize="small" />,
-}
-
 const Tick = ({ ok, children }) => (
   <ListItem disableGutters sx={{ py: 0.25 }}>
     <ListItemIcon sx={{ minWidth: 32 }}>
@@ -90,43 +113,6 @@ const Tick = ({ ok, children }) => (
     <ListItemText primary={children} />
   </ListItem>
 )
-
-const StepResults = ({ action }) => {
-  if (action.isPending) {
-    return (
-      <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 2 }}>
-        <CircularProgress size={18} />
-        <Typography variant="body2">Working…</Typography>
-      </Stack>
-    )
-  }
-  if (action.isError) {
-    const msg = action.error?.response?.data?.Results ?? action.error?.message
-    return (
-      <Alert severity="error" sx={{ mt: 2 }}>
-        {String(msg)}
-      </Alert>
-    )
-  }
-  const steps = action.data?.data?.Results
-  if (!Array.isArray(steps) || steps.length === 0) return null
-  return (
-    <List dense sx={{ mt: 1 }} aria-label="What was done">
-      {steps.map((s, i) => (
-        <ListItem
-          key={i}
-          disableGutters
-          sx={{ py: 0.25, alignItems: 'flex-start' }}
-        >
-          <ListItemIcon sx={{ minWidth: 32, mt: 0.5 }}>
-            {statusIcon[s.Status] ?? null}
-          </ListItemIcon>
-          <ListItemText primary={s.Message} secondary={s.Step} />
-        </ListItem>
-      ))}
-    </List>
-  )
-}
 
 /**
  * Community Additions > Standard Processes > Claude for Microsoft 365.
@@ -147,6 +133,7 @@ export const CippClaudeConnectorProcess = ({ tenant }) => {
   const values = useWatch({ control: formControl.control })
   const [statusGroup, setStatusGroup] = useState(DEFAULT_GROUP)
   const [pollUntil, setPollUntil] = useState(0)
+  const usersLoadedFor = useRef(null)
   const validTenant = Boolean(tenant) && tenant !== 'AllTenants'
 
   const status = ApiGetCall({
@@ -179,6 +166,26 @@ export const CippClaudeConnectorProcess = ({ tenant }) => {
     if (s?.EntraP1 === false) formControl.setValue('assignDirect', true)
   }, [s?.EntraP1]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Start the people list from who can use Claude now, once per tenant.
+  useEffect(() => {
+    if (!s || usersLoadedFor.current === tenant) return
+    usersLoadedFor.current = tenant
+    const current = claudeCurrentUsers(s)
+    if (
+      current.length > 0 &&
+      (formControl.getValues('users') ?? []).length === 0
+    ) {
+      formControl.setValue('users', current)
+    }
+    if (
+      s.Group?.Exists === false &&
+      s.AssignedByGroup === false &&
+      current.length > 0
+    ) {
+      formControl.setValue('assignDirect', true)
+    }
+  }, [s, tenant]) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     addApps.reset()
     apply.reset()
@@ -210,8 +217,25 @@ export const CippClaudeConnectorProcess = ({ tenant }) => {
 
   const usersChosen = (values.users ?? []).length > 0
 
+  const levels = s?.Options?.Levels ?? []
+  const levelName = (id) => {
+    const l = levels.find((x) => x.id === id)
+    return l ? `Level ${l.number}: ${l.name}` : null
+  }
+  const areaNames = (ids) =>
+    (s?.Options?.ReadAreas ?? [])
+      .filter((a) => (ids ?? []).includes(a.id))
+      .map((a) => a.noun)
+
   return (
     <Stack spacing={3}>
+      <CippClaudeCustomerInfo
+        tenant={tenant}
+        tenantName={s?.Tenant}
+        readiness={s?.Readiness}
+        loading={status.isLoading}
+      />
+
       <Typography color="text.secondary">
         Sets up Anthropic's Claude connector for Microsoft 365 in{' '}
         <strong>{s?.Tenant ?? tenant}</strong> so that only the people you
@@ -294,6 +318,17 @@ export const CippClaudeConnectorProcess = ({ tenant }) => {
                   }`
                 : 'Admin consent requests off'}
             </Tick>
+            {s.Access && (s.Access.TenantScopes ?? []).length > 0 && (
+              <Tick ok={!['full', 'custom'].includes(s.Access.Level)}>
+                Everyone:{' '}
+                <strong>
+                  {levelName(s.Access.Level) ?? 'a custom set of permissions'}
+                </strong>
+                {`, reading ${areaNames(s.Access.ReadAreas).join(', ') || 'nothing'}`}
+                {(s.Access.People ?? []).length > 0 &&
+                  `. Own level: ${s.Access.People.map((p) => `${p.Upn ?? p.Name} (${levelName(p.Level) ?? 'custom'})`).join(', ')}`}
+              </Tick>
+            )}
             <Tick ok={null}>
               Entra ID P1:{' '}
               {s.EntraP1 === true
@@ -330,7 +365,7 @@ export const CippClaudeConnectorProcess = ({ tenant }) => {
             >
               {progress.added ? 'Check the apps again' : 'Add the Claude apps'}
             </Button>
-            <StepResults action={addApps} />
+            <CippClaudeStepResults action={addApps} />
           </StepContent>
         </Step>
 
@@ -463,7 +498,18 @@ export const CippClaudeConnectorProcess = ({ tenant }) => {
                 )}
               </Box>
             </Stack>
-            <StepResults action={apply} />
+            <CippClaudeStepResults action={apply} />
+          </StepContent>
+        </Step>
+
+        <Step completed={progress.accessSet} expanded>
+          <StepLabel>Choose what Claude can read and change</StepLabel>
+          <StepContent>
+            <CippClaudeAccessStep
+              tenant={tenant}
+              status={s}
+              disabled={!progress.consented}
+            />
           </StepContent>
         </Step>
 
@@ -483,9 +529,8 @@ export const CippClaudeConnectorProcess = ({ tenant }) => {
                 apps in its MFA policy.
               </Typography>
               <Typography component="li" variant="body2">
-                To stop Claude sending email or changing files, remove those
-                Graph permissions from the apps in Entra (Enterprise apps &gt;
-                Permissions).
+                Optional, for the Claude desktop app: hide write tools on some
+                devices with the managed configuration&apos;s toolPolicy.
               </Typography>
             </Box>
           </StepContent>

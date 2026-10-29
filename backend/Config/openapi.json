@@ -17301,7 +17301,7 @@
         "tags": [
           "CommunityAdditions"
         ],
-        "description": "Community Additions > Standard Processes > Claude for Microsoft 365. Action AddApps adds Anthropic's two Claude apps to the tenant (tenantFilter). Action Apply (after a Global Administrator has approved Microsoft's consent page for both) limits Claude to the chosen Users: through the access group GroupName (default SG-Claude-Users) or, with AssignUsersDirectly, user by user. LockUserConsent also stops users approving apps themselves and turns on admin consent requests. RemoveOtherDirect removes direct assignments for people not in the group. See Set-CIPPClaudeConnector.",
+        "description": "Community Additions > Standard Processes > Claude for Microsoft 365. Action AddApps adds Anthropic's two Claude apps to the tenant (tenantFilter). Action Apply (after a Global Administrator has approved Microsoft's consent page for both) limits Claude to the chosen Users: through the access group GroupName (default SG-Claude-Users) or, with AssignUsersDirectly, user by user. LockUserConsent also stops users approving apps themselves and turns on admin consent requests. RemoveOtherDirect removes direct assignments for people not in the group. Apply and Action Access (access only) also take ReadAreas (what Claude can read for everyone: mail, calendar, files, teams, meetings), TenantLevel (access level for everyone: read, drafts, assistant, full) and PeopleLevels (extra access for individual people: [{ User, Level }]). See Set-CIPPClaudeConnector and Config/ClaudeConnectorAccess.json.",
         "requestBody": {
           "required": true,
           "content": {
@@ -17321,10 +17321,19 @@
                   "LockUserConsent": {
                     "type": "string"
                   },
+                  "PeopleLevels": {
+                    "type": "string"
+                  },
+                  "ReadAreas": {
+                    "type": "string"
+                  },
                   "RemoveOtherDirect": {
                     "type": "string"
                   },
                   "tenantFilter": {
+                    "$ref": "#/components/schemas/LabelValue"
+                  },
+                  "TenantLevel": {
                     "$ref": "#/components/schemas/LabelValue"
                   },
                   "Users": {
@@ -17368,6 +17377,76 @@
           }
         ],
         "x-cipp-role": "Tenant.Application.ReadWrite"
+      }
+    },
+    "/api/ExecClaudeConnectorCustomerPdf": {
+      "post": {
+        "summary": "ExecClaudeConnectorCustomerPdf",
+        "operationId": "ExecClaudeConnectorCustomerPdf",
+        "tags": [
+          "CommunityAdditions"
+        ],
+        "description": "Community Additions > Standard Processes > Claude for Microsoft 365: the customer information PDF for the tenant (tenantFilter). Explains the options for giving Claude access to Microsoft 365, what we recommend having first (third-party backup, Entra ID P1, Microsoft Defender, Business Premium) filled in from the tenant, the four access levels with pros and cons, and what to reply with. Optional ContactName (who it is addressed to) and PreparedBy (who it is from). Returns application/pdf with the CIPP branding.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ContactName": {
+                    "type": "string"
+                  },
+                  "PreparedBy": {
+                    "type": "string"
+                  },
+                  "tenantFilter": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "tenantFilter"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/tenantFilter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Not described statically: this endpoint returns the upstream response as-is, so its fields are determined by the upstream API rather than by CIPP. Call the endpoint to see the actual shape, or add a response schema in backend/Config/openapi-overrides."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "Tenant.Application.Read"
       }
     },
     "/api/ExecCloneTemplate": {
@@ -45052,7 +45131,7 @@
         "tags": [
           "CommunityAdditions"
         ],
-        "description": "Community Additions > Standard Processes > Claude for Microsoft 365: how far the tenant (tenantFilter) is through setting up Anthropic's Claude connector. Read-only. GroupName is the access group to look for (default SG-Claude-Users).",
+        "description": "Community Additions > Standard Processes > Claude for Microsoft 365: how far the tenant (tenantFilter) is through setting up Anthropic's Claude connector. Read-only. Also returns what the tenant already has (Readiness: backup, Entra ID P1, Defender, Business Premium), what Claude can read and change (Access) and the options (Options: read areas and access levels). GroupName is the access group to look for (default SG-Claude-Users).",
         "parameters": [
           {
             "name": "GroupName",

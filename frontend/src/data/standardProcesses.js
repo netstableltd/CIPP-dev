@@ -16,6 +16,8 @@ export const standardProcesses = [
       "A Global Administrator approves Microsoft's consent page",
       'Puts the chosen people in an access group and makes the apps assignment-only',
       'Optionally stops users approving apps themselves and turns on admin consent requests',
+      'Sets what Claude can read and change, for everyone and for named people',
+      'Makes a branded PDF for the customer explaining the options',
     ],
     needs: 'A Global Administrator of the tenant, for the consent step',
     href: '/community/standard-processes/claude-m365',

@@ -10,6 +10,10 @@ function Get-CIPPClaudeConnectorStatus {
         a group to an app), whether users can consent to apps themselves, and whether admin consent requests
         are on with Global Administrators as reviewers.
 
+        Access: the 'M365 MCP Server for Claude' app's tenant-wide Graph scopes, described as the read areas
+        that are on and the access level they match (Config/ClaudeConnectorAccess.json), plus any people with
+        their own extra access. Readiness: Get-CIPPClaudeConnectorReadiness (backup, P1, Defender, suite).
+
         Each part is read separately; a part that can't be read carries an Error and the rest still return.
 
     .PARAMETER TenantFilter
@@ -79,13 +83,43 @@ function Get-CIPPClaudeConnectorStatus {
         } catch { $Group.Error = & $ErrorText $_ }
     }
 
-    # --- Entra ID P1 ---------------------------------------------------------------------------------------
-    $EntraP1 = $null
-    try {
-        $Skus = @(New-GraphGetRequest -uri 'https://graph.microsoft.com/v1.0/subscribedSkus?$select=skuPartNumber,capabilityStatus,servicePlans' -tenantid $TenantFilter)
-        $EntraP1 = [bool]($Skus | Where-Object { $_.capabilityStatus -eq 'Enabled' } | ForEach-Object { $_.servicePlans } |
-                Where-Object { $_.servicePlanName -in @('AAD_PREMIUM', 'AAD_PREMIUM_P2') -and $_.provisioningStatus -ne 'Disabled' })
-    } catch { $EntraP1 = $null }
+    # --- What the tenant already has (backup, P1, Defender, Business Premium) ------------------------------
+    $Readiness = Get-CIPPClaudeConnectorReadiness -TenantFilter $TenantFilter
+    $EntraP1 = $Readiness.EntraP1
+
+    # --- What Claude can read and change -------------------------------------------------------------------
+    # Admin consent gives the 'M365 MCP Server for Claude' app one tenant-wide (AllPrincipals) grant to
+    # Microsoft Graph; extra write access for one person is a separate per-user (Principal) grant.
+    $Access = [ordered]@{ TenantScopes = @(); ReadAreas = @(); Level = $null; WriteScopes = @(); People = @(); Error = $null }
+    $Server = $Apps | Where-Object { $_.Key -eq 'Server' } | Select-Object -First 1
+    if ($Server.ServicePrincipalId) {
+        try {
+            $GraphSp = @(New-GraphGetRequest -uri "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=appId eq '00000003-0000-0000-c000-000000000000'&`$select=id" -tenantid $TenantFilter) | Select-Object -First 1
+            $Grants = @(New-GraphGetRequest -uri "https://graph.microsoft.com/v1.0/oauth2PermissionGrants?`$filter=clientId eq '$($Server.ServicePrincipalId)'" -tenantid $TenantFilter | Where-Object { $_.resourceId -eq $GraphSp.id })
+            $Tenant = $Grants | Where-Object { $_.consentType -eq 'AllPrincipals' } | Select-Object -First 1
+            if ($Tenant) {
+                $Access.TenantScopes = @("$($Tenant.scope)" -split '\s+' | Where-Object { $_ })
+                $Summary = Get-CIPPClaudeConnectorScopeSummary -Scopes $Access.TenantScopes
+                $Access.ReadAreas = @($Summary.ReadAreas)
+                $Access.Level = $Summary.Level
+                $Access.WriteScopes = @($Summary.WriteScopes)
+            }
+            $Access.People = @($Grants | Where-Object { $_.consentType -eq 'Principal' } | ForEach-Object {
+                    $G = $_
+                    $Scopes = @("$($G.scope)" -split '\s+' | Where-Object { $_ })
+                    $Summary = Get-CIPPClaudeConnectorScopeSummary -Scopes $Scopes
+                    $U = try { New-GraphGetRequest -uri "https://graph.microsoft.com/v1.0/users/$($G.principalId)?`$select=id,displayName,userPrincipalName" -tenantid $TenantFilter -noPagination $true | Select-Object -First 1 } catch { $null }
+                    [pscustomobject]@{
+                        UserId      = $G.principalId
+                        Name        = if ($U.displayName) { $U.displayName } else { $G.principalId }
+                        Upn         = $U.userPrincipalName
+                        Scopes      = $Scopes
+                        WriteScopes = @($Summary.WriteScopes)
+                        Level       = $Summary.Level
+                    }
+                })
+        } catch { $Access.Error = & $ErrorText $_ }
+    }
 
     # --- User consent --------------------------------------------------------------------------------------
     $UserConsent = [ordered]@{ Allowed = $null; Policies = @(); ManagedByCipp = $false; Error = $null }
@@ -120,6 +154,8 @@ function Get-CIPPClaudeConnectorStatus {
         AssignedByGroup      = [bool]$GroupMode
         Group                = [pscustomobject]$Group
         EntraP1              = $EntraP1
+        Readiness            = $Readiness
+        Access               = [pscustomobject]$Access
         UserConsent          = [pscustomobject]$UserConsent
         AdminConsentRequests = [pscustomobject]$Requests
     }

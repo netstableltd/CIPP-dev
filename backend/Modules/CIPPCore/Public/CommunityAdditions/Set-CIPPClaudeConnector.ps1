@@ -27,6 +27,10 @@ function Set-CIPPClaudeConnector {
              consent" standard already manages it) and turns on admin consent requests, with Global
              Administrators added as reviewers (existing reviewers kept).
 
+          7. Access (also on its own with Action Access): what Claude can read and change, for everyone and
+             for individual people. See Set-CIPPClaudeConnectorAccess. Only runs when -ReadAreas,
+             -TenantLevel or -PeopleLevels is given.
+
         Not done (manual): Claude's own Organisation settings > Connectors > Microsoft 365; Conditional Access
         on the two apps; removing individual Graph permissions.
 
@@ -39,12 +43,15 @@ function Set-CIPPClaudeConnector {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$TenantFilter,
-        [Parameter(Mandatory)][ValidateSet('AddApps', 'Apply')][string]$Action,
+        [Parameter(Mandatory)][ValidateSet('AddApps', 'Apply', 'Access')][string]$Action,
         [string[]]$Users = @(),
         [string]$GroupName = 'SG-Claude-Users',
         [switch]$AssignUsersDirectly,
         [switch]$LockUserConsent,
         [switch]$RemoveOtherDirect,
+        [string[]]$ReadAreas,
+        [string]$TenantLevel,
+        [object[]]$PeopleLevels = @(),
         $Headers,
         [string]$APIName = 'ClaudeConnector'
     )
@@ -101,6 +108,19 @@ function Set-CIPPClaudeConnector {
         }
     }
     & $Add 'Consent' 'Success' 'Both Claude apps have admin consent.'
+
+    $HasReadAreas = $PSBoundParameters.ContainsKey('ReadAreas') -and $null -ne $ReadAreas
+    $AccessStep = {
+        if (-not ($HasReadAreas -or $TenantLevel -or @($PeopleLevels | Where-Object { $_ }).Count -gt 0)) { return }
+        $AccessArgs = @{ TenantFilter = $TenantFilter; ServerSpId = $Sps['Server'].id; PeopleLevels = @($PeopleLevels); Headers = $Headers; APIName = $APIName }
+        if ($HasReadAreas) { $AccessArgs.ReadAreas = @($ReadAreas) }
+        if ($TenantLevel) { $AccessArgs.TenantLevel = $TenantLevel }
+        foreach ($R in @(Set-CIPPClaudeConnectorAccess @AccessArgs)) { $Results.Add($R) }
+    }
+    if ($Action -eq 'Access') {
+        . $AccessStep
+        return $Results
+    }
 
     # ------------------------------------------------------------------ 2. users
     $UserObjs = [System.Collections.Generic.List[object]]::new()
@@ -212,6 +232,9 @@ function Set-CIPPClaudeConnector {
             }
         }
     }
+
+    # ------------------------------------------------------------------ 7. access (before consent lock-down)
+    . $AccessStep
 
     # ------------------------------------------------------------------ 6. user consent
     if ($LockUserConsent) {

@@ -24,22 +24,33 @@ BeforeAll {
     function Get-Tenants { param($TenantFilter) [pscustomobject]@{ customerId = '11111111-1111-1111-1111-111111111111'; defaultDomainName = 'contoso.com' } }
     function Start-Sleep { param($Seconds) }
 
-    foreach ($Name in 'ConvertTo-CIPPODataFilterValue', 'Get-CIPPClaudeConnectorApps', 'Get-CIPPClaudeConnectorStatus', 'Set-CIPPClaudeConnector', 'Invoke-ExecClaudeConnector', 'Invoke-ListClaudeConnector') {
+    foreach ($Name in 'ConvertTo-CIPPODataFilterValue', 'Get-CIPPClaudeConnectorApps', 'Get-CIPPClaudeConnectorStatus', 'Set-CIPPClaudeConnector', 'Invoke-ExecClaudeConnector', 'Invoke-ListClaudeConnector',
+        'Get-CIPPClaudeConnectorAccessConfig', 'Get-CIPPClaudeConnectorScopeSummary', 'Get-CIPPClaudeConnectorReadiness', 'Set-CIPPClaudeConnectorAccess', 'Build-CippClaudeConnectorCustomerTree', 'New-CippReportComponents') {
         . (& $Find "$Name.ps1")
     }
 
     $script:ClientAppId = '08ad6f98-a4f8-4635-bb8d-f1a3044760f0'
     $script:ServerAppId = '07c030f6-5743-41b7-ba00-0a6e85f37c17'
     $script:GaRole = '62e90394-69f5-4237-9190-012177145e10'
+    $script:ReadScopes = 'User.Read User.ReadBasic.All offline_access Mail.Read Mail.ReadBasic Mail.Read.Shared MailboxFolder.Read MailboxItem.Read Calendars.Read Calendars.Read.Shared Files.Read Files.Read.All Sites.Read.All Chat.Read Chat.ReadBasic ChatMember.Read ChatMessage.Read Channel.ReadBasic.All ChannelMessage.Read.All OnlineMeetings.Read OnlineMeetingTranscript.Read.All OnlineMeetingAiInsight.Read OnlineMeetingArtifact.Read.All OnlineMeetingRecording.Read.All'
+    $script:WriteScopes = 'Mail.Send Mail.ReadWrite MailboxSettings.ReadWrite Calendars.ReadWrite Files.ReadWrite.All ChatMessage.Send ChannelMessage.Send Chat.Create'
+    $script:Scopes = { param($Grant) @("$($Grant.scope)" -split '\s+' | Where-Object { $_ }) }
+    $script:TenantGrant = { $script:T.Grants | Where-Object { $_.clientId -eq 'sp-server' -and $_.consentType -eq 'AllPrincipals' } }
+    $script:UserGrant = { param($U) $script:T.Grants | Where-Object { $_.clientId -eq 'sp-server' -and $_.consentType -eq 'Principal' -and $_.principalId -eq $U } }
 
     # A small fake tenant. Get/Post requests read and change $script:T; every write is logged in order.
     function New-FakeTenant {
-        param([switch]$NoApps, [switch]$NoConsent, [switch]$GroupExists, [string[]]$Self = @('ManagePermissionGrantsForSelf.microsoft-user-default-legacy'))
+        param([switch]$NoApps, [switch]$NoConsent, [switch]$GroupExists, [string[]]$Self = @('ManagePermissionGrantsForSelf.microsoft-user-default-legacy'), [switch]$ReadOnlyConsent)
         $script:Calls = [System.Collections.Generic.List[string]]::new()
         $script:FailAssign = $false
         $script:T = @{
             Sps     = @{}
-            Grants  = @{}
+            Grants  = [System.Collections.Generic.List[object]]::new()
+            AllSps  = @(
+                [pscustomobject]@{ displayName = 'Barracuda Cloud-to-Cloud Backup'; appOwnerOrganizationId = 'b1'; accountEnabled = $true }
+                [pscustomobject]@{ displayName = 'Barracuda Email Protection'; appOwnerOrganizationId = 'b1'; accountEnabled = $true }
+                [pscustomobject]@{ displayName = 'Microsoft Graph'; appOwnerOrganizationId = 'f8cdef31-a31e-4b4a-93e4-5f571e91255a'; accountEnabled = $true }
+            )
             Assign  = @{}
             Users   = @{
                 'jo@contoso.com'  = [pscustomobject]@{ id = 'u-jo'; userPrincipalName = 'jo@contoso.com'; displayName = 'Jo' }
@@ -49,7 +60,10 @@ BeforeAll {
             Members = @{}
             Auth    = [pscustomobject]@{ defaultUserRolePermissions = [pscustomobject]@{ permissionGrantPoliciesAssigned = @($Self + 'ManageOwnTeams') } }
             Request = [pscustomobject]@{ isEnabled = $false; requestDurationInDays = 14; reviewers = @([pscustomobject]@{ query = '/users/u-helpdesk'; queryType = 'MicrosoftGraph'; queryRoot = $null }) }
-            Skus    = @([pscustomobject]@{ capabilityStatus = 'Enabled'; servicePlans = @([pscustomobject]@{ servicePlanName = 'AAD_PREMIUM'; provisioningStatus = 'Success' }) })
+            Skus    = @([pscustomobject]@{ skuPartNumber = 'SPB'; capabilityStatus = 'Enabled'; servicePlans = @(
+                        [pscustomobject]@{ servicePlanName = 'AAD_PREMIUM'; provisioningStatus = 'Success' }
+                        [pscustomobject]@{ servicePlanName = 'MDE_SMB'; provisioningStatus = 'Success' }
+                        [pscustomobject]@{ servicePlanName = 'ATP_ENTERPRISE'; provisioningStatus = 'Success' }) })
         }
         if (-not $NoApps) {
             $script:T.Sps[$script:ClientAppId] = [pscustomobject]@{ id = 'sp-client'; appId = $script:ClientAppId; appRoleAssignmentRequired = $false }
@@ -57,8 +71,9 @@ BeforeAll {
             $script:T.Assign['sp-client'] = [System.Collections.Generic.List[object]]::new()
             $script:T.Assign['sp-server'] = [System.Collections.Generic.List[object]]::new()
             if (-not $NoConsent) {
-                $script:T.Grants['sp-client'] = @([pscustomobject]@{ consentType = 'AllPrincipals' })
-                $script:T.Grants['sp-server'] = @([pscustomobject]@{ consentType = 'AllPrincipals' })
+                $script:T.Grants.Add([pscustomobject]@{ id = 'gr-client'; clientId = 'sp-client'; consentType = 'AllPrincipals'; principalId = $null; resourceId = 'sp-server'; scope = 'access_as_user' })
+                $Scope = if ($ReadOnlyConsent) { $script:ReadScopes } else { "$($script:ReadScopes) $($script:WriteScopes)" }
+                $script:T.Grants.Add([pscustomobject]@{ id = 'gr-server'; clientId = 'sp-server'; consentType = 'AllPrincipals'; principalId = $null; resourceId = 'sp-graph'; scope = $Scope })
             }
         }
         if ($GroupExists) {
@@ -72,10 +87,13 @@ BeforeAll {
         param($uri, $tenantid, $noPagination, $AsApp)
         $u = [System.Uri]::UnescapeDataString($uri)
         switch -Regex ($u) {
+            "servicePrincipals\?\`$filter=appId eq '00000003-0000-0000-c000-000000000000'" { return [pscustomobject]@{ id = 'sp-graph' } }
             "servicePrincipals\?\`$filter=appId eq '([0-9a-f-]+)'" { $sp = $script:T.Sps[$Matches[1]]; if ($sp) { return $sp } else { return @() } }
-            "oauth2PermissionGrants\?\`$filter=clientId eq '([^']+)'" { return @($script:T.Grants[$Matches[1]]) }
+            'servicePrincipals\?\$select=displayName' { return $script:T.AllSps }
+            "oauth2PermissionGrants\?\`$filter=clientId eq '([^']+)'" { $C = $Matches[1]; return @($script:T.Grants | Where-Object { $_.clientId -eq $C }) }
+            'groups/([^/]+)/transitiveMembers' { return @($script:T.Members[$Matches[1]] | ForEach-Object { [pscustomobject]@{ id = $_ } }) }
             'servicePrincipals/([^/]+)/appRoleAssignedTo' { return @($script:T.Assign[$Matches[1]]) }
-            '/users/([^?]+)\?' { $x = $script:T.Users[$Matches[1]]; if ($x) { return $x } else { throw 'Resource not found' } }
+            '/users/([^?]+)\?' { $K = $Matches[1]; $x = $script:T.Users[$K]; if (-not $x) { $x = $script:T.Users.Values | Where-Object id -EQ $K | Select-Object -First 1 }; if ($x) { return $x } else { throw 'Resource not found' } }
             "groups\?\`$filter=displayName eq '([^']+)'" { $g = $script:T.Groups[$Matches[1]]; if ($g) { return $g } else { return @() } }
             'groups/([^/]+)/members' { $Id = $Matches[1]; return @($script:T.Members[$Id] | ForEach-Object { $M = $_; $U = $script:T.Users.Values | Where-Object id -EQ $M; [pscustomobject]@{ id = $M; displayName = $U.displayName; userPrincipalName = $U.userPrincipalName } }) }
             'subscribedSkus' { return $script:T.Skus }
@@ -99,6 +117,12 @@ BeforeAll {
             }
             'servicePrincipals/([^/]+)/appRoleAssignedTo/(.+)$' { $Sp = $Matches[1]; $Id = $Matches[2]; $L = $script:T.Assign[$Sp]; $Item = $L | Where-Object id -EQ $Id; [void]$L.Remove($Item); return }
             'servicePrincipals/([^/]+)$' { ($script:T.Sps.Values | Where-Object id -EQ $Matches[1]).appRoleAssignmentRequired = $true; return }
+            'oauth2PermissionGrants$' { $script:T.Grants.Add([pscustomobject]@{ id = "gr-$($B.principalId)"; clientId = $B.clientId; consentType = $B.consentType; principalId = $B.principalId; resourceId = $B.resourceId; scope = $B.scope }); return }
+            'oauth2PermissionGrants/(.+)$' {
+                $Id = $Matches[1]; $G = $script:T.Grants | Where-Object id -EQ $Id
+                if ($type -eq 'DELETE') { [void]$script:T.Grants.Remove($G) } else { $G.scope = $B.scope }
+                return
+            }
             'authorizationPolicy' { $script:T.Auth.defaultUserRolePermissions.permissionGrantPoliciesAssigned = @($B.defaultUserRolePermissions.permissionGrantPoliciesAssigned); return }
             'adminConsentRequestPolicy' { $script:T.Request = $B; return }
             default { throw "Unexpected $type $uri" }
@@ -288,5 +312,197 @@ Describe 'Invoke-ListClaudeConnector' {
     It 'rejects All Tenants' {
         $R = Invoke-ListClaudeConnector -Request @{ Query = @{ tenantFilter = 'AllTenants' } }
         $R.StatusCode | Should -Be 400
+    }
+}
+
+Describe 'Access levels and read areas' {
+    It 'sets everyone to read only, keeping what Claude can read' {
+        New-FakeTenant -GroupExists
+        $R = Set-CIPPClaudeConnector -TenantFilter 'contoso.com' -Action Access -TenantLevel 'read'
+        $S = & $script:Scopes (& $script:TenantGrant)
+        $S | Should -Not -Contain 'Mail.Send'
+        $S | Should -Not -Contain 'Files.ReadWrite.All'
+        $S | Should -Contain 'Mail.Read'
+        $S | Should -Contain 'User.Read'
+        ($R | Where-Object Step -EQ 'Access').Message | Should -Match 'Level 1'
+        # Access only: nothing else touched.
+        $script:Calls | Where-Object { $_ -match '/groups|appRoleAssignedTo|authorizationPolicy' } | Should -BeNullOrEmpty
+    }
+
+    It 'sets everyone to exactly one level' {
+        New-FakeTenant -GroupExists
+        $null = Set-CIPPClaudeConnector -TenantFilter 'contoso.com' -Action Access -TenantLevel 'drafts'
+        $S = & $script:Scopes (& $script:TenantGrant)
+        @($S | Where-Object { $script:WriteScopes -split ' ' -contains $_ }) | Should -Be @('Mail.ReadWrite')
+    }
+
+    It 'turns read areas off and back on' {
+        New-FakeTenant -GroupExists -ReadOnlyConsent
+        $null = Set-CIPPClaudeConnector -TenantFilter 'contoso.com' -Action Access -ReadAreas 'mail', 'calendar', 'files'
+        $S = & $script:Scopes (& $script:TenantGrant)
+        $S | Should -Not -Contain 'Chat.Read'
+        $S | Should -Not -Contain 'OnlineMeetingTranscript.Read.All'
+        $S | Should -Contain 'Sites.Read.All'
+        $null = Set-CIPPClaudeConnector -TenantFilter 'contoso.com' -Action Access -ReadAreas 'mail', 'calendar', 'files', 'teams', 'meetings'
+        (& $script:Scopes (& $script:TenantGrant)) | Should -Contain 'Chat.Read'
+    }
+
+    It 'does nothing when access is already as asked' {
+        New-FakeTenant -GroupExists -ReadOnlyConsent
+        $R = Set-CIPPClaudeConnector -TenantFilter 'contoso.com' -Action Access -TenantLevel 'read' -ReadAreas 'mail', 'calendar', 'files', 'teams', 'meetings'
+        $script:Calls | Should -BeNullOrEmpty
+        ($R | Where-Object Step -EQ 'Access').Message | Should -Match 'already has Level 1'
+    }
+
+    It 'gives one person extra access on top of everyone, then changes and removes it' {
+        New-FakeTenant -GroupExists -ReadOnlyConsent
+        $null = Set-CIPPClaudeConnector -TenantFilter 'contoso.com' -Action Access -PeopleLevels @(@{ User = 'jo@contoso.com'; Level = 'assistant' })
+        (& $script:Scopes (& $script:UserGrant 'u-jo') | Sort-Object) | Should -Be @('Calendars.ReadWrite', 'Mail.ReadWrite', 'Mail.Send', 'MailboxSettings.ReadWrite')
+        (& $script:UserGrant 'u-jo').resourceId | Should -Be 'sp-graph'
+        $null = Set-CIPPClaudeConnector -TenantFilter 'contoso.com' -Action Access -PeopleLevels @(@{ User = 'u-jo'; Level = 'drafts' })
+        (& $script:Scopes (& $script:UserGrant 'u-jo')) | Should -Be @('Mail.ReadWrite')
+        $R = Set-CIPPClaudeConnector -TenantFilter 'contoso.com' -Action Access -PeopleLevels @(@{ User = 'jo@contoso.com'; Level = 'read' })
+        & $script:UserGrant 'u-jo' | Should -BeNullOrEmpty
+        (($R | Where-Object Step -EQ 'Access').Message -join ' ') | Should -Match 'removed their extra access'
+    }
+
+    It 'only adds what everyone does not already have' {
+        New-FakeTenant -GroupExists -ReadOnlyConsent
+        $null = Set-CIPPClaudeConnector -TenantFilter 'contoso.com' -Action Access -TenantLevel 'drafts' -PeopleLevels @(@{ User = 'jo@contoso.com'; Level = 'drafts' })
+        & $script:UserGrant 'u-jo' | Should -BeNullOrEmpty
+        $null = Set-CIPPClaudeConnector -TenantFilter 'contoso.com' -Action Access -PeopleLevels @(@{ User = 'jo@contoso.com'; Level = 'assistant' })
+        (& $script:Scopes (& $script:UserGrant 'u-jo') | Sort-Object) | Should -Be @('Calendars.ReadWrite', 'Mail.Send', 'MailboxSettings.ReadWrite')
+    }
+
+    It 'warns when the person is not one of the people who can use Claude' {
+        New-FakeTenant -GroupExists -ReadOnlyConsent
+        $null = Set-CIPPClaudeConnector -TenantFilter 'contoso.com' -Action Apply -Users 'jo@contoso.com'
+        $R = Set-CIPPClaudeConnector -TenantFilter 'contoso.com' -Action Access -PeopleLevels @(@{ User = 'sam@contoso.com'; Level = 'drafts' })
+        ($R | Where-Object Status -EQ 'Warning').Message | Should -Match "sam@contoso.com isn't one of the people"
+        $R = Set-CIPPClaudeConnector -TenantFilter 'contoso.com' -Action Access -PeopleLevels @(@{ User = 'jo@contoso.com'; Level = 'drafts' })
+        $R | Where-Object Status -EQ 'Warning' | Should -BeNullOrEmpty
+    }
+
+    It 'warns when a write permission lets Claude read something switched off' {
+        New-FakeTenant -GroupExists -ReadOnlyConsent
+        $R = Set-CIPPClaudeConnector -TenantFilter 'contoso.com' -Action Access -ReadAreas 'calendar' -PeopleLevels @(@{ User = 'jo@contoso.com'; Level = 'drafts' })
+        (($R | Where-Object Status -EQ 'Warning').Message -join ' ') | Should -Match 'also lets Claude read their email'
+    }
+
+    It 'applies access as part of Apply, after the assignments' {
+        New-FakeTenant -GroupExists
+        $R = Set-CIPPClaudeConnector -TenantFilter 'contoso.com' -Action Apply -Users 'jo@contoso.com' -TenantLevel 'read' -PeopleLevels @(@{ User = 'jo@contoso.com'; Level = 'drafts' })
+        (& $script:Scopes (& $script:TenantGrant)) | Should -Not -Contain 'Mail.Send'
+        (& $script:Scopes (& $script:UserGrant 'u-jo')) | Should -Be @('Mail.ReadWrite')
+        @($R | Where-Object Status -EQ 'Error').Count | Should -Be 0
+    }
+
+    It 'reports access in the status' {
+        New-FakeTenant -GroupExists
+        $S = Get-CIPPClaudeConnectorStatus -TenantFilter 'contoso.com'
+        $S.Access.Level | Should -Be 'full'
+        @($S.Access.ReadAreas).Count | Should -Be 5
+        $null = Set-CIPPClaudeConnector -TenantFilter 'contoso.com' -Action Access -TenantLevel 'read' -ReadAreas 'mail' -PeopleLevels @(@{ User = 'jo@contoso.com'; Level = 'assistant' })
+        $S = Get-CIPPClaudeConnectorStatus -TenantFilter 'contoso.com'
+        $S.Access.Level | Should -Be 'read'
+        @($S.Access.ReadAreas) | Should -Be @('mail')
+        $S.Access.People[0].Upn | Should -Be 'jo@contoso.com'
+        $S.Access.People[0].Level | Should -Be 'assistant'
+    }
+}
+
+Describe 'Get-CIPPClaudeConnectorReadiness' {
+    It 'finds Barracuda backup, Entra ID P1, Defender and Business Premium' {
+        New-FakeTenant
+        $R = Get-CIPPClaudeConnectorReadiness -TenantFilter 'contoso.com'
+        $R.Backup.Barracuda | Should -BeTrue
+        @($R.Backup.Products) | Should -Be @('Barracuda Cloud-to-Cloud Backup')
+        $R.EntraP1 | Should -BeTrue
+        $R.Defender.Products | Should -Contain 'Microsoft Defender for Business'
+        $R.BusinessPremium | Should -BeTrue
+    }
+    It 'reports what is missing' {
+        New-FakeTenant
+        $script:T.AllSps = @([pscustomobject]@{ displayName = 'Barracuda Email Protection'; appOwnerOrganizationId = 'b1'; accountEnabled = $true })
+        $script:T.Skus = @([pscustomobject]@{ skuPartNumber = 'O365_BUSINESS_PREMIUM'; capabilityStatus = 'Enabled'; servicePlans = @([pscustomobject]@{ servicePlanName = 'EXCHANGE_S_STANDARD'; provisioningStatus = 'Success' }) })
+        $R = Get-CIPPClaudeConnectorReadiness -TenantFilter 'contoso.com'
+        $R.Backup.Found | Should -BeFalse
+        $R.EntraP1 | Should -BeFalse
+        $R.Defender.Found | Should -BeFalse
+        $R.Suite | Should -BeNullOrEmpty
+    }
+    It 'names another backup product' {
+        New-FakeTenant
+        $script:T.AllSps = @([pscustomobject]@{ displayName = 'Datto SaaS Protection'; appOwnerOrganizationId = 'd1'; accountEnabled = $true })
+        $R = Get-CIPPClaudeConnectorReadiness -TenantFilter 'contoso.com'
+        $R.Backup.Found | Should -BeTrue
+        $R.Backup.Barracuda | Should -BeFalse
+    }
+}
+
+Describe 'Build-CippClaudeConnectorCustomerTree' {
+    BeforeAll {
+        $script:Text = { param($Tree) ($Tree.Blocks | ConvertTo-Json -Depth 10) }
+    }
+    It 'has the request, before-you-start checks, a page per level and the reply list' {
+        $Ready = [pscustomobject]@{ Backup = [pscustomobject]@{ Found = $true; Barracuda = $true; Products = @('Barracuda Cloud-to-Cloud Backup') }; EntraP1 = $true; Defender = [pscustomobject]@{ Found = $true; Products = @('Microsoft Defender for Business') }; Suite = 'Microsoft 365 Business Premium'; BusinessPremium = $true }
+        $Tree = Build-CippClaudeConnectorCustomerTree -TenantName 'Contoso Ltd' -Readiness $Ready -ContactName 'Jo' -PreparedBy 'Dave'
+        $Titles = @($Tree.Blocks | Where-Object { $_.type -eq 'page' } | ForEach-Object { $_.title })
+        $Titles | Should -Be @('Your request', 'Access levels', 'Levels 1 and 2', 'Levels 3 and 4', 'Next steps')
+        ($Tree.Blocks | Where-Object { $_.type -eq 'blank' -and $_.title -like 'Level *' }).title | Should -Be @('Level 1: Read only', 'Level 2: Drafts and tidy-up', 'Level 3: Personal assistant', 'Level 4: Full access')
+        $J = & $script:Text $Tree
+        $J | Should -Match 'Dear Jo'
+        $J | Should -Match 'You have Barracuda Cloud-to-Cloud Backup'
+        $J | Should -Match 'You already have Business Premium'
+        $J | Should -Not -Match 'quote for:'
+        $Tree.Variables.covertenant | Should -Be 'Contoso Ltd'
+    }
+    It 'says what is missing and offers quotes' {
+        $Ready = [pscustomobject]@{ Backup = [pscustomobject]@{ Found = $false; Barracuda = $false; Products = @() }; EntraP1 = $false; Defender = [pscustomobject]@{ Found = $false; Products = @() }; Suite = $null; BusinessPremium = $false }
+        $J = & $script:Text (Build-CippClaudeConnectorCustomerTree -TenantName 'Contoso Ltd' -Readiness $Ready)
+        $J | Should -Match "couldn't find a third-party backup"
+        $J | Should -Match "don't currently have Entra ID P1"
+        $J | Should -Match "don't currently have Microsoft Defender"
+        $J | Should -Match 'quote for: a third-party backup'
+        $J | Should -Match 'Microsoft 365 Business Premium\?'
+    }
+    It 'copes when nothing could be checked' {
+        $J = & $script:Text (Build-CippClaudeConnectorCustomerTree -TenantName 'Contoso & Co' -Readiness ([pscustomobject]@{ Backup = $null; EntraP1 = $null; Defender = $null; Suite = $null }))
+        $J | Should -Match 'To confirm'
+        $J | Should -Match 'Contoso &amp; Co'
+    }
+}
+
+Describe 'Invoke-ExecClaudeConnector access options' {
+    BeforeEach { New-FakeTenant -GroupExists }
+    It 'rejects an unknown level' {
+        $R = Invoke-ExecClaudeConnector -Request @{ Body = @{ tenantFilter = 'contoso.com'; Action = 'Access'; TenantLevel = 'admin' }; Headers = @{}; Params = @{} }
+        $R.StatusCode | Should -Be 400
+    }
+    It 'rejects an unknown read area and an empty list' {
+        (Invoke-ExecClaudeConnector -Request @{ Body = @{ tenantFilter = 'contoso.com'; Action = 'Access'; ReadAreas = @('mail', 'x') }; Headers = @{}; Params = @{} }).StatusCode | Should -Be 400
+        (Invoke-ExecClaudeConnector -Request @{ Body = @{ tenantFilter = 'contoso.com'; Action = 'Access'; ReadAreas = @() }; Headers = @{}; Params = @{} }).StatusCode | Should -Be 400
+    }
+    It 'needs something to change for Access' {
+        (Invoke-ExecClaudeConnector -Request @{ Body = @{ tenantFilter = 'contoso.com'; Action = 'Access' }; Headers = @{}; Params = @{} }).StatusCode | Should -Be 400
+    }
+    It 'rejects a bad person' {
+        (Invoke-ExecClaudeConnector -Request @{ Body = @{ tenantFilter = 'contoso.com'; Action = 'Access'; PeopleLevels = @(@{ User = '../x'; Level = 'read' }) }; Headers = @{}; Params = @{} }).StatusCode | Should -Be 400
+    }
+    It 'takes picker values and sets access' {
+        $R = Invoke-ExecClaudeConnector -Request @{ Body = @{ tenantFilter = 'contoso.com'; Action = 'Access'; TenantLevel = @{ value = 'read' }; PeopleLevels = @(@{ User = @{ value = 'jo@contoso.com' }; Level = @{ value = 'drafts' } }) }; Headers = @{}; Params = @{} }
+        $R.StatusCode | Should -Be 200
+        $R.Body.Success | Should -BeTrue
+        (& $script:Scopes (& $script:UserGrant 'u-jo')) | Should -Be @('Mail.ReadWrite')
+    }
+}
+
+Describe 'Invoke-ListClaudeConnector options' {
+    It 'returns the levels and read areas' {
+        New-FakeTenant
+        $R = Invoke-ListClaudeConnector -Request @{ Query = @{ tenantFilter = 'contoso.com' } }
+        @($R.Body.Options.Levels).Count | Should -Be 4
+        @($R.Body.Options.ReadAreas).Count | Should -Be 5
+        $R.Body.Readiness.Backup.Barracuda | Should -BeTrue
     }
 }

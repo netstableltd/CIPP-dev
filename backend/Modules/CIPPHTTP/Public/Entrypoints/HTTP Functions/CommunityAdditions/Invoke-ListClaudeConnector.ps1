@@ -5,7 +5,7 @@ function Invoke-ListClaudeConnector {
     .ROLE
         Tenant.Application.Read
     .DESCRIPTION
-        Community Additions > Standard Processes > Claude for Microsoft 365: how far the tenant (tenantFilter) is through setting up Anthropic's Claude connector. Read-only. GroupName is the access group to look for (default SG-Claude-Users).
+        Community Additions > Standard Processes > Claude for Microsoft 365: how far the tenant (tenantFilter) is through setting up Anthropic's Claude connector. Read-only. Also returns what the tenant already has (Readiness: backup, Entra ID P1, Defender, Business Premium), what Claude can read and change (Access) and the options (Options: read areas and access levels). GroupName is the access group to look for (default SG-Claude-Users).
     #>
     [CmdletBinding()]
     param($Request, $TriggerMetadata)
@@ -23,6 +23,9 @@ function Invoke-ListClaudeConnector {
 
     try {
         $Status = Get-CIPPClaudeConnectorStatus -TenantFilter $TenantFilter -GroupName $GroupName
+        # The read areas and access levels, so the page and the PDF describe the same options.
+        $Config = Get-CIPPClaudeConnectorAccessConfig
+        $Status | Add-Member -NotePropertyName Options -NotePropertyValue ([pscustomobject]@{ ReadAreas = $Config.readAreas; Levels = $Config.levels; WriteScopes = $Config.writeScopes }) -Force
         return ([HttpResponseContext]@{ StatusCode = [HttpStatusCode]::OK; Body = $Status })
     } catch {
         $ErrorMessage = Get-CippException -Exception $_
