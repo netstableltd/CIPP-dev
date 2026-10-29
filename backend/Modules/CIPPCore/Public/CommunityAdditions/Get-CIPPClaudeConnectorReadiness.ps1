@@ -43,6 +43,8 @@ function Get-CIPPClaudeConnectorReadiness {
     $EntraP1 = $null; $Defender = $null; $Suite = $null
     try {
         if ($null -eq $Skus) { $Skus = @(New-GraphGetRequest -uri 'https://graph.microsoft.com/v1.0/subscribedSkus?$select=skuPartNumber,capabilityStatus,servicePlans,prepaidUnits' -tenantid $TenantFilter) }
+        # Every tenant has at least one subscription; none back means the read didn't reach the tenant.
+        if (@($Skus | Where-Object { $_.skuPartNumber }).Count -eq 0) { throw 'No subscriptions returned' }
         $Active = @($Skus | Where-Object { $_.capabilityStatus -eq 'Enabled' })
         $Plans = @($Active | ForEach-Object { $_.servicePlans } | Where-Object { $_.provisioningStatus -ne 'Disabled' } | ForEach-Object { "$($_.servicePlanName)" })
         $EntraP1 = [bool]($Plans | Where-Object { $_ -in @('AAD_PREMIUM', 'AAD_PREMIUM_P2') })
@@ -59,6 +61,8 @@ function Get-CIPPClaudeConnectorReadiness {
     $Backup = $null
     try {
         $Sps = @(New-GraphGetRequest -uri 'https://graph.microsoft.com/v1.0/servicePrincipals?$select=displayName,appId,appOwnerOrganizationId,accountEnabled&$top=999' -tenantid $TenantFilter)
+        # Every tenant has Microsoft's own enterprise apps; none back means the read didn't reach the tenant.
+        if (@($Sps | Where-Object { $_.displayName }).Count -eq 0) { throw 'No enterprise apps returned' }
         $Apps = @($Sps | Where-Object {
                 $_.displayName -match $BackupVendors -and $_.displayName -match $BackupWords -and
                 "$($_.appOwnerOrganizationId)" -notin $MicrosoftOwners -and $_.accountEnabled -ne $false

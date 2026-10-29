@@ -431,6 +431,15 @@ Describe 'Get-CIPPClaudeConnectorReadiness' {
         $R.Defender.Found | Should -BeFalse
         $R.Suite | Should -BeNullOrEmpty
     }
+    It 'says unknown, not missing, when nothing comes back from the tenant' {
+        New-FakeTenant
+        $script:T.AllSps = @()
+        $script:T.Skus = @()
+        $R = Get-CIPPClaudeConnectorReadiness -TenantFilter 'contoso.com'
+        $R.Backup | Should -BeNullOrEmpty
+        $R.EntraP1 | Should -BeNullOrEmpty
+        $R.Defender | Should -BeNullOrEmpty
+    }
     It 'names another backup product' {
         New-FakeTenant
         $script:T.AllSps = @([pscustomobject]@{ displayName = 'Datto SaaS Protection'; appOwnerOrganizationId = 'd1'; accountEnabled = $true })
