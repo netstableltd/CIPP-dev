@@ -1,11 +1,19 @@
 // webpack require.context polyfill for vitest. the app runs under next/webpack where
 // require.context is real; vite only has import.meta.glob, so map the known call sites
-// (CippBreadcrumbNav pages glob, tutorial-context) onto eager globs
+// (CippBreadcrumbNav pages glob, tutorial-context, add-on manifests) onto eager globs
 const ROOTS = [
   {
     suffix: '/pages',
     base: '/src/pages',
     modules: import.meta.glob('/src/pages/**/*.json', { eager: true }),
+  },
+  {
+    // fork: Community Additions add-on manifests (utils/addon-menu.js), outside the frontend
+    suffix: '/backend/Config/Addons',
+    base: '../../../backend/Config/Addons',
+    modules: import.meta.glob('../../../backend/Config/Addons/*/addon.json', {
+      eager: true,
+    }),
   },
   {
     suffix: '/data/tutorials',
@@ -53,7 +61,8 @@ requireShim.context = createContext
 
 // amd loaders (monaco) assign their own window.require after setup runs, trap the
 // assignment and keep .context attached to whatever gets installed
-let currentRequire = typeof globalThis.require === 'undefined' ? requireShim : globalThis.require
+let currentRequire =
+  typeof globalThis.require === 'undefined' ? requireShim : globalThis.require
 if (typeof currentRequire.context === 'undefined') {
   currentRequire.context = createContext
 }

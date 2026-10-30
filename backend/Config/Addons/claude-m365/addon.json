@@ -1,0 +1,85 @@
+{
+  "schema": 1,
+  "id": "claude-m365",
+  "name": "Claude for Microsoft 365",
+  "version": "1.3.0",
+  "description": "Sets up Anthropic's Claude connector for Microsoft 365 in a tenant, limited to the people you choose: adds the Claude apps, guides the admin consent, assigns people, sets what Claude can read and change (for everyone and for named people), and makes branded PDFs for the customer before and after.",
+  "author": "Netstable",
+  "category": "Standard process",
+  "cipp": {
+    "minVersion": "11.0.0",
+    "testedWith": [
+      "11.0.2",
+      "11.2.1"
+    ]
+  },
+  "menu": [
+    {
+      "title": "Claude for Microsoft 365",
+      "path": "/addons/claude-m365",
+      "permissions": [
+        "Tenant.Application.*"
+      ],
+      "placement": "Community Additions",
+      "preferredPlacement": "Tenant Administration > Applications"
+    }
+  ],
+  "endpoints": [
+    "ExecClaudeConnector",
+    "ExecClaudeConnectorCustomerPdf",
+    "ExecClaudeConnectorGuide",
+    "ExecClaudeConnectorSummaryPdf",
+    "ListClaudeConnector"
+  ],
+  "dependsOn": {
+    "functions": [
+      "Add-CIPPAzDataTableEntity",
+      "ConvertTo-CIPPODataFilterValue",
+      "ConvertTo-CippReportPdf",
+      "Get-CIPPAzDataTableEntity",
+      "Get-CIPPTable",
+      "Get-CippException",
+      "Get-CippReportTenantName",
+      "Get-Tenants",
+      "New-CippReportAlertBox",
+      "New-CippReportBullets",
+      "New-CippReportHeading",
+      "New-CippReportInfoBox",
+      "New-CippReportInfoBoxColumns",
+      "New-CippReportNote",
+      "New-CippReportPage",
+      "New-CippReportParagraph",
+      "New-CippReportStatRow",
+      "New-CippReportTable",
+      "New-GraphGetRequest",
+      "New-GraphPOSTRequest",
+      "Remove-CIPPAzDataTableEntity",
+      "Write-LogMessage"
+    ],
+    "frontend": [
+      "src/api/ApiCall",
+      "src/components/CippCards/CippPageCard",
+      "src/components/CippComponents/CippFormComponent",
+      "src/components/CippComponents/CippFormUserSelector",
+      "src/components/CippPdf/useServerPdf",
+      "src/hooks/use-settings",
+      "src/layouts/index"
+    ]
+  },
+  "coreChanges": [
+    {
+      "area": "Report PDF renderer (CIPPSharp)",
+      "files": [
+        "backend/Shared/CIPPSharp/Reporting/ReportComponents.cs"
+      ],
+      "what": "Adds the 'image' and 'imagerow' report blocks (pictures in the connection guide) and the opt-in %coverpanel% cover variable (readable cover text). Without them the PDFs still render, without pictures and with the plain cover."
+    }
+  ],
+  "storage": [
+    {
+      "table": "CommunityProcesses",
+      "what": "The uploaded connection guide (row ClaudeM365 / Guide)."
+    }
+  ],
+  "graphPermissions": "Uses CIPP's existing delegated access (GDAP): service principals, OAuth2 permission grants, app role assignments, groups, authorization and admin consent request policies."
+}

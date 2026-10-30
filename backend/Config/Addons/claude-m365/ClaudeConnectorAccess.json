@@ -1,0 +1,147 @@
+{
+  "_comment": "Claude for Microsoft 365 add-on (claude-m365). Microsoft Graph delegated scopes on the 'M365 MCP Server for Claude' app, grouped into what Claude can read (readAreas) and what it can change (levels). Scope lists follow Anthropic's Microsoft 365 connector docs: https://claude.com/docs/third-party/claude-desktop/connectors-m365 and https://support.claude.com/en/articles/12684923.",
+  "alwaysKeep": ["User.Read", "User.ReadBasic.All", "offline_access", "openid", "profile", "email"],
+  "readAreas": [
+    {
+      "id": "mail",
+      "noun": "email",
+      "label": "Email",
+      "description": "Search and read email, including shared mailboxes the person can open.",
+      "scopes": ["Mail.Read", "Mail.ReadBasic", "Mail.Read.Shared", "MailboxFolder.Read", "MailboxItem.Read"]
+    },
+    {
+      "id": "calendar",
+      "noun": "calendar",
+      "label": "Calendar",
+      "description": "Read calendars and find meeting times.",
+      "scopes": ["Calendars.Read", "Calendars.Read.Shared"]
+    },
+    {
+      "id": "files",
+      "noun": "OneDrive and SharePoint files",
+      "label": "OneDrive and SharePoint files",
+      "description": "Search and read files and SharePoint sites the person can open.",
+      "scopes": ["Files.Read", "Files.Read.All", "Sites.Read.All"]
+    },
+    {
+      "id": "teams",
+      "noun": "Teams chats and channels",
+      "label": "Teams chats and channels",
+      "description": "Read Teams chats and channel messages the person can see.",
+      "scopes": ["Chat.Read", "Chat.ReadBasic", "ChatMember.Read", "ChatMessage.Read", "Channel.ReadBasic.All", "ChannelMessage.Read.All"]
+    },
+    {
+      "id": "meetings",
+      "noun": "Teams meetings",
+      "label": "Teams meetings",
+      "description": "Read online meetings, transcripts, recordings and meeting notes.",
+      "scopes": ["OnlineMeetings.Read", "OnlineMeetingTranscript.Read.All", "OnlineMeetingAiInsight.Read", "OnlineMeetingArtifact.Read.All", "OnlineMeetingRecording.Read.All"]
+    }
+  ],
+  "writeScopes": ["Mail.ReadWrite", "Mail.Send", "Calendars.ReadWrite", "MailboxSettings.ReadWrite", "Files.ReadWrite.All", "ChatMessage.Send", "ChannelMessage.Send", "Chat.Create"],
+  "levels": [
+    {
+      "id": "read",
+      "summary": "Search and read their email, calendar, files and Teams. Can't change anything.",
+      "number": 1,
+      "name": "Read only",
+      "tagline": "Research and catching up",
+      "risk": "Low",
+      "scopes": [],
+      "canDo": [
+        "Search and read the person's email, calendar, OneDrive and SharePoint files, and Teams chats and meetings",
+        "Summarise, find information and answer questions about it"
+      ],
+      "cannotDo": ["Send, change, move or delete anything in Microsoft 365"],
+      "pros": [
+        "Lowest risk: nothing in Microsoft 365 can be changed",
+        "Ideal for research, catching up on long threads and finding documents",
+        "A safe way to start and learn what Claude is useful for"
+      ],
+      "cons": [
+        "You copy Claude's suggested replies into Outlook yourself",
+        "Claude can see everything the person can see, including sensitive mail and files",
+        "Something Claude reads, such as a malicious email, could try to influence its answers"
+      ],
+      "suits": "Everyone, to start with"
+    },
+    {
+      "id": "drafts",
+      "summary": "Also writes drafts, and moves, labels and deletes email in their own mailbox.",
+      "number": 2,
+      "name": "Drafts and tidy-up",
+      "tagline": "Claude prepares, you press Send",
+      "risk": "Low to medium",
+      "scopes": ["Mail.ReadWrite"],
+      "canDo": [
+        "Everything in Level 1",
+        "Write draft emails into the person's Drafts folder",
+        "Move, label and delete email in the person's own mailbox, for example clearing junk"
+      ],
+      "cannotDo": ["Send email", "Change shared mailboxes, calendars, files or Teams"],
+      "pros": [
+        "Saves typing: replies are ready and waiting in Drafts",
+        "Nothing leaves the business without the person reviewing it and pressing Send",
+        "Can keep an inbox tidy"
+      ],
+      "cons": [
+        "Claude can move or delete email. Deleted email can be recovered for a limited time, but mistakes are possible",
+        "Only the person's own mailbox: Claude can read shared mailboxes but can't tidy them"
+      ],
+      "suits": "Most people once they are comfortable with Level 1"
+    },
+    {
+      "id": "assistant",
+      "summary": "Also sends and forwards email, manages meetings, out-of-office and mail rules.",
+      "number": 3,
+      "name": "Personal assistant",
+      "tagline": "Claude acts on the person's behalf",
+      "risk": "Medium to high",
+      "scopes": ["Mail.ReadWrite", "Mail.Send", "Calendars.ReadWrite", "MailboxSettings.ReadWrite"],
+      "canDo": [
+        "Everything in Level 2",
+        "Send and forward email as the person",
+        "Create, accept and change meetings",
+        "Set out-of-office replies and mail rules"
+      ],
+      "cannotDo": ["Change OneDrive or SharePoint files", "Post in Teams"],
+      "pros": [
+        "Real time savings: Claude can finish a task, not just prepare it",
+        "In the Claude desktop app, Claude always asks the person to approve each email or invite before it is sent"
+      ],
+      "cons": [
+        "Email and invites go out in the person's name",
+        "A malicious email could try to trick Claude into forwarding information out of the business",
+        "Mail rules could redirect email if misused",
+        "Relies on the person reading each approval carefully"
+      ],
+      "suits": "Experienced users who handle a lot of email and diary management"
+    },
+    {
+      "id": "full",
+      "summary": "Also changes OneDrive and SharePoint files, and posts in Teams.",
+      "number": 4,
+      "name": "Full access",
+      "tagline": "Handing Claude the keys",
+      "risk": "High",
+      "scopes": ["Mail.ReadWrite", "Mail.Send", "Calendars.ReadWrite", "MailboxSettings.ReadWrite", "Files.ReadWrite.All", "ChatMessage.Send", "ChannelMessage.Send", "Chat.Create"],
+      "canDo": [
+        "Everything in Level 3",
+        "Create, edit, move and delete files in OneDrive and SharePoint that the person can edit",
+        "Post in Teams chats and channels, and start new chats"
+      ],
+      "cannotDo": [],
+      "pros": [
+        "The most automation: Claude can carry out whole tasks across Microsoft 365",
+        "No need to switch between Claude and other apps"
+      ],
+      "cons": [
+        "Highest risk: Claude could change or delete company files the person can edit",
+        "Messages in Teams go out in the person's name",
+        "A mistake or a manipulated instruction affects shared company data, not just one inbox",
+        "We only recommend this with a tested third-party backup in place, and for a small number of people"
+      ],
+      "suits": "A few named people, with a third-party backup in place"
+    }
+  ]
+}

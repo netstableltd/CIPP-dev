@@ -1,23 +1,14 @@
-import { CardContent } from '@mui/material'
-import { Layout as DashboardLayout } from '../../../layouts/index'
-import CippPageCard from '../../../components/CippCards/CippPageCard'
-import { CippClaudeConnectorProcess } from '../../../components/CippCommunity/CippClaudeConnectorProcess'
-import { useSettings } from '../../../hooks/use-settings'
+import { useEffect } from 'react'
+import { useRouter } from 'next/router'
 
+// Fork: the Claude for Microsoft 365 process moved to /addons/claude-m365 when it became an add-on. Kept
+// so old links and bookmarks still work; remove once nobody uses them.
 const Page = () => {
-  const tenant = useSettings().currentTenant
-  return (
-    <CippPageCard
-      title="Claude for Microsoft 365"
-      backButtonTitle="Standard Processes"
-    >
-      <CardContent>
-        <CippClaudeConnectorProcess tenant={tenant} />
-      </CardContent>
-    </CippPageCard>
-  )
+  const router = useRouter()
+  useEffect(() => {
+    router.replace({ pathname: '/addons/claude-m365', query: router.query })
+  }, [router])
+  return null
 }
-
-Page.getLayout = (page) => <DashboardLayout>{page}</DashboardLayout>
 
 export default Page

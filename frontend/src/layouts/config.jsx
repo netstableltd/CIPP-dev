@@ -1,7 +1,9 @@
 import { SvgIcon } from '@mui/material'
 import { CippIcons } from '../utils/icon-registry'
+import { withAddonMenuItems } from '../utils/addon-menu'
 
-export const nativeMenuItems = [
+// Fork: Community Additions add-ons add their own entries (utils/addon-menu.js).
+export const nativeMenuItems = withAddonMenuItems([
   {
     title: 'Dashboard',
     path: '/',
@@ -1085,8 +1087,8 @@ export const nativeMenuItems = [
     ],
   },
   {
-    // Additions contributed by the community. Standard Processes: repeatable jobs in a customer
-    // tenant as guided pages (src/data/standardProcesses.js).
+    // Fork: additions contributed by the community, each an add-on (backend/Config/Addons/<id>).
+    // Installed add-ons are added above Settings by withAddonMenuItems (utils/addon-menu.js).
     title: 'Community Additions',
     type: 'header',
     icon: (
@@ -1094,12 +1096,18 @@ export const nativeMenuItems = [
         <CippIcons.Diversity1 />
       </SvgIcon>
     ),
-    permissions: ['Tenant.Application.*'],
+    permissions: ['CIPP.AppSettings.*'],
     items: [
       {
-        title: 'Standard Processes',
-        path: '/community/standard-processes',
-        permissions: ['Tenant.Application.*'],
+        title: 'Settings',
+        permissions: ['CIPP.AppSettings.*'],
+        items: [
+          {
+            title: 'Add-ons',
+            path: '/community/settings/addons',
+            permissions: ['CIPP.AppSettings.*'],
+          },
+        ],
       },
     ],
   },
@@ -1376,4 +1384,4 @@ export const nativeMenuItems = [
       },
     ],
   },
-]
+])

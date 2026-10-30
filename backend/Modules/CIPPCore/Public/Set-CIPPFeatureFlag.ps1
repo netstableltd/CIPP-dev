@@ -28,6 +28,8 @@ function Set-CIPPFeatureFlag {
     try {
         # Get feature flags from JSON to validate
         $FeatureFlags = [System.IO.File]::ReadAllText((Join-Path $env:CIPPRootPath 'Config\FeatureFlags.json')) | ConvertFrom-Json
+        # Fork: Community Additions add-ons each have a flag (Addon.<id>).
+        $FeatureFlags = @($FeatureFlags) + @(try { Get-CIPPAddonFeatureFlags } catch { Write-Warning "Add-on flags unavailable: $($_.Exception.Message)" })
 
         # Find the requested feature flag in JSON
         $FeatureFlag = $FeatureFlags | Where-Object { $_.Id -eq $Id }

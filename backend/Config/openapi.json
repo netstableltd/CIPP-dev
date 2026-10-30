@@ -19,6 +19,9 @@
   ],
   "tags": [
     {
+      "name": "Addons > claude-m365"
+    },
+    {
       "name": "CIPP > Core"
     },
     {
@@ -12783,6 +12786,254 @@
         "x-cipp-role": "Tenant.Application.ReadWrite"
       }
     },
+    "/api/ExecAddon": {
+      "post": {
+        "summary": "ExecAddon",
+        "operationId": "ExecAddon",
+        "tags": [
+          "CommunityAdditions"
+        ],
+        "description": "Community Additions > Settings > Add-ons. Action Enable or Disable (Id) turns an installed add-on on or off: a turned-off add-on's pages leave the menu and its API endpoints are refused. Action Upload (FileName, Data as base64 or a data URL) checks an add-on package (.zip) and keeps it in this instance so it can be downloaded and installed into the repository; nothing in it is run. Action DeleteUpload (RowKey) removes an uploaded package.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Action": {
+                    "type": "string"
+                  },
+                  "Data": {
+                    "type": "string"
+                  },
+                  "FileName": {
+                    "type": "string"
+                  },
+                  "Id": {
+                    "type": "string"
+                  },
+                  "RowKey": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Derived from the fields written into the storage table it reads. Fields taken from the storage writers may be omitted by this endpoint, and the response may carry computed fields not listed here.",
+                  "properties": {
+                    "AddonId": {
+                      "x-cipp-field-source": "storage"
+                    },
+                    "Bytes": {
+                      "type": "integer",
+                      "x-cipp-field-source": "storage"
+                    },
+                    "ETag": {
+                      "type": "string",
+                      "x-cipp-field-source": "storage"
+                    },
+                    "FileName": {
+                      "x-cipp-field-source": "storage"
+                    },
+                    "MinVersion": {
+                      "x-cipp-field-source": "storage"
+                    },
+                    "Name": {
+                      "x-cipp-field-source": "storage"
+                    },
+                    "PartitionKey": {
+                      "x-cipp-field-source": "storage"
+                    },
+                    "RowKey": {
+                      "x-cipp-field-source": "storage"
+                    },
+                    "Sha256": {
+                      "x-cipp-field-source": "storage"
+                    },
+                    "TestedWith": {
+                      "x-cipp-field-source": "storage"
+                    },
+                    "Timestamp": {
+                      "type": "string",
+                      "x-cipp-field-source": "storage"
+                    },
+                    "UploadedAt": {
+                      "x-cipp-field-source": "storage"
+                    },
+                    "UploadedBy": {
+                      "x-cipp-field-source": "storage"
+                    },
+                    "Version": {
+                      "x-cipp-field-source": "storage"
+                    },
+                    "Warnings": {
+                      "x-cipp-field-source": "storage"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "CIPP.AppSettings.ReadWrite"
+      }
+    },
+    "/api/ExecAddonDownload": {
+      "post": {
+        "summary": "ExecAddonDownload",
+        "operationId": "ExecAddonDownload",
+        "tags": [
+          "CommunityAdditions"
+        ],
+        "description": "Community Additions > Settings > Add-ons: downloads an add-on package (.zip). Id gives an installed add-on's package (made when this CIPP image was built); RowKey gives an uploaded package. Returns application/zip.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Id": {
+                    "type": "string"
+                  },
+                  "RowKey": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "RowKey",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Derived from the fields written into the storage table it reads. Fields taken from the storage writers may be omitted by this endpoint, and the response may carry computed fields not listed here.",
+                  "properties": {
+                    "AddonId": {
+                      "x-cipp-field-source": "storage"
+                    },
+                    "Bytes": {
+                      "type": "integer",
+                      "x-cipp-field-source": "storage"
+                    },
+                    "ETag": {
+                      "type": "string",
+                      "x-cipp-field-source": "storage"
+                    },
+                    "FileName": {
+                      "x-cipp-field-source": "storage"
+                    },
+                    "MinVersion": {
+                      "x-cipp-field-source": "storage"
+                    },
+                    "Name": {
+                      "x-cipp-field-source": "storage"
+                    },
+                    "PartitionKey": {
+                      "x-cipp-field-source": "storage"
+                    },
+                    "RowKey": {
+                      "x-cipp-field-source": "storage"
+                    },
+                    "Sha256": {
+                      "x-cipp-field-source": "storage"
+                    },
+                    "TestedWith": {
+                      "x-cipp-field-source": "storage"
+                    },
+                    "Timestamp": {
+                      "type": "string",
+                      "x-cipp-field-source": "storage"
+                    },
+                    "UploadedAt": {
+                      "x-cipp-field-source": "storage"
+                    },
+                    "UploadedBy": {
+                      "x-cipp-field-source": "storage"
+                    },
+                    "Version": {
+                      "x-cipp-field-source": "storage"
+                    },
+                    "Warnings": {
+                      "x-cipp-field-source": "storage"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "CIPP.AppSettings.Read"
+      }
+    },
     "/api/ExecAddSPN": {
       "post": {
         "summary": "ExecAddSPN",
@@ -18089,9 +18340,9 @@
         "summary": "ExecClaudeConnector",
         "operationId": "ExecClaudeConnector",
         "tags": [
-          "CommunityAdditions"
+          "Addons > claude-m365"
         ],
-        "description": "Community Additions > Standard Processes > Claude for Microsoft 365. Action AddApps adds Anthropic's two Claude apps to the tenant (tenantFilter). Action Apply (after a Global Administrator has approved Microsoft's consent page for both) limits Claude to the chosen Users: through the access group GroupName (default SG-Claude-Users) or, with AssignUsersDirectly, user by user. LockUserConsent also stops users approving apps themselves and turns on admin consent requests. RemoveOtherDirect removes direct assignments for people not in the group. Apply and Action Access (access only) also take ReadAreas (what Claude can read for everyone: mail, calendar, files, teams, meetings), TenantLevel (access level for everyone: read, drafts, assistant, full) and PeopleLevels (extra access for individual people: [{ User, Level }]). See Set-CIPPClaudeConnector and Config/ClaudeConnectorAccess.json.",
+        "description": "Community Additions > Claude for Microsoft 365 (add-on claude-m365). Action AddApps adds Anthropic's two Claude apps to the tenant (tenantFilter). Action Apply (after a Global Administrator has approved Microsoft's consent page for both) limits Claude to the chosen Users: through the access group GroupName (default SG-Claude-Users) or, with AssignUsersDirectly, user by user. LockUserConsent also stops users approving apps themselves and turns on admin consent requests. RemoveOtherDirect removes direct assignments for people not in the group. Apply and Action Access (access only) also take ReadAreas (what Claude can read for everyone: mail, calendar, files, teams, meetings), TenantLevel (access level for everyone: read, drafts, assistant, full) and PeopleLevels (extra access for individual people: [{ User, Level }]). See Set-CIPPClaudeConnector and Config/Addons/claude-m365/ClaudeConnectorAccess.json.",
         "requestBody": {
           "required": true,
           "content": {
@@ -18174,9 +18425,9 @@
         "summary": "ExecClaudeConnectorCustomerPdf",
         "operationId": "ExecClaudeConnectorCustomerPdf",
         "tags": [
-          "CommunityAdditions"
+          "Addons > claude-m365"
         ],
-        "description": "Community Additions > Standard Processes > Claude for Microsoft 365: the customer information PDF for the tenant (tenantFilter). Explains the options for giving Claude access to Microsoft 365, what we recommend having first (third-party backup, Entra ID P1, Microsoft Defender, Business Premium) filled in from the tenant, the four access levels with pros and cons, and what to reply with. Optional ContactName (who it is addressed to) and PreparedBy (who it is from). Returns application/pdf with the CIPP branding.",
+        "description": "Community Additions > Claude for Microsoft 365 (add-on claude-m365): the customer information PDF for the tenant (tenantFilter). Explains the options for giving Claude access to Microsoft 365, what we recommend having first (third-party backup, Entra ID P1, Microsoft Defender, Business Premium) filled in from the tenant, the four access levels with pros and cons, and what to reply with. Optional ContactName (who it is addressed to) and PreparedBy (who it is from). Returns application/pdf with the CIPP branding.",
         "requestBody": {
           "required": true,
           "content": {
@@ -18244,9 +18495,9 @@
         "summary": "ExecClaudeConnectorGuide",
         "operationId": "ExecClaudeConnectorGuide",
         "tags": [
-          "CommunityAdditions"
+          "Addons > claude-m365"
         ],
-        "description": "Community Additions > Standard Processes > Claude for Microsoft 365: the connection guide added to the end of the setup summary PDF. Action Upload saves a Word document (FileName, Data as base64 or a data URL; .docx, up to 10 MB), checking first that it can be read; Action Remove deletes it. The guide is kept in this CIPP instance, not in the code.",
+        "description": "Community Additions > Claude for Microsoft 365 (add-on claude-m365): the connection guide added to the end of the setup summary PDF. Action Upload saves a Word document (FileName, Data as base64 or a data URL; .docx, up to 10 MB), checking first that it can be read; Action Remove deletes it. The guide is kept in this CIPP instance, not in the code.",
         "requestBody": {
           "required": false,
           "content": {
@@ -18306,9 +18557,9 @@
         "summary": "ExecClaudeConnectorSummaryPdf",
         "operationId": "ExecClaudeConnectorSummaryPdf",
         "tags": [
-          "CommunityAdditions"
+          "Addons > claude-m365"
         ],
-        "description": "Community Additions > Standard Processes > Claude for Microsoft 365: the end-of-setup summary PDF for the tenant (tenantFilter). Read from the tenant: who can use Claude and at what level, what Claude can read, the safeguards in place, anything not finished, and what happens next. GroupName is the access group (default SG-Claude-Users). Optional ContactName (who it is addressed to) and PreparedBy (who it is from). The uploaded connection guide (ExecClaudeConnectorGuide) is added at the end unless IncludeGuide is false. Returns application/pdf with the CIPP branding.",
+        "description": "Community Additions > Claude for Microsoft 365 (add-on claude-m365): the end-of-setup summary PDF for the tenant (tenantFilter). Read from the tenant: who can use Claude and at what level, what Claude can read, the safeguards in place, anything not finished, and what happens next. GroupName is the access group (default SG-Claude-Users). Optional ContactName (who it is addressed to) and PreparedBy (who it is from). The uploaded connection guide (ExecClaudeConnectorGuide) is added at the end unless IncludeGuide is false. Returns application/pdf with the CIPP branding.",
         "requestBody": {
           "required": true,
           "content": {
@@ -43106,6 +43357,47 @@
         "x-cipp-role": "Exchange.Mailbox.Read"
       }
     },
+    "/api/ListAddons": {
+      "get": {
+        "summary": "ListAddons",
+        "operationId": "ListAddons",
+        "tags": [
+          "CommunityAdditions"
+        ],
+        "description": "Community Additions > Settings > Add-ons: the add-ons installed in this CIPP (version, whether each is turned on, and whether it is expected to work on this CIPP version: Compatible, Untested, NeedsNewerCipp or Problem, with what is missing), this CIPP's version and the newest upstream CIPP version, and the add-on packages uploaded to this instance.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "description": "Not described statically: this endpoint returns the upstream response as-is, so its fields are determined by the upstream API rather than by CIPP. Call the endpoint to see the actual shape, or add a response schema in backend/Config/openapi-overrides."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "CIPP.AppSettings.Read"
+      }
+    },
     "/api/ListAdminPortalLicenses": {
       "get": {
         "summary": "ListAdminPortalLicenses",
@@ -48158,9 +48450,9 @@
         "summary": "ListClaudeConnector",
         "operationId": "ListClaudeConnector",
         "tags": [
-          "CommunityAdditions"
+          "Addons > claude-m365"
         ],
-        "description": "Community Additions > Standard Processes > Claude for Microsoft 365: how far the tenant (tenantFilter) is through setting up Anthropic's Claude connector. Read-only. Also returns what the tenant already has (Readiness: backup, Entra ID P1, Defender, Business Premium), what Claude can read and change (Access) the options (Options: read areas and access levels) and the uploaded connection guide, if any (Guide). GroupName is the access group to look for (default SG-Claude-Users).",
+        "description": "Community Additions > Claude for Microsoft 365 (add-on claude-m365): how far the tenant (tenantFilter) is through setting up Anthropic's Claude connector. Read-only. Also returns what the tenant already has (Readiness: backup, Entra ID P1, Defender, Business Premium), what Claude can read and change (Access) the options (Options: read areas and access levels) and the uploaded connection guide, if any (Guide). GroupName is the access group to look for (default SG-Claude-Users).",
         "parameters": [
           {
             "name": "GroupName",

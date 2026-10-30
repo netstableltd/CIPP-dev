@@ -134,6 +134,25 @@ RUN pwsh -File /build/build-openapi.ps1 \
     -GraphMetadataPath /gen/graph-metadata \
     -OutputPath /gen/openapi.json
 
+# ── Community Additions add-on packages (fork) ──
+# Each installed add-on is packaged as Config/AddonPackages/<id>.zip so the add-on manager can offer it
+# for download: the image holds no add-on source otherwise (modules are compiled, the frontend exported).
+# The export runs the same package checks as an upload, so a broken add-on fails the build here.
+FROM ps-base AS build-addonpackages
+COPY backend/Config               /gen/repo/backend/Config
+COPY backend/version_latest.txt   /gen/repo/backend/version_latest.txt
+COPY backend/Modules/CIPPCore/Public /gen/repo/backend/Modules/CIPPCore/Public
+COPY backend/Modules/CIPPHTTP/Public /gen/repo/backend/Modules/CIPPHTTP/Public
+COPY backend/Tests                /gen/repo/backend/Tests
+COPY frontend/src                 /gen/repo/frontend/src
+COPY frontend/tests               /gen/repo/frontend/tests
+COPY docs/user-documentation      /gen/repo/docs/user-documentation
+COPY build/tools/addons           /gen/repo/build/tools/addons
+RUN mkdir -p /gen/AddonPackages && \
+    if ls /gen/repo/backend/Config/Addons/*/addon.json >/dev/null 2>&1; then \
+      pwsh -NoProfile -File /gen/repo/build/tools/addons/Export-CippAddon.ps1 -All -NameById -OutputPath /gen/AddonPackages; \
+    else echo "[addons] none installed"; fi
+
 # ── Frontend build ──
 FROM node:22-slim AS frontend-deps
 WORKDIR /build
@@ -143,6 +162,9 @@ RUN --mount=type=cache,target=/usr/local/share/.cache/yarn \
 
 FROM frontend-deps AS frontend-build
 COPY frontend/ ./
+# fork: add-on manifests, read at build time for the menu (src/utils/addon-menu.js reads
+# ../../../backend/Config/Addons, which from /build/src/utils is /backend/Config/Addons)
+COPY backend/Config/Addons /backend/Config/Addons
 
 # Build performance: disable telemetry
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -240,6 +262,9 @@ COPY --chown=app:app --from=build-openapi /gen/openapi.json /app/API/Config/open
 # refreshed from docs.cipp.app at build time; overwrites the committed fallback so the
 # SearchDocs tool links against what was actually published when this image was built
 COPY --chown=app:app --from=build-docspages /gen/DocsPublishedPages.txt /app/API/Config/DocsPublishedPages.txt
+
+# fork: packages of the installed Community Additions add-ons, for the add-on manager's downloads
+COPY --chown=app:app --from=build-addonpackages /gen/AddonPackages /app/API/Config/AddonPackages
 
 # Frontend — changes most frequently, placed last
 COPY --from=frontend-build /build/out/ /app/Frontend/

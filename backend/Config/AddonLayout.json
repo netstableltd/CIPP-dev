@@ -1,0 +1,16 @@
+{
+  "_comment": "Community Additions add-ons: where each part of an add-on package lives in the repository. {id} is the add-on id. The package (a .zip) has addon.json at its root and one folder per area. Used by the add-on manager (upload checks), the package tools in build/tools/addons and the image build.",
+  "schema": 1,
+  "manifest": { "package": "addon.json", "repo": "backend/Config/Addons/{id}/addon.json" },
+  "areas": [
+    { "package": "backend/functions", "repo": "backend/Modules/CIPPCore/Public/Addons/{id}", "extensions": [".ps1"], "label": "Backend functions" },
+    { "package": "backend/endpoints", "repo": "backend/Modules/CIPPHTTP/Public/Entrypoints/HTTP Functions/Addons/{id}", "extensions": [".ps1"], "label": "API endpoints" },
+    { "package": "backend/config", "repo": "backend/Config/Addons/{id}", "extensions": [".json"], "label": "Settings files" },
+    { "package": "backend/tests", "repo": "backend/Tests/Addons/{id}", "extensions": [".ps1"], "label": "Backend tests" },
+    { "package": "frontend/components", "repo": "frontend/src/addons/{id}", "extensions": [".js", ".jsx", ".json"], "label": "Page components" },
+    { "package": "frontend/pages", "repo": "frontend/src/pages/addons/{id}", "extensions": [".js", ".jsx"], "label": "Pages" },
+    { "package": "frontend/tests", "repo": "frontend/tests/addons/{id}", "extensions": [".js", ".jsx"], "label": "Frontend tests" },
+    { "package": "docs", "repo": "docs/user-documentation/addons/{id}", "extensions": [".md", ".png", ".jpg", ".jpeg", ".gif", ".svg"], "label": "Documentation" }
+  ],
+  "limits": { "packageBytes": 10485760, "fileBytes": 5242880, "files": 500 }
+}
