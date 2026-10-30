@@ -30,6 +30,7 @@ BeforeAll {
 
     . (Join-Path $script:RepoRoot 'Modules/CIPPCore/Public/Get-CIPPIntuneCompareExclusions.ps1')
     . (Join-Path $script:RepoRoot 'Modules/CIPPCore/Public/Compare-CIPPIntuneObject.ps1')
+    . (Join-Path $Baselines 'Helpers/Get-CIPPBaselineCommand.ps1')
     . (Join-Path $Baselines 'Helpers/Get-CIPPBaselineCacheRows.ps1')
     . (Join-Path $Baselines 'Helpers/Test-CIPPBaselineCacheCollected.ps1')
     . (Join-Path $Baselines 'PrepareHooks/Get-CIPPBaselineSensitivityLabelTemplateState.ps1')
@@ -279,6 +280,23 @@ Describe 'Get-CIPPBaselineTransportRuleTemplateState' {
         Should -Invoke New-ExoRequest -Times 1 -Exactly -ParameterFilter { $cmdlet -eq $Expected -and $cmdParams.Identity -eq 'Tag' }
     }
 
+    It 'updates a rule the stale cache missed when overwrite is on, and leaves it when off (overwrite <Overwrite>)' -ForEach @(
+        @{ Overwrite = $true; SetCalls = 1 }
+        @{ Overwrite = $false; SetCalls = 0 }
+    ) {
+        Mock New-ExoRequest { throw "|System.ArgumentException|A rule with this name already exists. (Parameter 'Name')" } -ParameterFilter { $cmdlet -eq 'New-TransportRule' }
+        Mock New-ExoRequest { }
+        $Current = [PSCustomObject]@{ ruleBodies = @([PSCustomObject]@{ name = 'Tag'; PrependSubject = '[EXT] ' }); deployedNames = @() }
+        { Invoke-CIPPBaselineTransportRuleTemplate -Remediate ([PSCustomObject]@{ overwrite = $Overwrite }) -TenantFilter $script:Tenant -Current $Current } | Should -Not -Throw
+        Should -Invoke New-ExoRequest -Times $SetCalls -Exactly -ParameterFilter { $cmdlet -eq 'Set-TransportRule' -and $cmdParams.Identity -eq 'Tag' }
+    }
+
+    It 'still fails a create that errors for another reason' {
+        Mock New-ExoRequest { throw 'Access denied' }
+        $Current = [PSCustomObject]@{ ruleBodies = @([PSCustomObject]@{ name = 'Tag' }); deployedNames = @() }
+        { Invoke-CIPPBaselineTransportRuleTemplate -Remediate ([PSCustomObject]@{ overwrite = $true }) -TenantFilter $script:Tenant -Current $Current } | Should -Throw '*Access denied*'
+    }
+
     It 'grades and deploys the template under its resolved %variables%' {
         Mock Get-CIPPTextReplacement { $Text -replace '%tenantname%', 'Contoso' }
         Mock Get-CIPPAzDataTableEntity { [PSCustomObject]@{ RowKey = 'tpl-t'; JSON = '{"name":"%tenantname% Block Autoforward","PrependSubject":"[%tenantname%] "}' } }
@@ -313,6 +331,13 @@ Describe 'Template family executors' {
         $Current = [PSCustomObject]@{ missingPolicies = @(); templateBodies = @([PSCustomObject]@{ Name = 'A' }) }
         Invoke-CIPPBaselineRetentionCompliancePolicyTemplate -Remediate $null -TenantFilter $script:Tenant -Current $Current
         Should -Invoke Set-CIPPRetentionCompliancePolicy -Times 1 -Exactly
+    }
+
+    It 'deploys every retention template and then fails the run when one failed' {
+        Mock Set-CIPPRetentionCompliancePolicy { if ($Template.Name -eq 'A') { throw 'rule A failed' } }
+        $Current = [PSCustomObject]@{ missingPolicies = @(); templateBodies = @([PSCustomObject]@{ Name = 'A' }, [PSCustomObject]@{ Name = 'B' }) }
+        { Invoke-CIPPBaselineRetentionCompliancePolicyTemplate -Remediate $null -TenantFilter $script:Tenant -Current $Current } | Should -Throw 'rule A failed'
+        Should -Invoke Set-CIPPRetentionCompliancePolicy -Times 2 -Exactly
     }
 
     It 'writes only the SITs the hook marked remediable' {

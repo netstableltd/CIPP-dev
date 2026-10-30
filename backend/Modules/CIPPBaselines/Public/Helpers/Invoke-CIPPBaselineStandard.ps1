@@ -150,7 +150,7 @@ function Invoke-CIPPBaselineStandard {
                     if ($Normalized.PSObject.Properties[$DeclaredVariable.Name]) {
                         $Normalized.$($DeclaredVariable.Name) = $Fallback
                     } else {
-                        $Normalized | Add-Member -NotePropertyName $DeclaredVariable.Name -NotePropertyValue $Fallback
+                        $Normalized.PSObject.Properties.Add([psnoteproperty]::new($DeclaredVariable.Name, $Fallback))
                     }
                 }
             }
@@ -237,11 +237,11 @@ function Invoke-CIPPBaselineStandard {
                         else { $null -ne $_ -and $_ -eq $Current }
                     }).Count -gt 0
                 if ($UseCurrent -and $IsMember) { return $Current }
-                return ($Allowed | Where-Object { $null -ne $_ } | Select-Object -First 1)
+                return $Allowed.Where({ $null -ne $_ }, 'First')[0]
             }
             $Resolved = [PSCustomObject]@{}
             foreach ($Property in $Node.PSObject.Properties) {
-                $Resolved | Add-Member -NotePropertyName $Property.Name -NotePropertyValue (& $ResolveAnyOf $Property.Value $Current.$($Property.Name) $UseCurrent)
+                $Resolved.PSObject.Properties.Add([psnoteproperty]::new($Property.Name, (& $ResolveAnyOf $Property.Value $Current.$($Property.Name) $UseCurrent)))
             }
             $Resolved
         }
@@ -254,7 +254,10 @@ function Invoke-CIPPBaselineStandard {
         if ($StaleRows.Count -gt 0 -and -not $GradeOnly) {
             try { Remove-CIPPAzDataTableEntity -Force @ResolvedTable -Entity $StaleRows } catch { Write-Information "Baselines: stale resolved-row cleanup for $($Item.Standard) on $TenantFilter failed: $($_.Exception.Message)" }
         }
-        $Prior = $PriorRows | Sort-Object -Property { [int64]($_.LastRun ?? 0) } -Descending | Select-Object -First 1
+        $Prior = $null
+        foreach ($PriorRow in $PriorRows) {
+            if ($null -eq $Prior -or [int64]($PriorRow.LastRun ?? 0) -gt [int64]($Prior.LastRun ?? 0)) { $Prior = $PriorRow }
+        }
         $PriorStatus = $Prior.Status
 
         # Per-property verdicts default to 'accept' (tolerate); 'denyDelete' marks the path's
@@ -389,19 +392,19 @@ function Invoke-CIPPBaselineStandard {
         # read.array descends into each cached row's nested array and flattens the elements
         # into the candidate set BEFORE the filters run. filter.property may be a dot-path.
         $ReadCurrent = {
-            $Data = @(New-CIPPDbRequest -TenantFilter $TenantFilter -Type $Definition.read.cacheType | Where-Object { $_ })
+            $Data = @((New-CIPPDbRequest -TenantFilter $TenantFilter -Type $Definition.read.cacheType).Where({ $_ }))
             if ($Definition.read.array) {
-                $Data = @($Data | ForEach-Object {
-                        $Nested = $_
-                        foreach ($Segment in ($Definition.read.array -split '\.')) { $Nested = $Nested.$Segment }
-                        $Nested
-                    } | Where-Object { $_ })
+                $Data = @(@(foreach ($Row in $Data) {
+                            $Nested = $Row
+                            foreach ($Segment in ($Definition.read.array -split '\.')) { $Nested = $Nested.$Segment }
+                            $Nested
+                        }).Where({ $_ }))
             }
             foreach ($Condition in @($Definition.read.filter)) {
                 if (-not $Condition) { continue }
                 $Match = & $Render $Condition.value $Item.Variables
                 $Property = $Condition.property
-                $Data = @($Data | Where-Object {
+                $Data = @($Data.Where({
                         $Candidate = $_
                         foreach ($Segment in ($Property -split '\.')) { $Candidate = $Candidate.$Segment }
                         switch ($Condition.operator) {
@@ -410,9 +413,9 @@ function Invoke-CIPPBaselineStandard {
                             'notStartsWith' { -not "$Candidate".StartsWith("$Match") }
                             default { $Candidate -eq $Match }
                         }
-                    })
+                    }))
             }
-            $Value = $Data | Select-Object -First 1
+            $Value = @($Data)[0]
             if ($Definition.read.object -and $null -ne $Value) {
                 foreach ($Segment in ($Definition.read.object -split '\.')) {
                     $Value = $Value.$Segment
@@ -433,7 +436,7 @@ function Invoke-CIPPBaselineStandard {
         # generic empty-cache pointer.
         $CollectorFailure = $null
         $PrepareNoDataReason = $null
-        $CacheCollector = Get-Command -Name "Set-CIPPDBCache$($Definition.read.cacheType)" -ErrorAction SilentlyContinue
+        $CacheCollector = if ($Definition.read.cacheType) { Get-CIPPBaselineCommand -Name "Set-CIPPDBCache$($Definition.read.cacheType)" }
         $CollectorArgs = @{ TenantFilter = $TenantFilter }
         foreach ($Argument in ($Definition.read.collectorArgs ?? [PSCustomObject]@{}).PSObject.Properties) {
             $CollectorArgs[$Argument.Name] = $Argument.Value
@@ -443,11 +446,13 @@ function Invoke-CIPPBaselineStandard {
         }
 
         if ($Definition.prepare) {
-            if ($Definition.prepare -notmatch '^Get-CIPPBaseline[A-Za-z0-9]+$' -or -not (Get-Command -Name $Definition.prepare -ErrorAction SilentlyContinue)) {
+            if ($Definition.prepare -notmatch '^Get-CIPPBaseline[A-Za-z0-9]+$' -or -not (Get-CIPPBaselineCommand -Name $Definition.prepare)) {
                 throw "Prepare function $($Definition.prepare) is not available."
             }
             $Prepared = & $Definition.prepare -Item $Item -TenantFilter $TenantFilter
-            if ($null -eq $Prepared.Current -and $CacheCollector -and -not $JustRefreshed) {
+            # ConfigError: the hook cannot grade because of the baseline's own settings, so fresh data
+            # would not help and re-collecting (a full per-object read for some caches) is skipped.
+            if ($null -eq $Prepared.Current -and $CacheCollector -and -not $JustRefreshed -and -not $Prepared.ConfigError) {
                 try {
                     $null = & $CacheCollector @CollectorArgs
                     $Prepared = & $Definition.prepare -Item $Item -TenantFilter $TenantFilter
@@ -493,6 +498,17 @@ function Invoke-CIPPBaselineStandard {
                 }
             }
         }
+
+        # A prepare hook that names why it cannot grade leaves nothing to compare or act on. The tenant is
+        # licensed by now, so that is an error, and the executor must not run against no data.
+        if ($null -eq $Current -and $PrepareNoDataReason) {
+            Write-LogMessage -API 'Baselines' -tenant $TenantFilter -message "$($Item.Standard): $PrepareNoDataReason - Run $RunId" -Sev 'Error'
+            $Result.Outcome = 'Error'
+            $Result.Status = if ("$PriorStatus".StartsWith('Denied')) { $PriorStatus } else { 'Error' }
+            if (-not $GradeOnly) { Set-CIPPBaselineResult -Result $Result -Prior $Prior -RunId $RunId -Detail "Error: $PrepareNoDataReason" }
+            return $Result
+        }
+
         $CheckBeforeRun = $Definition.checkBeforeRun -ne $false
 
         $ReadDefaults = $Definition.read.defaults
@@ -510,7 +526,7 @@ function Invoke-CIPPBaselineStandard {
                     $Value -is [System.Management.Automation.PSCustomObject]) {
                     $Value = & $ProjectNode $Property.Value $Value
                 }
-                $Node | Add-Member -NotePropertyName $Property.Name -NotePropertyValue $Value
+                $Node.PSObject.Properties.Add([psnoteproperty]::new($Property.Name, $Value))
             }
             $Node
         }
@@ -528,7 +544,7 @@ function Invoke-CIPPBaselineStandard {
                 if ($null -eq $Value -and $null -ne $ReadDefaults -and $ReadDefaults.PSObject.Properties[$Property]) {
                     $Value = $ReadDefaults.$Property
                 }
-                $Projected | Add-Member -NotePropertyName $Property -NotePropertyValue $Value
+                $Projected.PSObject.Properties.Add([psnoteproperty]::new($Property, $Value))
             }
             $Result.CurrentValue = $Projected
             $CompareExpected = & $ResolveAnyOf $ExpectedTemplate $Current $true
@@ -616,7 +632,7 @@ function Invoke-CIPPBaselineStandard {
                 $VerdictBy = "$($AcceptedPaths.$DenyKey.by)"
                 try {
                     $DeleteExecutor = "Invoke-CIPPBaselineDelete$($Definition.delete.executor)"
-                    if ($Definition.delete.executor -notmatch '^[A-Za-z0-9]+$' -or -not (Get-Command -Name $DeleteExecutor -ErrorAction SilentlyContinue)) {
+                    if ($Definition.delete.executor -notmatch '^[A-Za-z0-9]+$' -or -not (Get-CIPPBaselineCommand -Name $DeleteExecutor)) {
                         throw "Unknown delete executor '$($Definition.delete.executor)' on $($Definition.name)."
                     }
                     & $DeleteExecutor -Target $Target -TenantFilter $TenantFilter
@@ -703,11 +719,19 @@ function Invoke-CIPPBaselineStandard {
                 # (declarative or prepared), which sweeps and object-scoped writes need and
                 # everything else ignores.
                 $ExecutorName = "Invoke-CIPPBaseline$($Definition.remediate.executor)"
-                if ($Definition.remediate.executor -notmatch '^[A-Za-z0-9]+$' -or -not (Get-Command -Name $ExecutorName -ErrorAction SilentlyContinue)) {
+                if ($Definition.remediate.executor -notmatch '^[A-Za-z0-9]+$' -or -not (Get-CIPPBaselineCommand -Name $ExecutorName)) {
                     throw "Unknown remediate executor '$($Definition.remediate.executor)' on $($Definition.name)."
                 }
                 $ExecutorOutput = & $ExecutorName -Remediate $Rendered -TenantFilter $TenantFilter -Current $Current
             } catch {
+                    if ($Compliant) {
+                    Write-LogMessage -API 'Baselines' -tenant $TenantFilter -message "`"$Label`" is already compliant; the forced rewrite was rejected and ignored: $($_.Exception.Message) - Run $RunId" -Sev 'Info'
+                    $Result.Compliant = $true
+                    $Result.Outcome = 'Compliant'
+                    $Result.Status = 'Compliant'
+                    Set-CIPPBaselineResult -Result $Result -Prior $Prior -RunId $RunId
+                    return $Result
+                }
                 Write-LogMessage -API 'Baselines' -tenant $TenantFilter -message "Failed to change `"$Label`" to $ExpectedJson`: $($_.Exception.Message) - Run $RunId" -Sev 'Error' -LogData (Get-CippException -Exception $_)
                 $Result.Outcome = 'Error'
                 # A failed write is not tenant drift: the row must not show Drift with an

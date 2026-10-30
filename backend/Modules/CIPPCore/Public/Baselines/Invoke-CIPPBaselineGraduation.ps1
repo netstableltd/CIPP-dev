@@ -54,7 +54,7 @@ function Invoke-CIPPBaselineGraduation {
                     }
                     'variable' {
                         # Reuse the replacement machinery: an unresolved token comes back verbatim.
-                        $Token = '%{0}%' -f $Condition.variable
+                        $Token = '%{0}%' -f "$($Condition.variable)".Trim().Trim('%')
                         $Value = Get-CIPPTextReplacement -TenantFilter $State.tenantFilter -Text $Token
                         if ($Value -eq $Token) { $false } else {
                             switch ($Condition.operator) {
@@ -120,7 +120,7 @@ function Invoke-CIPPBaselineGraduation {
             $StateTable.Force = $true
             Add-CIPPAzDataTableEntity @StateTable -Entity @{
                 PartitionKey    = "$($Baseline.GUID)"
-                RowKey          = "$($State.tenantFilter)"
+                RowKey          = "$($State.customerId ?? $State.tenantFilter)"
                 currentStage    = ($State.currentStage + 1)
                 enteredStageAt  = $Now
                 firstDeployedAt = $State.firstDeployedAt ?? $State.enteredStageAt ?? $Now

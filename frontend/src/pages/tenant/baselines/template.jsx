@@ -110,8 +110,10 @@ const buildEditorStages = (templateDefinition) =>
     templateDefinition?.stages ?? [
       { name: 'Default', standards: [], conditions: [], logic: 'and' },
     ]
-  ).map((stage) => ({
+  ).map((stage, index) => ({
     key: newStageKey(),
+    // Saved position, so the save can move tenants whose stage was removed or reordered.
+    sourceStage: templateDefinition ? index + 1 : null,
     name: stage.name,
     standards: [...stage.standards],
     // Saved per-instance configuration (variables + action posture) keyed by
@@ -254,6 +256,7 @@ const StagePanel = ({
       const values = formControl.getValues()
       return {
         name: stage.name,
+        sourceStage: stage.sourceStage ?? null,
         logic: unwrapValue(values.conditionLogic) ?? 'and',
         conditions: conditionIds.map((conditionId) => {
           const condition = values.conditions?.[conditionId] ?? {}
@@ -663,6 +666,9 @@ const Page = () => {
     setSaveTargetId(savedId)
     setLoadedTemplateId(savedId)
     setLastSavedId(savedId)
+    setStages((prev) =>
+      prev.map((stage, index) => ({ ...stage, sourceStage: index + 1 }))
+    )
     setHasUnsavedChanges(false)
     // Re-baseline the form so isDirty clears after the save.
     formControl.reset(formControl.getValues())
@@ -771,17 +777,22 @@ const Page = () => {
   const unsavedChanges = hasUnsavedChanges || formControl.formState.isDirty
 
   // Warn before navigating away with unsaved changes (browser close + in-app navigation).
-  const handleRouteChange = useCallback(() => {
-    if (unsavedChanges) {
-      const confirmLeave = window.confirm(
-        'You have unsaved changes. Are you sure you want to leave this page?'
-      )
-      if (!confirmLeave) {
-        router.events.emit('routeChangeError')
-        throw 'Route change was aborted'
+  const handleRouteChange = useCallback(
+    (url, { shallow } = {}) => {
+      // A shallow replace (adopting a saved baseline's id) keeps the page and its state.
+      if (shallow) return
+      if (unsavedChanges) {
+        const confirmLeave = window.confirm(
+          'You have unsaved changes. Are you sure you want to leave this page?'
+        )
+        if (!confirmLeave) {
+          router.events.emit('routeChangeError')
+          throw 'Route change was aborted'
+        }
       }
-    }
-  }, [unsavedChanges, router])
+    },
+    [unsavedChanges, router]
+  )
 
   useEffect(() => {
     const handleBeforeUnload = (event) => {
@@ -1008,6 +1019,7 @@ const Page = () => {
           (stage) =>
             stageSerializers.current[stage.key]?.() ?? {
               name: stage.name,
+              sourceStage: stage.sourceStage ?? null,
               logic: 'and',
               conditions: [],
               standards: [],

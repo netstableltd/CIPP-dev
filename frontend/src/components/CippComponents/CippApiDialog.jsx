@@ -85,9 +85,9 @@ export const CippApiDialog = (props) => {
     urlFromData: true,
     relatedQueryKeys: relatedQueryKeys ?? api.relatedQueryKeys ?? title,
     bulkRequest: api.multiPost === false,
-    onResult: (result) => {
+    onResult: (result, meta) => {
       setPartialResults((prev) => [...prev, result])
-      api?.onSuccess?.(result)
+      if (!meta?.failed) api?.onSuccess?.(result)
     },
   })
 
@@ -95,9 +95,9 @@ export const CippApiDialog = (props) => {
     ...getRequestInfo,
     relatedQueryKeys: relatedQueryKeys ?? api.relatedQueryKeys ?? title,
     bulkRequest: api.multiPost === false,
-    onResult: (result) => {
+    onResult: (result, meta) => {
       setPartialResults((prev) => [...prev, result])
-      api?.onSuccess?.(result)
+      if (!meta?.failed) api?.onSuccess?.(result)
     },
   })
 
@@ -288,23 +288,13 @@ export const CippApiDialog = (props) => {
     }
   }, [createDialog.open, api?.setDefaultValues])
 
-  const escapeHtml = (text) => {
-    if (typeof text !== 'string') return text
-    const div = document.createElement('div')
-    div.textContent = text
-    return div.innerHTML
-  }
-
+  // Values land in React text nodes, which escape on render; pre-escaping shows &amp; to the user.
   const getRawNestedValue = (obj, path) => {
     return path
       .split('.')
       .reduce((acc, key) => (acc && acc[key] !== undefined ? acc[key] : undefined), obj)
   }
-
-  const getNestedValue = (obj, path) => {
-    const value = getRawNestedValue(obj, path)
-    return typeof value === 'string' ? escapeHtml(value) : value
-  }
+  const getNestedValue = getRawNestedValue
 
   // Handle link actions - opens the link when dialog opens, using ref to prevent duplicates
   useEffect(() => {

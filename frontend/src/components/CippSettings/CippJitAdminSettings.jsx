@@ -4,6 +4,7 @@ import CippButtonCard from "../CippCards/CippButtonCard";
 import { ApiGetCall, ApiPostCall } from "../../api/ApiCall";
 import { CippApiResults } from "../CippComponents/CippApiResults";
 import CippFormComponent from "../CippComponents/CippFormComponent";
+import { CippFormTenantSelector } from "../CippComponents/CippFormTenantSelector";
 import { useForm, useWatch } from "react-hook-form";
 import jitAdminRoles from "../../data/JitAdminRoles.json";
 import { useEffect } from "react";
@@ -24,6 +25,7 @@ const CippJitAdminSettings = () => {
     defaultValues: {
       MaxDuration: "",
       RequireApproval: false,
+      ApprovalTenants: [],
       ApprovalTriggerRoles: [],
       ApproverRoles: [],
       RequiredApprovals: 1,
@@ -36,6 +38,7 @@ const CippJitAdminSettings = () => {
       formControl.reset({
         MaxDuration: jitSettings.data?.MaxDuration || "",
         RequireApproval: jitSettings.data?.RequireApproval ?? false,
+        ApprovalTenants: jitSettings.data?.ApprovalTenants ?? [],
         ApprovalTriggerRoles: jitSettings.data?.ApprovalTriggerRoles ?? [],
         ApproverRoles: jitSettings.data?.ApproverRoles ?? [],
         RequiredApprovals: jitSettings.data?.RequiredApprovals ?? 1,
@@ -51,6 +54,7 @@ const CippJitAdminSettings = () => {
         Action: "Set",
         MaxDuration: formData.MaxDuration || null,
         RequireApproval: formData.RequireApproval,
+        ApprovalTenants: formData.ApprovalTenants,
         ApprovalTriggerRoles: formData.ApprovalTriggerRoles,
         ApproverRoles: formData.ApproverRoles,
         RequiredApprovals: formData.RequiredApprovals,
@@ -144,6 +148,15 @@ const CippJitAdminSettings = () => {
           />
           {requireApproval && (
             <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+              <CippFormTenantSelector
+                name="ApprovalTenants"
+                label="Tenants that need approval"
+                placeholder="Leave empty to require approval in every tenant"
+                valueField="customerId"
+                includeGroups={true}
+                required={false}
+                formControl={formControl}
+              />
               <CippFormComponent
                 type="autoComplete"
                 name="ApprovalTriggerRoles"
@@ -181,9 +194,10 @@ const CippJitAdminSettings = () => {
                 validators={{ min: { value: 1, message: "At least one approval is required" } }}
               />
               <Typography variant="body2" color="text.secondary">
-                Approvers are notified through the configured notification methods, and on the new CIPP infrastructure by push if
-                they have it enabled. The requester cannot approve their own request, and any
-                rejection ends the request.
+                Each approver gets an email about new requests, and the requester gets one with the
+                decision. The configured notification methods receive every event as well, and on the
+                new CIPP infrastructure approvers also get a push if they have it enabled. The requester
+                cannot approve their own request, and any rejection ends the request.
               </Typography>
             </Box>
           )}

@@ -90,6 +90,8 @@ For a **Scripted CIPP Alert**, this is how the alert is delivered:
 * Email - Delivers an HTML-formatted table to the email address provided in [notifications.md](../../../cipp/settings/notifications.md "mention").
 * Push (notify me) - Sends a push notification to the devices you registered under [user-settings.md](../../../shared-features/menu-bar/user-settings.md "mention"). It reaches only the person who created the alert. The option is only offered once you have registered at least one device there; until then, the helper text under the field says where to enrol, and afterwards it says how many devices will be notified.
 
+By default a scripted alert notifies you once when an item first appears or comes back, and stays quiet while the item is still there on later runs. Turn on **Notify on every run while the alert is still active** if you want still-active items sent again on every run. Items you have snoozed stay silent either way, and the switch is saved with the alert, so it is set again when you edit it.
+
 For an **Audit Log Alert**, this is what CIPP does when a matching log entry arrives, and it can include remediation as well as notification:
 
 * Execute a BEC Remediate - Runs the business email compromise remediation against the user in the log entry.
@@ -104,7 +106,7 @@ Execute a BEC Remediate and Disable the user in the log entry act on the tenant 
 
 ### PSA Ticket Strategy
 
-Shown for scripted alerts when PSA is one of the selected actions. It overrides the HaloPSA Link Tickets to affected Users toggle for this alert only, which is handy for wide alerts such as users without MFA where you want to control how many tickets are raised.
+Shown for scripted alerts when PSA is one of the selected actions. It overrides the Link Tickets to affected Users toggle of the HaloPSA or NinjaOne integration for this alert only, which is handy for wide alerts such as users without MFA where you want to control how many tickets are raised.
 
 | Option                             | Description                                                   |
 | ---------------------------------- | ------------------------------------------------------------- |
@@ -115,7 +117,7 @@ Whichever option matches your current HaloPSA integration setting is labelled as
 
 ### PSA Ticket Priority
 
-Shown for both alert types when Generate a PSA ticket (or PSA) is one of the selected actions, and only while the HaloPSA integration is enabled. Overrides the HaloPSA Default Priority for tickets raised by this alert, restricted to the priorities available on the integration's Ticket Type. Leave it blank to use the integration default.
+Shown for both alert types when Generate a PSA ticket (or PSA) is one of the selected actions, and only while the HaloPSA or Syncro integration is enabled. Overrides that integration's default priority for tickets raised by this alert; for HaloPSA the list is restricted to the priorities available on the integration's Ticket Type. Leave it blank to use the integration default. NinjaOne tickets always use the priority set on the NinjaOne integration.
 
 {% hint style="info" %}
 The dropdown is shown disabled with an explanation instead of a priority list when there is nothing valid to offer: no Ticket Type is set on the integration yet, the configured Ticket Type has no SLA attached (so HaloPSA is left to apply its own priority regardless of any selection here), or the priority list could not be loaded.
@@ -149,6 +151,10 @@ You can review the available alerts embedded below or navigate to [https://resou
 
 {% hint style="info" %}
 The **Alert on Huntress or CIPP Rogue Apps detected** alert checks tenants against both the public Huntress RogueApps feed and a list curated by CIPP, so it can report applications that do not appear on the Huntress website. See [rogue-apps.md](rogue-apps.md "mention") for how the list is built and which applications the CIPP list contains.
+{% endhint %}
+
+{% hint style="info" %}
+The **Alert on presence of specific app ids** alert reports any service principal in the tenant whose application id is on the list you configure. It comes pre-filled with the ConnectWise Cloud Management application ids named in the ConnectWise breach disclosure, and you can add or remove any application (client) id. Pair it with **Alert on newly added service principal credentials**, which reports every secret or certificate added to a service principal in the last six days by default, so a credential planted on a vendor's multi-tenant app is caught even when the app itself is expected.
 {% endhint %}
 
 {% hint style="warning" %}

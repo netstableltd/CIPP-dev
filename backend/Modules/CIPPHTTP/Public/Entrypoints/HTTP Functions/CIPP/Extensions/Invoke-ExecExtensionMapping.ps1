@@ -34,6 +34,9 @@ Function Invoke-ExecExtensionMapping {
       'Sherweb' {
         $Result = Get-SherwebMapping -CIPPMapping $Table
       }
+      'Syncro' {
+        $Result = Get-SyncroMapping -CIPPMapping $Table
+      }
       'Atera' {
         $Result = Get-AteraMapping -CIPPMapping $Table
       }
@@ -53,6 +56,9 @@ Function Invoke-ExecExtensionMapping {
           'Outcomes'    = $Outcomes
           'Priorities'  = $Priorities
         }
+      }
+      'NinjaOneTicketFields' {
+        $Result = Get-NinjaOneTicketFields
       }
       'HaloPSARequestSources' {
         # Request sources are instance-wide rather than scoped to a ticket type, so they get their
@@ -92,6 +98,9 @@ Function Invoke-ExecExtensionMapping {
         }
         'HaloPSA' {
           $Result = Set-HaloMapping -CIPPMapping $Table -APIName $APIName -Request $Request
+        }
+        'Syncro' {
+          $Result = Set-SyncroMapping -CIPPMapping $Table -APIName $APIName -Request $Request
         }
         'NinjaOne' {
           $Result = Set-NinjaOneOrgMapping -CIPPMapping $Table -APIName $APIName -Request $Request
@@ -144,6 +153,12 @@ Function Invoke-ExecExtensionMapping {
         }
         'HaloPSA' {
           $Result = Invoke-HaloAutoMap -CIPPMapping $Table
+        }
+        'Syncro' {
+          $Result = Invoke-SyncroAutoMap -CIPPMapping $Table
+        }
+        'Hudu' {
+          $Result = Invoke-HuduAutoMap -CIPPMapping $Table
         }
         'Atera' {
           $Result = Invoke-AteraAutoMap -CIPPMapping $Table -APIName $APIName -Headers $Headers

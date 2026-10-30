@@ -96,6 +96,7 @@ const CACHE_TYPE_COLLECTIONS = {
   ConditionalAccess: [
     "ConditionalAccessPolicies",
     "UserRegistrationDetails",
+    "ServicePrincipalSignInActivities",
   ],
   IdentityProtection: [
     "RiskyUsers",
@@ -144,7 +145,6 @@ const CACHE_TYPE_COLLECTIONS = {
   SharePoint: [
     "SPOTenant",
     "SPOSites",
-    "SPOTenantSyncClientRestriction",
     "SharePointAdminSettings",
     "SharePointSiteUsage",
     "SiteActivity",
@@ -162,6 +162,7 @@ const CACHE_TYPE_COLLECTIONS = {
     "CsExternalAccessPolicy",
     "CsTenantFederationConfiguration",
     "CsTeamsMessagingPolicy",
+    "CsTeamsFilesPolicy",
     "CsTeamsMessagingConfiguration",
     "CsTeamsAppPermissionPolicy",
     "Teams",

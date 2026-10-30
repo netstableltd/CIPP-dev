@@ -22,6 +22,7 @@ function Get-CippSecuritySimulationContext {
     $AlignmentTable = Get-CippTable -tablename 'BaselineAlignment'
     $SafeTenant = ConvertTo-CIPPODataFilterValue -Value $Tenant
     $AlignmentRows = @(Get-CIPPAzDataTableEntity @AlignmentTable -Filter "PartitionKey eq '$SafeTenant'")
+    $FreshAfter = [DateTimeOffset]::UtcNow.AddHours(-12).ToUnixTimeSeconds()
     $Context = @{
         Tenant    = $Tenant
         Scenarios = $Scenarios
@@ -40,14 +41,14 @@ function Get-CippSecuritySimulationContext {
         $TestId = "SecuritySimulation_$($Scenario.id)"
         $Licensed = -not $Scenario.licensePresets -or (Test-CIPPStandardLicense -StandardName $TestId -TenantFilter $Tenant -Preset $Scenario.licensePresets -SkipLog)
         $Persona = $(if ("$($Scenario.persona)") { "$($Scenario.persona)" } else { 'user' })
-        $WhatIfSteps = @($Scenario.steps | Where-Object { $_.whatIf })
+        $WhatIfSteps = @($Scenario.steps.Where({ $_.whatIf }))
         # The What If API itself needs Entra ID P1 or P2, whatever else the scenario is licensed for.
         $CALicensed = $WhatIfSteps.Count -gt 0 -and $Licensed -and (Test-CIPPStandardLicense -StandardName $TestId -TenantFilter $Tenant -Preset Entra -SkipLog)
         $Identity = $null
         if ($CALicensed) {
             if (-not $Identities.ContainsKey($Persona)) {
                 $Directory ??= @{
-                    Users    = @(Get-CIPPSimulationCache -TenantFilter $Tenant -Type 'Users')
+                    Users    = @(Get-CIPPSimulationCache -TenantFilter $Tenant -Type 'Users' -Fields 'id', 'displayName', 'userPrincipalName', 'accountEnabled', 'userType', 'assignedLicenses')
                     Roles    = @(Get-CIPPSimulationCache -TenantFilter $Tenant -Type 'Roles')
                     Policies = @(Get-CIPPSimulationCache -TenantFilter $Tenant -Type 'ConditionalAccessPolicies')
                 }
@@ -70,13 +71,13 @@ function Get-CippSecuritySimulationContext {
     }
 
     # Graded live against the scenario's secure value (a list means any entry is secure); tenant-specific settings use the baseline verdict.
-    $References = @($Scenarios.steps.standards | Where-Object { $_ })
+    $References = @($Scenarios.steps.standards.Where({ $_ }))
     foreach ($Reference in $References) {
         $Name = "$($Reference.name)"
         $Key = '{0}|{1}' -f $Name, (ConvertTo-Json -Compress -Depth 5 -InputObject $Reference.secure)
         if ($Context.Standards.ContainsKey($Key)) { continue }
         $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-        $Definition = Get-CIPPBaselineDefinition -Name $Name | Select-Object -First 1
+        $Definition = @(Get-CIPPBaselineDefinition -Name $Name)[0]
         $State = [PSCustomObject]@{
             name      = $Name
             label     = "$($Definition.label ?? $Name)"
@@ -85,14 +86,18 @@ function Get-CippSecuritySimulationContext {
             assigned  = $false
             detail    = ''
         }
-        $Row = @($AlignmentRows | Where-Object { ("$($_.StandardName)" -split '#')[0] -eq $Name }) |
-            Sort-Object -Property { [int64]($_.LastRun ?? 0) } -Descending | Select-Object -First 1
+        $Row = $null
+        foreach ($AlignmentRow in $AlignmentRows) {
+            if (("$($AlignmentRow.StandardName)" -split '#')[0] -eq $Name -and ($null -eq $Row -or [int64]($AlignmentRow.LastRun ?? 0) -gt [int64]($Row.LastRun ?? 0))) { $Row = $AlignmentRow }
+        }
         $State.assigned = $null -ne $Row
-        $TenantSpecific = @(($Definition.variables ?? [PSCustomObject]@{}).PSObject.Properties | Where-Object {
+        $TenantSpecific = ($Definition.variables ?? [PSCustomObject]@{}).PSObject.Properties.Where({
                 $_.Value.required -eq $true -and $null -eq ($_.Value.default ?? $_.Value.recommended) -and -not ($Reference.secure -and $Reference.secure.PSObject.Properties[$_.Name])
             }).Count -gt 0
 
-        if ($Definition.requiredCapabilities -and -not (Test-CIPPStandardLicense -StandardName $Name -TenantFilter $Tenant -RequiredCapabilities @($Definition.requiredCapabilities | ForEach-Object { $_ }) -SkipLog)) {
+        # Nested requiredCapabilities are AND-ed any-of groups, as in Invoke-CIPPBaselineStandard.
+        $CapabilityGroups = @(if (@($Definition.requiredCapabilities).Where({ $_ -is [System.Array] }).Count -gt 0) { $Definition.requiredCapabilities } else { , @($Definition.requiredCapabilities) })
+        if ($Definition.requiredCapabilities -and $CapabilityGroups.Where({ -not (Test-CIPPStandardLicense -StandardName $Name -TenantFilter $Tenant -RequiredCapabilities @($_) -SkipLog) }, 'First').Count -gt 0) {
             $State.status = 'License missing'
             $State.compliant = $null
         } elseif ($TenantSpecific) {
@@ -103,6 +108,16 @@ function Get-CippSecuritySimulationContext {
                 '^Skipped - No License$' { $State.status = 'License missing'; $State.compliant = $null }
                 '^$' { $State.status = 'Needs configuration'; $State.detail = 'This standard needs tenant-specific settings, chosen in a baseline, before it can be checked.' }
                 default { $State.status = 'No data'; $State.compliant = $null }
+            }
+        } elseif (@(($Definition.variables ?? [PSCustomObject]@{}).PSObject.Properties).Count -eq 0 -and "$($Row.Status)" -in @('Compliant', 'Drift') -and $Row.PendingVerification -ne $true -and [int64]($Row.LastRun ?? 0) -ge $FreshAfter) {
+            # A standard without settings grades the same in every baseline, so a recent verdict replaces a live grade.
+            if ("$($Row.Status)" -eq 'Compliant') {
+                $State.status = 'Compliant'
+                $State.compliant = $true
+            } else {
+                $RowDiff = @(if ("$($Row.Diff)") { [CIPP.CippJson]::ConvertFromJson("$($Row.Diff)") })
+                $DiffProperties = @(@($RowDiff | ForEach-Object { $_.Property }).Where({ $_ }) | Select-Object -Unique)
+                if ($DiffProperties.Count -gt 0) { $State.detail = 'Differs on: {0}' -f ($DiffProperties -join ', ') }
             }
         } else {
             $Candidates = [System.Collections.Generic.List[object]]::new()
@@ -168,13 +183,13 @@ function Get-CippSecuritySimulationContext {
                         $State.detail = 'The tenant cache holds no value for this setting yet.'
                         break
                     }
-                    $Diffs = @($Graded.Diff | Where-Object { $_ })
-                    if ($Diffs.Count -gt 0 -and @($Diffs | Where-Object { -not ($ListPaths.ContainsKey("$($_.Property)") -and $ListPaths["$($_.Property)"] -contains $_.ReceivedValue) }).Count -eq 0) {
+                    $Diffs = @($Graded.Diff.Where({ $_ }))
+                    if ($Diffs.Count -gt 0 -and $Diffs.Where({ -not ($ListPaths.ContainsKey("$($_.Property)") -and $ListPaths["$($_.Property)"] -contains $_.ReceivedValue) }).Count -eq 0) {
                         $State.status = 'Compliant'
                         $State.compliant = $true
                         break
                     }
-                    $FirstDiff ??= @($Diffs | ForEach-Object { $_.Property } | Where-Object { $_ } | Select-Object -Unique)
+                    $FirstDiff ??= @(@($Diffs | ForEach-Object { $_.Property }).Where({ $_ }) | Select-Object -Unique)
                     if ($ListPaths.Count -gt 0) { break }
                 }
                 if ($State.compliant -eq $false -and $State.status -eq 'Not configured') {

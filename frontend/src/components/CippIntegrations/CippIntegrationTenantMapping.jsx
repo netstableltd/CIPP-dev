@@ -100,7 +100,7 @@ const CippIntegrationSettings = ({ children }) => {
       IntegrationName: selectedCompany.label,
       IntegrationId: selectedCompany.value,
       TenantDomain: selectedTenant.addedFields.defaultDomainName,
-      ...(isHudu && { SyncPasswords: true }),
+      ...(supportsSyncPasswords && { SyncPasswords: true }),
     };
 
     setTableData([...tableData, newRowData]);
@@ -148,7 +148,7 @@ const CippIntegrationSettings = ({ children }) => {
           TenantDomain: tenant.defaultDomainName,
           IntegrationName: matchingCompany.name,
           IntegrationId: matchingCompany.value,
-          ...(isHudu && { SyncPasswords: true }),
+          ...(supportsSyncPasswords && { SyncPasswords: true }),
         });
       }
     });
@@ -188,7 +188,7 @@ const CippIntegrationSettings = ({ children }) => {
   };
 
   const extension = extensions.find((extension) => extension.id === router.query.id);
-  const isHudu = extension?.id === "Hudu";
+  const supportsSyncPasswords = ["Hudu", "NinjaOne"].includes(extension?.id);
 
   const handleToggleSyncPasswords = (row) => {
     const target = Array.isArray(row) ? row[0] : row;
@@ -217,7 +217,7 @@ const CippIntegrationSettings = ({ children }) => {
           },
         ]
       : []),
-    ...(isHudu
+    ...(supportsSyncPasswords
       ? [
           {
             label: "Exclude password data (LAPS/BitLocker)",
@@ -250,9 +250,16 @@ const CippIntegrationSettings = ({ children }) => {
 
   // isSuccess only goes false -> true once, so depending on it alone meant a refetch never
   // reached the table and server-side automap results stayed hidden until a page reload.
+  // Rows the server doesn't have yet are unsaved local automap matches; keep them.
   useEffect(() => {
     if (mappings.isSuccess) {
-      setTableData(mappings.data.Mappings ?? []);
+      const serverRows = mappings.data.Mappings ?? [];
+      setTableData((prev) => [
+        ...serverRows,
+        ...(Array.isArray(prev) ? prev : []).filter(
+          (row) => !serverRows.some((server) => server.TenantId === row.TenantId)
+        ),
+      ]);
     }
   }, [mappings.isSuccess, mappings.data]);
 
@@ -378,7 +385,7 @@ const CippIntegrationSettings = ({ children }) => {
                 simpleColumns={[
                   "IntegrationName",
                   "Tenant",
-                  ...(isHudu ? ["SyncPasswords"] : []),
+                  ...(supportsSyncPasswords ? ["SyncPasswords"] : []),
                   "TenantDomain",
                   "TenantId",
                 ]}

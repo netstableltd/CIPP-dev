@@ -65,7 +65,7 @@ Temporary Access Pass has to be enabled in the tenant's authentication methods p
 
 ## Approval
 
-If JIT Admin approval is switched on in the [application settings](../../../cipp/settings/README.md#jit-admin-settings) and the request includes a role that needs approval, submitting the form does not create anything. The request is saved on the [requests.md](requests.md "mention") tab, the approvers are notified, and the result says how many approvals it needs and from which CIPP roles. When no specific roles are set to need approval, every request needs it, including one that only adds groups.
+If JIT Admin approval is switched on in the [application settings](../../../cipp/settings/README.md#jit-admin-settings) and the request is for a tenant and a role that need approval, submitting the form does not create anything. The request is saved on the [requests.md](requests.md "mention") tab, the approvers are notified, and the result says how many approvals it needs and from which CIPP roles. When no specific roles are set to need approval, every request needs it, including one that only adds groups.
 
 The duration limit and the roles you are allowed to grant are checked when you submit, and again when the request is approved.
 
@@ -78,7 +78,7 @@ When an approved request is created, no password or Temporary Access Pass is gen
 | Field               | Description                                                                                 |
 | ------------------- | ------------------------------------------------------------------------------------------- |
 | Expiration Action   | What happens to the account when the window closes. Required.                               |
-| Notification Action | How you are told the JIT admin was created: Webhook, Email, PSA or Push (a notification to your own registered devices). Several can be selected. |
+| Notification Action | How you are told when the JIT admin is created and when it expires: Webhook, Email, PSA or Push (a notification to your own registered devices). Several can be selected. |
 
 The expiration action offers **Delete User** and **Disable User** for any grant. Depending on which switches are on, it also offers **Remove Roles**, **Remove Groups**, or **Remove Roles and Groups**, so the account itself survives and only the elevation is taken away. Changing the switches after choosing clears the selection, since the option may no longer apply.
 
