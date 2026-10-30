@@ -59,7 +59,7 @@ function Update-CIPPSAMCertificate {
     # Shared-SAM guard: when this instance borrows the CIPP-SAM app registration from another
     # instance (e.g. a dev/staging copy of production), it must never create, renew or remove
     # credentials on that app - the other instance would be left holding stale ones.
-    if (Test-CIPPSAMReadOnly) {
+    if ($env:CIPP_SAM_READONLY -eq 'true') {
         Write-Information 'CIPP_SAM_READONLY is set - skipping SAM certificate create/renew/reconcile.'
         return [PSCustomObject]@{
             Renewed  = $false

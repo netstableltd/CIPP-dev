@@ -43,7 +43,7 @@ function Start-UpdateTokensTimer {
 
         # Check application secret expiration for $env:ApplicationId and generate a new application secret if expiration is within 30 days.
         # Skipped entirely when CIPP_SAM_READONLY is set (instance shares the SAM app with another instance).
-        if (Test-CIPPSAMReadOnly) {
+        if ($env:CIPP_SAM_READONLY -eq 'true') {
             Write-Information 'CIPP_SAM_READONLY is set - skipping SAM application secret rotation, expired-secret cleanup and lock configuration.'
         } else { try {
             $AppId = $env:ApplicationID

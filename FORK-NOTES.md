@@ -24,7 +24,7 @@ Feature work for upstream PRs is split out from `preview/reports` into `feat/*` 
 
 | App setting | Effect |
 |---|---|
-| `CIPP_SAM_READONLY=true` | The instance never creates, renews or removes credentials on the CIPP-SAM app registration (weekly Update Tokens timer and `Update-CIPPSAMCertificate`). Use on any instance that borrows another instance's SAM app. Implemented in `Test-CIPPSAMReadOnly`. Candidate for upstream. |
+| `CIPP_SAM_READONLY=true` | The instance never creates, renews or removes credentials on the CIPP-SAM app registration (weekly Update Tokens timer and `Update-CIPPSAMCertificate`). Use on any instance that borrows another instance's SAM app. Checked inline (`$env:CIPP_SAM_READONLY -eq 'true'`) in `Start-UpdateTokensTimer` and `Update-CIPPSAMCertificate`, so upstream's tests run unchanged. Candidate for upstream. |
 
 ## Copying secrets between vaults
 
