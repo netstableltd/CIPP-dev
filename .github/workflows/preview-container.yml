@@ -99,6 +99,12 @@ jobs:
           TAG=$(git tag --sort=-v:refname | head -1)
           TAG=${TAG:-v0.0.0}
           BASE="${TAG#v}"
+          # Fork: upstream's release tags are not always copied to the fork, so use
+          # backend/version_latest.txt (upstream's own version file) when it is newer.
+          FILE_VERSION=$(tr -d '[:space:]' < backend/version_latest.txt 2>/dev/null || true)
+          if [ -n "$FILE_VERSION" ] && [ "$(printf '%s\n%s\n' "$BASE" "$FILE_VERSION" | sort -V | tail -1)" = "$FILE_VERSION" ]; then
+            BASE="$FILE_VERSION"
+          fi
           FULL_SHA=$(git rev-parse HEAD)
           SHORT_SHA=$(git rev-parse --short=7 HEAD)
 
