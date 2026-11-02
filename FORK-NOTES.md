@@ -41,6 +41,8 @@ What the add-on system touches outside its own folders (check these when merging
 
 The manager (Community Additions > Settings > Add-ons) is `ListAddons`, `ExecAddon` and `ExecAddonDownload` (`HTTP Functions/CommunityAdditions`), on functions in `CIPPCore/Public/AddonManager`. Uploads are only checked and stored (table `AddonPackages`), never run: installing is `build/tools/addons/Install-CippAddon.ps1`, then commit and push.
 
+Shared pieces add-ons can use (core, not inside any add-on): `CIPPCore/Public/AddonKit` (`ConvertFrom-CIPPDocxGuide`, `Get-CIPPAddonGuide`), the `ExecAddonGuide` endpoint (Word guides listed under `guides` in a manifest, stored in table `AddonGuides`), and `frontend/src/components/CippAddons` (`CippAddonPdfCard`, `CippAddonStepResults`, `CippAddonGuideUpload`). Add-on #2 is `shared-mailbox`. The Claude add-on still has its own copies of the PDF card, step results and guide upload (guide in table `CommunityProcesses`); moving it onto the kit is a later tidy-up.
+
 Old URLs `/community/standard-processes(/claude-m365)` redirect to the new ones; remove those two pages once nobody uses them.
 
 ## Copying secrets between vaults

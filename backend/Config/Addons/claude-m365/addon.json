@@ -34,12 +34,13 @@
   "dependsOn": {
     "functions": [
       "Add-CIPPAzDataTableEntity",
+      "ConvertFrom-CIPPDocxGuide",
       "ConvertTo-CIPPODataFilterValue",
       "ConvertTo-CippReportPdf",
       "Get-CIPPAzDataTableEntity",
-      "Get-CIPPTable",
       "Get-CippException",
       "Get-CippReportTenantName",
+      "Get-CIPPTable",
       "Get-Tenants",
       "New-CippReportAlertBox",
       "New-CippReportBullets",

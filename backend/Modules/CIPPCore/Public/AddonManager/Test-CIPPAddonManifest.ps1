@@ -35,6 +35,11 @@ function Test-CIPPAddonManifest {
         if (@($Item.permissions | Where-Object { $_ }).Count -eq 0) { $Problems.Add("Menu entry '$($Item.title)' has no permissions.") }
         if ("$($Item.path)" -notmatch "^/addons/$([regex]::Escape("$($M.id)"))(/[a-z0-9-]+)*$") { $Problems.Add("Menu entry '$($Item.title)' must have a path under /addons/$($M.id).") }
     }
+    foreach ($G in @($M.guides)) {
+        if (-not $G) { continue }
+        if ("$($G.key)" -notmatch '^[a-z0-9][a-z0-9-]{0,40}$') { $Problems.Add("Guide '$($G.key)' needs a key of lowercase letters, numbers and dashes.") }
+        if (-not "$($G.title)".Trim()) { $Problems.Add("Guide '$($G.key)' has no title.") }
+    }
     foreach ($E in @($M.endpoints)) { if ($E -and "$E" -notmatch '^[A-Za-z][A-Za-z0-9]{2,80}$') { $Problems.Add("Endpoint '$E' isn't a valid name.") } }
     @($Problems)
 }

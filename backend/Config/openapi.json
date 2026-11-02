@@ -22,6 +22,9 @@
       "name": "Addons > claude-m365"
     },
     {
+      "name": "Addons > shared-mailbox"
+    },
+    {
       "name": "CIPP > Core"
     },
     {
@@ -13032,6 +13035,76 @@
           }
         ],
         "x-cipp-role": "CIPP.AppSettings.Read"
+      }
+    },
+    "/api/ExecAddonGuide": {
+      "post": {
+        "summary": "ExecAddonGuide",
+        "operationId": "ExecAddonGuide",
+        "tags": [
+          "CommunityAdditions"
+        ],
+        "description": "Community Additions: a how-to guide for an add-on (AddonId), one of the guides its addon.json lists (Key). Action Upload saves a Word document (FileName, Data as base64 or a data URL; .docx, up to 10 MB), checking first that it can be read; Action Remove deletes it. Guides are kept in this CIPP instance, not in the code, and added to the end of the add-on's PDFs.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Action": {
+                    "type": "string"
+                  },
+                  "AddonId": {
+                    "type": "string"
+                  },
+                  "Data": {
+                    "type": "string"
+                  },
+                  "FileName": {
+                    "type": "string"
+                  },
+                  "Key": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResults"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "CIPP.AppSettings.ReadWrite"
       }
     },
     "/api/ExecAddSPN": {
@@ -40160,6 +40233,266 @@
         "x-cipp-role": "Tenant.AI.ReadWrite"
       }
     },
+    "/api/ExecSharedMailboxCustomerPdf": {
+      "post": {
+        "summary": "ExecSharedMailboxCustomerPdf",
+        "operationId": "ExecSharedMailboxCustomerPdf",
+        "tags": [
+          "Addons > shared-mailbox"
+        ],
+        "description": "Community Additions > Shared mailbox (add-on shared-mailbox): the customer PDF for a new shared mailbox in the tenant (tenantFilter): the choices to make (who gets access and how, sending, Outlook, sent emails, signature, address book, who can email it, size and licence), what each option means with its pros and cons, what we recommend, and what to reply with. Optional MailboxName (the mailbox asked for), ContactName (who it is addressed to) and PreparedBy (who it is from). Returns application/pdf with the CIPP branding.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ContactName": {
+                    "type": "string"
+                  },
+                  "MailboxName": {
+                    "type": "string"
+                  },
+                  "PreparedBy": {
+                    "type": "string"
+                  },
+                  "tenantFilter": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "tenantFilter"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/tenantFilter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Not described statically: this endpoint returns the upstream response as-is, so its fields are determined by the upstream API rather than by CIPP. Call the endpoint to see the actual shape, or add a response schema in backend/Config/openapi-overrides."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "Exchange.Mailbox.Read"
+      }
+    },
+    "/api/ExecSharedMailboxSetup": {
+      "post": {
+        "summary": "ExecSharedMailboxSetup",
+        "operationId": "ExecSharedMailboxSetup",
+        "tags": [
+          "Addons > shared-mailbox"
+        ],
+        "description": "Community Additions > Shared mailbox (add-on shared-mailbox): creates a shared mailbox (New: DisplayName, Address, Aliases) or sets up an existing one (Identity), following the customer's choices (Answers: grantVia people or group, send sendAs/sendOnBehalf/none, outlook automap or account, sentItems shared or personal, signature manual/rule/tool, visibility visible or hidden, external anyone or internal, size standard or licensed; a missing answer takes our recommendation). People are the sign-in names of who needs access; GroupName the access group for grantVia group. SignatureHtml is the signature the mail rule adds (signature rule). EnableArchive turns on the archive (licensed only). BlockSignIn (default true), RemoveOthers (take access from anyone not listed), ReapplyAccess (re-grant Full Access so automapping matches), Language and TimeZone (default en-GB, GMT Standard Time). Safe to run again; returns each step (Step, Status, Message) and the mailbox's status afterwards. See Set-CIPPSharedMailbox.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Answers": {
+                    "type": "string"
+                  },
+                  "BlockSignIn": {
+                    "type": "boolean"
+                  },
+                  "EnableArchive": {
+                    "type": "boolean"
+                  },
+                  "GroupName": {
+                    "type": "string"
+                  },
+                  "Identity": {
+                    "type": "string"
+                  },
+                  "Language": {
+                    "type": "string"
+                  },
+                  "New": {
+                    "type": "object",
+                    "properties": {
+                      "Address": {
+                        "type": "string"
+                      },
+                      "Aliases": {
+                        "type": "string"
+                      },
+                      "DisplayName": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "People": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/LabelValue"
+                    }
+                  },
+                  "ReapplyAccess": {
+                    "type": "boolean"
+                  },
+                  "RemoveOthers": {
+                    "type": "boolean"
+                  },
+                  "SignatureHtml": {
+                    "type": "string"
+                  },
+                  "tenantFilter": {
+                    "type": "string"
+                  },
+                  "TimeZone": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "tenantFilter"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResults"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "Exchange.Mailbox.ReadWrite"
+      }
+    },
+    "/api/ExecSharedMailboxSummaryPdf": {
+      "post": {
+        "summary": "ExecSharedMailboxSummaryPdf",
+        "operationId": "ExecSharedMailboxSummaryPdf",
+        "tags": [
+          "Addons > shared-mailbox"
+        ],
+        "description": "Community Additions > Shared mailbox (add-on shared-mailbox): the \"your shared mailbox is ready\" PDF for a shared mailbox (Identity, its address) in the tenant (tenantFilter): how it is set up, read from the tenant, anything not finished, and a guide for the team on adding it to Outlook, sending from it and working together, matched to the choices made (Answers, as for ExecSharedMailboxSetup). The uploaded step-by-step guide is added at the end unless IncludeGuide is false. Optional ContactName and PreparedBy. Returns application/pdf with the CIPP branding.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Answers": {
+                    "type": "string"
+                  },
+                  "ContactName": {
+                    "type": "string"
+                  },
+                  "Identity": {
+                    "type": "string"
+                  },
+                  "IncludeGuide": {
+                    "type": "string"
+                  },
+                  "PreparedBy": {
+                    "type": "string"
+                  },
+                  "tenantFilter": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "tenantFilter"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/tenantFilter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Not described statically: this endpoint returns the upstream response as-is, so its fields are determined by the upstream API rather than by CIPP. Call the endpoint to see the actual shape, or add a response schema in backend/Config/openapi-overrides."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "Exchange.Mailbox.Read"
+      }
+    },
     "/api/ExecSharePointPermissionsSync": {
       "post": {
         "summary": "Start a SharePoint permissions report sync",
@@ -64359,6 +64692,63 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "Exchange.Mailbox.Read"
+      }
+    },
+    "/api/ListSharedMailboxSetup": {
+      "get": {
+        "summary": "ListSharedMailboxSetup",
+        "operationId": "ListSharedMailboxSetup",
+        "tags": [
+          "Addons > shared-mailbox"
+        ],
+        "description": "Community Additions > Shared mailbox (add-on shared-mailbox). Read-only. Returns the questions for the customer with their options and our recommendations (Options), the uploaded step-by-step guide if any (Guide), and either the tenant's shared mailboxes (Mailboxes; no Identity) or how one shared mailbox (Identity, its address) is set up now: who has Full Access, Send As and Send on behalf, the access group, sent-item copies, address book, who can email it, signature rule, size, licence, archive, regional settings, sign-in, and the answers those amount to (Current).",
+        "parameters": [
+          {
+            "name": "Identity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/tenantFilter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "description": "Not described statically: this endpoint returns the upstream response as-is, so its fields are determined by the upstream API rather than by CIPP. Call the endpoint to see the actual shape, or add a response schema in backend/Config/openapi-overrides."
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
           },
           "401": {
             "description": "Unauthorized - invalid or missing bearer token"

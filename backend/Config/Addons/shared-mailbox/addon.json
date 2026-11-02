@@ -1,0 +1,81 @@
+{
+  "schema": 1,
+  "id": "shared-mailbox",
+  "name": "Shared mailbox",
+  "version": "1.0.0",
+  "description": "Sets up a shared mailbox the way the customer chooses: a PDF of the choices (access, sending, Outlook, sent items, signature, address book, who can email it, size) with what each means and our recommendation, then creates or updates the mailbox with all of them, and a PDF for the team on adding and using it.",
+  "author": "Netstable",
+  "category": "Standard process",
+  "cipp": {
+    "minVersion": "11.2.0",
+    "testedWith": [
+      "11.2.1"
+    ]
+  },
+  "menu": [
+    {
+      "title": "Shared mailbox",
+      "path": "/addons/shared-mailbox",
+      "permissions": [
+        "Exchange.Mailbox.*"
+      ],
+      "placement": "Community Additions",
+      "preferredPlacement": "Email & Exchange > Administration"
+    }
+  ],
+  "endpoints": [
+    "ExecSharedMailboxCustomerPdf",
+    "ExecSharedMailboxSetup",
+    "ExecSharedMailboxSummaryPdf",
+    "ListSharedMailboxSetup"
+  ],
+  "guides": [
+    {
+      "key": "sending",
+      "title": "Sending from the shared mailbox",
+      "what": "Your own step-by-step guide with screenshots (a Word document), added to the end of the \"your shared mailbox is ready\" PDF."
+    }
+  ],
+  "dependsOn": {
+    "functions": [
+      "ConvertFrom-CIPPDocxGuide",
+      "ConvertTo-CippReportPdf",
+      "Get-CIPPAddonGuide",
+      "Get-CippException",
+      "Get-CippReportTenantName",
+      "New-CippReportAlertBox",
+      "New-CippReportBullets",
+      "New-CippReportHeading",
+      "New-CippReportInfoBox",
+      "New-CippReportNote",
+      "New-CippReportPage",
+      "New-CippReportParagraph",
+      "New-CippReportTable",
+      "New-ExoRequest",
+      "New-GraphGetRequest",
+      "New-GraphPOSTRequest",
+      "Set-CIPPMailboxPermission",
+      "Write-LogMessage"
+    ],
+    "frontend": [
+      "src/api/ApiCall",
+      "src/components/CippAddons/CippAddonGuideUpload",
+      "src/components/CippAddons/CippAddonPdfCard",
+      "src/components/CippAddons/CippAddonStepResults",
+      "src/components/CippCards/CippPageCard",
+      "src/components/CippComponents/CippFormComponent",
+      "src/components/CippComponents/CippFormDomainSelector",
+      "src/components/CippComponents/CippFormUserSelector",
+      "src/hooks/use-settings",
+      "src/layouts/index"
+    ]
+  },
+  "coreChanges": [],
+  "storage": [
+    {
+      "table": "AddonGuides",
+      "what": "The uploaded sending guide (row shared-mailbox / sending)."
+    }
+  ],
+  "graphPermissions": "Uses CIPP's existing delegated access (GDAP): Exchange Online (mailboxes, permissions, groups, mail flow rules) and Microsoft Graph users and licence details."
+}

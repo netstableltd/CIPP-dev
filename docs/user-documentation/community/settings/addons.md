@@ -33,6 +33,7 @@ The manifest says:
 * `dependsOn`: what it uses from CIPP itself (functions and frontend files), kept up to date by `Update-CippAddonDependencies.ps1` and checked by the tests;
 * `coreChanges`: changes it needed to CIPP's own files, which can conflict when CIPP is updated;
 * `storage`: tables it keeps data in.
+* `guides`: how-to guides (Word documents with screenshots) the MSP can upload for it, kept in the CIPP instance rather than the code and added to its customer PDFs.
 
 ## The page
 

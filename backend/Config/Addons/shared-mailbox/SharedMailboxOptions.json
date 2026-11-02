@@ -1,0 +1,238 @@
+{
+  "_comment": "Shared mailbox add-on (shared-mailbox): the questions to ask the customer, each option with what it means (summary, pros, cons) and our recommendation. Read by the customer PDF, the setup page (as the form's choices and defaults) and the summary PDF. Option ids are what ExecSharedMailboxSetup takes.",
+  "questions": [
+    {
+      "id": "grantVia",
+      "title": "Giving people access",
+      "question": "Should people get access one by one, or through a group?",
+      "options": [
+        {
+          "id": "people",
+          "label": "Person by person",
+          "summary": "Each person is given access individually.",
+          "pros": ["The mailbox appears in each person's Outlook by itself (if you choose that below).", "Simple to see who has access."],
+          "cons": ["Each new starter or leaver needs a change by us."],
+          "recommended": true,
+          "suits": "Up to about 20 people."
+        },
+        {
+          "id": "group",
+          "label": "Through a group",
+          "summary": "Access goes to a mail-enabled security group; anyone in the group has access.",
+          "pros": ["Adding or removing someone is a change to the group only.", "Suits larger or changing teams."],
+          "cons": ["The mailbox doesn't appear in Outlook by itself: each person has to add it once.", "Group changes can take a while to reach Outlook."],
+          "recommended": false,
+          "suits": "Large teams, or teams whose members change often."
+        }
+      ]
+    },
+    {
+      "id": "send",
+      "title": "Sending",
+      "question": "How should people send emails from the mailbox?",
+      "options": [
+        {
+          "id": "sendAs",
+          "label": "Send as the mailbox",
+          "summary": "Emails come from the shared address only, for example info@.",
+          "pros": ["Customers see one consistent address.", "Replies come back to the shared mailbox."],
+          "cons": ["Recipients can't see which person sent it (add a name in the signature if that matters)."],
+          "recommended": true,
+          "suits": "Almost every shared mailbox."
+        },
+        {
+          "id": "sendOnBehalf",
+          "label": "Send on behalf of the mailbox",
+          "summary": "Emails show as \"Jane Smith on behalf of Info\".",
+          "pros": ["Recipients can see who sent each email."],
+          "cons": ["Looks less polished, and shows the person's own name to customers.", "Some recipients reply to the person rather than the shared address."],
+          "recommended": false,
+          "suits": "When it must be clear which person sent each email."
+        },
+        {
+          "id": "none",
+          "label": "Read only (no sending)",
+          "summary": "People can read and file emails but not send from the shared address.",
+          "pros": ["No risk of emails going out from the shared address by mistake."],
+          "cons": ["Replies have to come from people's own addresses."],
+          "recommended": false,
+          "suits": "Mailboxes that only receive, such as a notifications or scanner inbox."
+        }
+      ]
+    },
+    {
+      "id": "outlook",
+      "title": "In Outlook",
+      "question": "How should the mailbox appear in Outlook?",
+      "options": [
+        {
+          "id": "automap",
+          "label": "Automatically, under each person's own mailbox",
+          "summary": "Outlook adds the mailbox by itself (automapping), shown below the person's own folders.",
+          "pros": ["Nothing for people to set up on their computers.", "Replies from inside the mailbox usually go from the shared address."],
+          "cons": ["New emails start from the person's own address: they pick the shared address in From (Outlook remembers it after the first time).", "No automatic signature for the shared mailbox in classic Outlook."],
+          "recommended": true,
+          "suits": "People who use the mailbox now and then."
+        },
+        {
+          "id": "account",
+          "label": "As a separate account in Outlook",
+          "summary": "Each person adds the mailbox to Outlook as a second account (signing in as themselves).",
+          "pros": ["Emails always go from the shared address.", "It can have its own automatic signature.", "Behaves like a separate inbox."],
+          "cons": ["A one-off setup on each computer.", "Works best in classic Outlook; new Outlook handles it less well."],
+          "recommended": false,
+          "suits": "People who work mainly from the shared mailbox."
+        }
+      ]
+    },
+    {
+      "id": "sentItems",
+      "title": "Sent emails",
+      "question": "Where should a copy of sent emails be kept?",
+      "options": [
+        {
+          "id": "shared",
+          "label": "In the shared mailbox too",
+          "summary": "Every email sent from the shared address is also saved in the shared mailbox's Sent Items.",
+          "pros": ["Everyone can see what has been sent, whichever person sent it.", "Works from Outlook, the web and phones."],
+          "cons": ["The sender also keeps a copy in their own Sent Items."],
+          "recommended": true,
+          "suits": "Almost every shared mailbox."
+        },
+        {
+          "id": "personal",
+          "label": "Only in the sender's own Sent Items",
+          "summary": "Sent emails are saved only by the person who sent them.",
+          "pros": ["No duplicate copies."],
+          "cons": ["Nobody else can see what was sent, so emails can be answered twice or missed."],
+          "recommended": false,
+          "suits": "Rarely the right choice."
+        }
+      ]
+    },
+    {
+      "id": "signature",
+      "title": "Signature",
+      "question": "What signature should emails from the mailbox have?",
+      "options": [
+        {
+          "id": "manual",
+          "label": "People choose it themselves",
+          "summary": "We give people the shared signature to save as a second signature, and they pick it when they send.",
+          "pros": ["No cost.", "People see the signature while writing."],
+          "cons": ["Relies on people remembering to pick it."],
+          "recommended": true,
+          "suits": "Small teams who send from the mailbox now and then."
+        },
+        {
+          "id": "rule",
+          "label": "Added automatically by Microsoft 365",
+          "summary": "A mail rule adds the signature to every email sent from the shared address.",
+          "pros": ["No cost, and nobody can forget it.", "Works from any device."],
+          "cons": ["People don't see it while writing.", "It goes at the very bottom of an email thread, not under the latest reply.", "Plain formatting only."],
+          "recommended": false,
+          "suits": "When consistency matters more than looks."
+        },
+        {
+          "id": "tool",
+          "label": "A signature service",
+          "summary": "A service such as Exclaimer or CodeTwo adds the right signature for whichever address the email is from.",
+          "pros": ["Professional, consistent signatures for everyone, including shared mailboxes.", "Can be managed centrally."],
+          "cons": ["A monthly cost per person."],
+          "recommended": false,
+          "suits": "Businesses that want consistent branding on every email."
+        }
+      ]
+    },
+    {
+      "id": "visibility",
+      "title": "Address book",
+      "question": "Should staff see the mailbox in the address book?",
+      "options": [
+        {
+          "id": "visible",
+          "label": "Yes, show it",
+          "summary": "Staff can find the shared address in the address book.",
+          "pros": ["Easy for colleagues to email."],
+          "cons": [],
+          "recommended": true,
+          "suits": "Most mailboxes."
+        },
+        {
+          "id": "hidden",
+          "label": "No, hide it",
+          "summary": "The mailbox still receives email but doesn't appear in the address book.",
+          "pros": ["Keeps the address book tidy for mailboxes staff never email."],
+          "cons": ["Colleagues have to type the address in full."],
+          "recommended": false,
+          "suits": "Mailboxes that only receive from outside, such as a scanner or system inbox."
+        }
+      ]
+    },
+    {
+      "id": "external",
+      "title": "Who can email it",
+      "question": "Who should be able to email the mailbox?",
+      "options": [
+        {
+          "id": "anyone",
+          "label": "Anyone, inside or outside the business",
+          "summary": "The mailbox accepts email from anyone.",
+          "pros": ["Customers and suppliers can use it."],
+          "cons": ["It receives the same spam as any public address."],
+          "recommended": true,
+          "suits": "Public addresses such as info@ or accounts@."
+        },
+        {
+          "id": "internal",
+          "label": "Only people in the business",
+          "summary": "Email from outside the business is rejected.",
+          "pros": ["No spam or outside email."],
+          "cons": ["Customers and suppliers can't email it."],
+          "recommended": false,
+          "suits": "Internal-only mailboxes, such as an HR or IT requests inbox."
+        }
+      ]
+    },
+    {
+      "id": "size",
+      "title": "Size and licence",
+      "question": "How much email will it hold, and does it need an archive or legal hold?",
+      "options": [
+        {
+          "id": "standard",
+          "label": "Standard, no licence",
+          "summary": "Up to 50 GB of email, with no archive.",
+          "pros": ["No monthly cost."],
+          "cons": ["No archive mailbox or legal hold.", "Needs a licence if it grows past 50 GB."],
+          "recommended": true,
+          "suits": "Most shared mailboxes."
+        },
+        {
+          "id": "licensed",
+          "label": "Licensed (Exchange Online Plan 1)",
+          "summary": "Up to 100 GB, plus an archive mailbox, and it can be placed on legal hold.",
+          "pros": ["Room for years of email.", "Meets retention or legal-hold requirements."],
+          "cons": ["A monthly licence cost."],
+          "recommended": false,
+          "suits": "Busy mailboxes kept for years, or ones under a retention policy."
+        }
+      ]
+    }
+  ],
+  "alwaysDone": [
+    { "label": "Sign-in blocked", "text": "Nobody signs in to the shared mailbox itself; people reach it through their own accounts, so it has no password to look after." },
+    { "label": "Regional settings", "text": "UK language and time zone, so folder names and dates are right." }
+  ],
+  "teamTips": [
+    { "label": "Read and unread are shared", "text": "If one person opens an email it shows as read for everyone. Agree a simple system, for example: unread means nobody has looked; a category with your name means it's yours; a flag means waiting; move to a Done folder when finished." },
+    { "label": "Rules", "text": "Rules for the shared mailbox are set up in Outlook on the web: open the mailbox there (profile picture, Open another mailbox) and add them in its settings." },
+    { "label": "Changes take a while", "text": "New access can take up to an hour to appear, and Outlook may need restarting." }
+  ],
+  "alternatives": [
+    { "label": "Microsoft 365 group", "text": "A group inbox with a shared calendar and files. Members see it under Groups in Outlook. Better for team collaboration than handling customer email." },
+    { "label": "Distribution list", "text": "Everyone gets their own copy of each email. Simple, but nobody can see whether someone else has already replied." },
+    { "label": "Ticketing system", "text": "When emails need an owner, a status and no double replies, a help desk system (for example email-to-ticket) does this better than any mailbox." }
+  ],
+  "defaults": { "language": "en-GB", "timeZone": "GMT Standard Time", "accessGroupPrefix": "SG-Mailbox-" }
+}

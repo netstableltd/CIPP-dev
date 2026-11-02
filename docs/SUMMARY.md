@@ -373,6 +373,7 @@
   * [Settings](user-documentation/reports/settings.md)
 * [Community Additions](user-documentation/community/README.md)
   * [Claude for Microsoft 365](user-documentation/addons/claude-m365/README.md)
+  * [Shared mailbox](user-documentation/addons/shared-mailbox/README.md)
   * [Settings](user-documentation/community/settings/addons.md)
     * [Add-ons](user-documentation/community/settings/addons.md)
 * [Tools](user-documentation/tools/README.md)
