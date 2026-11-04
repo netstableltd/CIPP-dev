@@ -33,6 +33,7 @@ The manifest says:
 * `dependsOn`: what it uses from CIPP itself (functions and frontend files), kept up to date by `Update-CippAddonDependencies.ps1` and checked by the tests;
 * `coreChanges`: changes it needed to CIPP's own files, which can conflict when CIPP is updated;
 * `storage`: tables it keeps data in.
+* `extends`: CIPP pages it adds to through an extension point, rather than having its own page (for example `userBulkEdit`, a property in the Users bulk edit);
 * `guides`: how-to guides (Word documents with screenshots) the MSP can upload for it, kept in the CIPP instance rather than the code and added to its customer PDFs.
 
 ## The page
@@ -105,6 +106,16 @@ For each add-on it lists:
 * whether the add-on has been tested on the new version.
 
 After merging, the add-on tests (`backend/Tests/Addons`) fail until each add-on lists the new version in `cipp.testedWith`, so recording that it has been checked is part of the update.
+
+## Adding to CIPP's own pages
+
+An add-on can also add to a page that belongs to CIPP, through an extension point: it ships a file with an agreed name in its components folder, and the page picks it up when CIPP is built. With the add-on turned off the addition is hidden; with it removed, the page is exactly as before.
+
+| Extension point | File | Adds |
+| --- | --- | --- |
+| `userBulkEdit` | `frontend/src/addons/<id>/userBulkEdit.js` | A property in **Identity Management > Users > Edit Properties**. Its change is sent to the add-on's own endpoint, never to CIPP's PatchUser. |
+
+`frontend/src/utils/addon-extensions.js` describes each extension point's contract.
 
 ## Where add-ons appear in the menu
 

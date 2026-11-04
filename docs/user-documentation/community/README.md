@@ -8,4 +8,5 @@ description: Additions to CIPP contributed by the community, packaged as add-ons
 
 * [Claude for Microsoft 365](../addons/claude-m365/README.md): set up Anthropic's Claude connector for Microsoft 365 in a tenant, limited to the people you choose.
 * [Shared mailbox](../addons/shared-mailbox/README.md): set up a shared mailbox the way the customer chooses, with a PDF of the choices before and a guide for their team after.
+* [Bulk email domain](../addons/bulk-email-domain/README.md): adds Email Domain to the Users bulk edit, to give many users an address on another domain as an alias or as their primary address.
 * [Settings > Add-ons](settings/addons.md): turn add-ons on and off, check them against this CIPP version, and upload or download add-on packages.

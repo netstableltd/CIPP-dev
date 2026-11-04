@@ -8,6 +8,12 @@ const ROOTS = [
     modules: import.meta.glob('/src/pages/**/*.json', { eager: true }),
   },
   {
+    // fork: add-on extension files (utils/addon-extensions.js)
+    suffix: '/addons',
+    base: '/src/addons',
+    modules: import.meta.glob('/src/addons/*/userBulkEdit.{js,jsx}', { eager: true }),
+  },
+  {
     // fork: Community Additions add-on manifests (utils/addon-menu.js), outside the frontend
     suffix: '/backend/Config/Addons',
     base: '../../../backend/Config/Addons',

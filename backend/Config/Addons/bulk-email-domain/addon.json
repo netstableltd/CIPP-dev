@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "id": "bulk-email-domain",
+  "name": "Bulk email domain",
+  "version": "1.0.0",
+  "description": "Adds Email Domain to Identity Management > Users > Edit Properties: give the selected users an address on another domain, either as an alias or as their new primary email address (the old one stays as an alias). Works alongside the existing UPN Domain Suffix option, so a domain change can be done in stages: aliases first, then the primary address, then sign-in names.",
+  "author": "Netstable",
+  "category": "Bulk action",
+  "cipp": {
+    "minVersion": "11.2.0",
+    "testedWith": [
+      "11.2.1"
+    ]
+  },
+  "menu": [],
+  "extends": [
+    {
+      "point": "userBulkEdit",
+      "where": "Identity Management > Users > Edit Properties",
+      "file": "frontend/src/addons/bulk-email-domain/userBulkEdit.js"
+    }
+  ],
+  "endpoints": [
+    "ExecBulkEmailDomain"
+  ],
+  "upstream": "Candidate for a pull request to CyberDrain/CIPP (follows #6013, which added the bulk UPN change but not aliases or the primary address). Upstream, the property would go straight into PATCHABLE_PROPERTIES in patch-wizard.jsx and the endpoint beside Invoke-EditUserAliases.",
+  "dependsOn": {
+    "functions": [
+      "Get-CippException",
+      "Get-NormalizedError",
+      "New-ExoBulkRequest",
+      "New-ExoRequest",
+      "New-GraphGetRequest",
+      "Write-LogMessage"
+    ],
+    "frontend": [
+      "src/components/CippComponents/CippFormDomainSelector"
+    ]
+  },
+  "coreChanges": [
+    {
+      "area": "Users bulk edit wizard (extension point)",
+      "files": [
+        "frontend/src/pages/identity/administration/users/patch-wizard.jsx",
+        "frontend/src/utils/addon-extensions.js"
+      ],
+      "what": "A generic extension point: add-ons can add properties to Edit Properties through a userBulkEdit.js file. Their changes are sent to the add-on's own endpoint, never to PatchUser. Without add-ons the wizard is unchanged."
+    }
+  ],
+  "storage": [],
+  "graphPermissions": "Uses CIPP's existing delegated access (GDAP): Exchange Online Get-Mailbox, Get-Recipient and Set-Mailbox, and Microsoft Graph domains."
+}

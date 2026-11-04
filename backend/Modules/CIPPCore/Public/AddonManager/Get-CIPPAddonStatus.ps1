@@ -36,6 +36,7 @@ function Get-CIPPAddonStatus {
             TestedWith         = @($M.cipp.testedWith)
             TestedOnLatest     = if ($Latest) { [bool](@($M.cipp.testedWith) | Where-Object { (& $MajorMinor $_) -eq (& $MajorMinor $Latest) }) } else { $null }
             Menu               = @($M.menu)
+            Extends            = @($M.extends)
             Endpoints          = @($M.endpoints)
             DependsOn          = [pscustomobject]@{ Functions = @($M.dependsOn.functions).Count; Frontend = @($M.dependsOn.frontend).Count }
             CoreChanges        = @($M.coreChanges)

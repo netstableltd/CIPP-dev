@@ -28,6 +28,7 @@ BeforeAll {
     function Remove-CIPPAzDataTableEntity { param($Context, $Entity, [switch]$Force) $script:Removed.Add($Entity); $null = $script:Saved.Remove($Entity) }
     function Invoke-CIPPRestMethod { param($Uri) throw 'offline' }
     function Set-CIPPFeatureFlag { param($Id, $Enabled) $script:FlagSet = @{ Id = $Id; Enabled = $Enabled }; $true }
+    function Test-CIPPFeatureFlagCondition { param($Condition) $false }
 
     foreach ($F in Get-ChildItem -Path (Join-Path $RepoRoot 'Modules/CIPPCore/Public/AddonManager') -Filter '*.ps1') { . $F.FullName }
     . (& $Find 'Get-CIPPFeatureFlag.ps1')

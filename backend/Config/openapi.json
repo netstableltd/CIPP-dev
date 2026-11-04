@@ -19,6 +19,9 @@
   ],
   "tags": [
     {
+      "name": "Addons > bulk-email-domain"
+    },
+    {
       "name": "Addons > claude-m365"
     },
     {
@@ -17357,6 +17360,84 @@
           }
         ],
         "x-cipp-role": "CIPP.BreachLookup.Read"
+      }
+    },
+    "/api/ExecBulkEmailDomain": {
+      "post": {
+        "summary": "ExecBulkEmailDomain",
+        "operationId": "ExecBulkEmailDomain",
+        "tags": [
+          "Addons > bulk-email-domain"
+        ],
+        "description": "Identity Management > Users > Edit Properties (add-on bulk-email-domain): gives the selected users (Users: [{ id, userPrincipalName }], one tenant: tenantFilter) an email address on a verified domain (Domain). Mode alias adds it as an alias; Mode primary adds it and makes it the primary address, keeping the old primary address as an alias. NameFrom email (default) uses the part before the @ of each user's current email address, NameFrom upn the part of their sign-in name. Sign-in names are not changed. Users without a mailbox, synced from on-premises, or whose new address another recipient already has are skipped with the reason. Returns a line per user.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Domain": {
+                    "$ref": "#/components/schemas/LabelValue"
+                  },
+                  "Mode": {
+                    "type": "string"
+                  },
+                  "NameFrom": {
+                    "type": "string"
+                  },
+                  "tenantFilter": {
+                    "type": "string"
+                  },
+                  "Users": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "tenantFilter"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResults"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "Identity.User.ReadWrite"
       }
     },
     "/api/ExecBulkLicense": {

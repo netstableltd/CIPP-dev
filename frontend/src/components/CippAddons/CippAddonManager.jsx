@@ -69,6 +69,7 @@ const resultText = (action) =>
 /** One installed add-on: what it is, whether it suits this CIPP, on/off, open and download. */
 const InstalledAddon = ({ addon, latest, onToggle, busy }) => {
   const [downloadError, setDownloadError] = useState(null)
+  const hasMenu = (addon.Menu ?? []).length > 0
   const placement = addon.Menu?.[0]?.placement || 'Community Additions'
   const preferred = addon.Menu?.[0]?.preferredPlacement
   return (
@@ -168,15 +169,29 @@ const InstalledAddon = ({ addon, latest, onToggle, busy }) => {
               </Typography>
             </>
           )}
-          <Typography component="dt" variant="body2">
-            In the menu
-          </Typography>
-          <Typography component="dd" variant="body2">
-            {placement}
-            {preferred && preferred !== placement
-              ? ` (could later move to ${preferred})`
-              : ''}
-          </Typography>
+          {hasMenu ? (
+            <>
+              <Typography component="dt" variant="body2">
+                In the menu
+              </Typography>
+              <Typography component="dd" variant="body2">
+                {placement}
+                {preferred && preferred !== placement
+                  ? ` (could later move to ${preferred})`
+                  : ''}
+              </Typography>
+            </>
+          ) : null}
+          {(addon.Extends ?? []).length > 0 && (
+            <>
+              <Typography component="dt" variant="body2">
+                Adds to
+              </Typography>
+              <Typography component="dd" variant="body2">
+                {addon.Extends.map((e) => e.where).join('; ')}
+              </Typography>
+            </>
+          )}
           {addon.CoreChanges?.length > 0 && (
             <>
               <Typography component="dt" variant="body2">

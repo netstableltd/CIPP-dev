@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, Suspense } from 'react'
 import { useWatch } from 'react-hook-form'
 import { CippIcons } from '../../../../utils/icon-registry'
 import { useRouter } from 'next/router'
@@ -26,6 +26,8 @@ import { CippDataTable } from '../../../../components/CippTable/CippDataTable'
 import { CippFormDomainSelector } from '../../../../components/CippComponents/CippFormDomainSelector'
 import { CippFormUserSelector } from '../../../../components/CippComponents/CippFormUserSelector'
 import { useSettings } from '../../../../hooks/use-settings'
+// Fork: properties added by Community Additions add-ons (src/utils/addon-extensions.js).
+import { enabledAddonExtensions, userBulkEditExtensions } from '../../../../utils/addon-extensions'
 
 // User properties that can be patched
 const PATCHABLE_PROPERTIES = [
@@ -316,7 +318,7 @@ const UsersDisplayStep = (props) => {
 
 // Step 2: Property selection and input
 const PropertySelectionStep = (props) => {
-  const { onNextStep, onPreviousStep, formControl, currentStep, users } = props
+  const { onNextStep, onPreviousStep, formControl, currentStep, users, addonExtensions = [] } = props
   const [selectedProperties, setSelectedProperties] = useState([])
 
   // Get unique tenant domains from users
@@ -328,7 +330,11 @@ const PropertySelectionStep = (props) => {
   const hasSponsorSelected = selectedProperties.includes('sponsor')
   const hasRelationshipSelected = hasManagerSelected || hasSponsorSelected
   const hasUPNSelected = selectedProperties.includes('userPrincipalName')
-  const hasTenantScopedSelectorSelected = hasRelationshipSelected || hasUPNSelected
+  const hasAddonSingleTenantSelected = addonExtensions.some(
+    (e) => e.singleTenant && selectedProperties.includes(e.property)
+  )
+  const hasTenantScopedSelectorSelected =
+    hasRelationshipSelected || hasUPNSelected || hasAddonSingleTenantSelected
 
   useEffect(() => {
     if (!hasTenantScopedSelectorSelected || !firstTenantDomain) {
@@ -377,9 +383,10 @@ const PropertySelectionStep = (props) => {
       ...PATCHABLE_PROPERTIES.filter(
         (property) => isSingleTenant || property.property !== 'userPrincipalName'
       ),
+      ...addonExtensions.filter((e) => isSingleTenant || !e.singleTenant),
       ...customDataProperties,
     ]
-  }, [customDataProperties, isSingleTenant])
+  }, [customDataProperties, isSingleTenant, addonExtensions])
 
   // Register form fields
   formControl.register('selectedProperties', { required: true })
@@ -395,6 +402,20 @@ const PropertySelectionStep = (props) => {
   const renderPropertyInput = (propertyName) => {
     const property = allProperties.find((p) => p.property === propertyName)
     const currentValue = formControl.getValues('propertyValues')?.[propertyName]
+
+    if (property?.isAddonExtension) {
+      const { Input } = property
+      return (
+        <Suspense key={propertyName} fallback={null}>
+          <Input
+            formControl={formControl}
+            name={`propertyValues.${propertyName}`}
+            users={users}
+            tenant={firstTenantDomain}
+          />
+        </Suspense>
+      )
+    }
 
     if (property?.type === 'boolean') {
       return (
@@ -652,6 +673,14 @@ const ConfirmationStep = (props) => {
   const { lastStep, formControl, onPreviousStep, currentStep, users, allProperties } = props
   const formValues = formControl.getValues()
   const { selectedProperties = [], propertyValues = {} } = formValues
+  // Add-on properties are sent to their own endpoints, not to PatchUser.
+  const selectedExtensions = allProperties.filter(
+    (p) => p.isAddonExtension && selectedProperties.includes(p.property)
+  )
+  const patchProperties = selectedProperties.filter(
+    (propName) => !selectedExtensions.some((e) => e.property === propName)
+  )
+  const [extensionRun, setExtensionRun] = useState(0)
 
   // Create API call handler for bulk patch
   const patchUsersApi = ApiPostCall({
@@ -665,6 +694,9 @@ const ConfirmationStep = (props) => {
       return
     }
 
+    if (selectedExtensions.length > 0) setExtensionRun((run) => run + 1)
+    if (patchProperties.length === 0) return
+
     // Create bulk request data
     const patchData = users.map((user) => {
       const userData = {
@@ -672,7 +704,7 @@ const ConfirmationStep = (props) => {
         tenantFilter: user.Tenant || user.tenantFilter,
       }
 
-      selectedProperties.forEach((propName) => {
+      patchProperties.forEach((propName) => {
         const propertyValue = propertyValues[propName]
 
         if (propertyValue !== undefined && propertyValue !== '' && propertyValue !== null) {
@@ -768,7 +800,9 @@ const ConfirmationStep = (props) => {
                 const value = propertyValues[propName]
                 let displayValue = value || 'Not set'
 
-                if (propName === 'manager' || propName === 'sponsor') {
+                if (property?.isAddonExtension) {
+                  displayValue = property.describe ? property.describe(value) : 'Set'
+                } else if (propName === 'manager' || propName === 'sponsor') {
                   displayValue = value?.label || value?.value || 'Not set'
                 } else if (propName === 'userPrincipalName') {
                   const selectedDomain = value?.label || value?.value || value
@@ -830,7 +864,16 @@ const ConfirmationStep = (props) => {
         </Card>
       )}
 
-      <CippApiResults apiObject={patchUsersApi} />
+      {patchProperties.length > 0 && <CippApiResults apiObject={patchUsersApi} />}
+      {selectedExtensions.map((extension) => (
+        <AddonExtensionRun
+          key={extension.property}
+          extension={extension}
+          value={propertyValues[extension.property]}
+          users={users}
+          run={extensionRun}
+        />
+      ))}
 
       <Stack
         direction="row"
@@ -852,16 +895,29 @@ const ConfirmationStep = (props) => {
           disabled={
             patchUsersApi.isPending ||
             selectedProperties.length === 0 ||
+            selectedExtensions.some((e) => e.isReady && !e.isReady(propertyValues[e.property])) ||
             !users ||
             users.length === 0
           }
           onClick={handleSubmit}
         >
-          {patchUsersApi.isSuccess ? 'Resubmit' : 'Submit'}
+          {patchUsersApi.isSuccess || extensionRun > 0 ? 'Resubmit' : 'Submit'}
         </Button>
       </Stack>
     </Stack>
   );
+}
+
+// Fork: sends one add-on property's change (its own request) each time `run` goes up, and shows the result.
+const AddonExtensionRun = ({ extension, value, users, run }) => {
+  const api = ApiPostCall({ relatedQueryKeys: ['ListUsers'] })
+  useEffect(() => {
+    if (!run) return
+    const tenant = users?.[0]?.Tenant || users?.[0]?.tenantFilter
+    api.mutate(extension.request({ value, users, tenant }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [run])
+  return run ? <CippApiResults apiObject={api} /> : null
 }
 
 const Page = () => {
@@ -927,10 +983,21 @@ const Page = () => {
     return []
   }, [customDataMappings.isSuccess, customDataMappings.data])
 
+  // Fork: add-on properties, less those whose add-on is turned off.
+  const featureFlags = ApiGetCall({
+    url: '/api/ListFeatureFlags',
+    queryKey: 'featureFlags',
+    staleTime: 600000,
+  })
+  const addonExtensions = useMemo(
+    () => enabledAddonExtensions(userBulkEditExtensions, featureFlags.data),
+    [featureFlags.data]
+  )
+
   // Combine standard properties with custom data properties
   const allProperties = useMemo(() => {
-    return [...PATCHABLE_PROPERTIES, ...customDataProperties]
-  }, [customDataProperties])
+    return [...PATCHABLE_PROPERTIES, ...addonExtensions, ...customDataProperties]
+  }, [customDataProperties, addonExtensions])
 
   const steps = [
     {
@@ -951,6 +1018,7 @@ const Page = () => {
         allProperties: allProperties,
         customDataMappings: customDataMappings,
         customDataProperties: customDataProperties,
+        addonExtensions: addonExtensions,
       },
     },
     {
