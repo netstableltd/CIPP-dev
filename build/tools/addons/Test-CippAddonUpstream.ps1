@@ -14,6 +14,8 @@
               or a CIPP function it calls lost a parameter
       REVIEW  a CIPP function or frontend file the add-on uses changed between -Base and -Ref, or a core
               file the add-on changed (coreChanges) changed upstream too (expect a merge conflict)
+      FORK    something it uses is the fork's own code (add-on kit, extension points), not upstream's:
+              not affected by the merge
       OK      nothing it uses changed
 
     and whether the add-on has been tested with -Ref's CIPP version. Exits 1 when anything breaks.
@@ -37,19 +39,26 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Can't find '$Ref'. Fetch it first (git fetch upstream --tags)." }
     if (-not $Base) { $Base = (git merge-base HEAD $Ref).Trim() }
     $RefFiles = [System.Collections.Generic.HashSet[string]]::new([string[]]@(git ls-tree -r --name-only $Ref))
+    # Files and functions upstream had at -Base: anything the add-ons use that wasn't there is the fork's
+    # own (its add-on kit, extension points), which a merge keeps, so it isn't reported as gone.
+    $BaseFiles = [System.Collections.Generic.HashSet[string]]::new([string[]]@(git ls-tree -r --name-only $Base))
     $Changed = [System.Collections.Generic.HashSet[string]]::new([string[]]@(git diff --name-only $Base $Ref))
     $RefVersion = ((git show "$($Ref):backend/version_latest.txt") -join '').Trim()
     $Layout = Get-AddonToolLayout
     $CoreIndex = Get-AddonCoreFunctionIndex
     # Functions in -Ref, by file name (outside add-on folders).
-    $RefFunctions = @{}
-    foreach ($Line in @(git grep -I -E '^\s*[Ff]unction\s+[A-Za-z][A-Za-z0-9_-]*' $Ref -- 'backend/Modules')) {
-        # <ref>:<path>:<text>
-        if (-not $Line.StartsWith("$($Ref):")) { continue }
-        if ($Line.Substring($Ref.Length + 1) -notmatch '^(?<file>[^:]+\.ps1):\s*function\s+(?<name>[\w-]+)') { continue }
-        if ($Matches.file -match '/Addons/') { continue }
-        if (-not $RefFunctions.ContainsKey($Matches.name)) { $RefFunctions[$Matches.name] = $Matches.file }
+    function Get-FunctionIndexAt([string]$Commit) {
+        $Index = @{}
+        foreach ($Line in @(git grep -I -E '^\s*[Ff]unction\s+[A-Za-z][A-Za-z0-9_-]*' $Commit -- 'backend/Modules')) {
+            if (-not $Line.StartsWith("$($Commit):")) { continue }
+            if ($Line.Substring($Commit.Length + 1) -notmatch '^(?<file>[^:]+\.ps1):\s*function\s+(?<name>[\w-]+)') { continue }
+            if ($Matches.file -match '/Addons/') { continue }
+            if (-not $Index.ContainsKey($Matches.name)) { $Index[$Matches.name] = $Matches.file }
+        }
+        $Index
     }
+    $RefFunctions = Get-FunctionIndexAt $Ref
+    $BaseFunctions = Get-FunctionIndexAt $Base
     $AnyBreak = $false
     function Get-FunctionParameters([string]$Commit, [string]$File, [string]$Name) {
         $Text = (git show "$($Commit):$File" 2>$null) -join "`n"
@@ -69,7 +78,10 @@ try {
 
         foreach ($Fn in @($M.dependsOn.functions)) {
             $Here = $CoreIndex[$Fn]
-            if (-not $RefFunctions.ContainsKey($Fn)) { & $Add 'BREAK' "CIPP function $Fn is gone (was $Here)." ; continue }
+            if (-not $RefFunctions.ContainsKey($Fn)) {
+                if (-not $BaseFunctions.ContainsKey($Fn)) { & $Add 'FORK' "$Fn is the fork's own ($Here), not upstream's; the merge keeps it."; continue }
+                & $Add 'BREAK' "CIPP function $Fn is gone (was $Here)."; continue
+            }
             $There = $RefFunctions[$Fn]
             if ($Here -and $Here -ne $There) { & $Add 'REVIEW' "CIPP function $Fn moved: $Here -> $There." }
             elseif ($Changed.Contains($There)) {
@@ -89,12 +101,20 @@ try {
         }
         foreach ($Spec in @($M.dependsOn.frontend)) {
             $File = Resolve-AddonFrontendFile -Spec $Spec -Exists { param($P) $RefFiles.Contains($P) }
-            if (-not $File) { & $Add 'BREAK' "Frontend file $Spec is gone."; continue }
+            if (-not $File) {
+                if (Resolve-AddonFrontendFile -Spec $Spec -Exists { param($P) $BaseFiles.Contains($P) } -or -not (Resolve-AddonFrontendFile -Spec $Spec -Exists { param($P) Test-Path (Join-Path $RepoRoot $P) })) {
+                    & $Add 'BREAK' "Frontend file $Spec is gone."; continue
+                }
+                & $Add 'FORK' "$Spec is the fork's own, not upstream's; the merge keeps it."; continue
+            }
             if ($Changed.Contains($File)) { & $Add 'REVIEW' "Frontend file $File changed ($((git diff --shortstat $Base $Ref -- $File).Trim())). Check the props and exports the add-on uses." }
         }
         foreach ($Core in @($M.coreChanges)) {
             foreach ($File in @($Core.files)) {
-                if (-not $RefFiles.Contains($File)) { & $Add 'BREAK' "Core file $File, which the add-on changes ($($Core.area)), is gone." }
+                if (-not $RefFiles.Contains($File)) {
+                    if ($BaseFiles.Contains($File)) { & $Add 'BREAK' "Core file $File, which the add-on changes ($($Core.area)), is gone." }
+                    else { & $Add 'FORK' "$File is the fork's own file, not upstream's; the merge keeps it." }
+                }
                 elseif ($Changed.Contains($File)) { & $Add 'REVIEW' "Core file $File, which the add-on changes ($($Core.area)), changed upstream too: expect a merge conflict." }
             }
         }
@@ -117,8 +137,8 @@ try {
         Write-Host ''
         Write-Host "$($M.name) $($M.version) [$($M.id)]: $Worst" -ForegroundColor $Colour
         Write-Host ("  CIPP {0}: {1}" -f $RefVersion, $(if ($Tested) { 'tested' } else { "not tested yet (tested with $(@($M.cipp.testedWith) -join ', '))" }))
-        foreach ($F in $Findings) { Write-Host "  $($F.Level.PadRight(6)) $($F.What)" -ForegroundColor @{ BREAK = 'Red'; REVIEW = 'Yellow' }[$F.Level] }
-        if ($Findings.Count -eq 0) { Write-Host '  Nothing it uses from CIPP changed.' }
+        foreach ($F in $Findings) { Write-Host "  $($F.Level.PadRight(6)) $($F.What)" -ForegroundColor @{ BREAK = 'Red'; REVIEW = 'Yellow'; FORK = 'DarkGray' }[$F.Level] }
+        if (@($Findings | Where-Object Level -ne 'FORK').Count -eq 0) { Write-Host '  Nothing it uses from CIPP changed.' }
     }
     Write-Host ''
     Write-Host "Compared $((git rev-parse --short $Base).Trim()) -> $Ref ($((git rev-parse --short $Ref).Trim()), CIPP $RefVersion)."
