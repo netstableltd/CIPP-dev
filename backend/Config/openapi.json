@@ -1179,6 +1179,9 @@
                       "properties": {
                         "customerId": {
                           "type": "string"
+                        },
+                        "defaultDomainName": {
+                          "type": "string"
                         }
                       }
                     }
@@ -1221,7 +1224,10 @@
           }
         ],
         "x-cipp-role": "Endpoint.Application.ReadWrite",
-        "x-cipp-any-tenant": true
+        "x-cipp-any-tenant": true,
+        "x-cipp-reads-via": [
+          "Resolve-CippBulkSelectedTenant"
+        ]
       }
     },
     "/api/AddConnectionFilter": {
@@ -2348,6 +2354,9 @@
                       "properties": {
                         "customerId": {
                           "type": "string"
+                        },
+                        "defaultDomainName": {
+                          "type": "string"
                         }
                       }
                     }
@@ -2392,7 +2401,8 @@
         "x-cipp-role": "Endpoint.Application.ReadWrite",
         "x-cipp-any-tenant": true,
         "x-cipp-reads-via": [
-          "Get-CIPPEdgeAppBody"
+          "Get-CIPPEdgeAppBody",
+          "Resolve-CippBulkSelectedTenant"
         ]
       }
     },
@@ -3437,6 +3447,148 @@
           }
         ],
         "x-cipp-role": "Endpoint.Autopilot.ReadWrite"
+      }
+    },
+    "/api/AddEnrollmentRestriction": {
+      "post": {
+        "summary": "AddEnrollmentRestriction",
+        "operationId": "AddEnrollmentRestriction",
+        "tags": [
+          "Endpoint > Autopilot"
+        ],
+        "description": "Creates or updates an enrollment (device type) restriction with its priority and group assignment (AssignTo with customGroup names, as Intune templates use). Creating fans out over selectedTenants (or a tenantFilter list) and can take its settings from a saved template (TemplateId, or TemplateList from the deploy drawer). replacename sets how groups are handled, as for conditional access templates: displayName (default) assigns the template's groups by name, leave keeps each restriction's current assignment, AllUsers assigns all users. CreateGroups creates the named groups a tenant does not have. Editing sends one tenantFilter with the restriction's ConfigurationIds, and may pass GroupIds picked in that tenant instead of group names.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ConfigurationIds": {
+                    "type": "string"
+                  },
+                  "CreateGroups": {
+                    "type": "string"
+                  },
+                  "GroupIds": {
+                    "type": "string",
+                    "description": "Group ids picked in the drawer (applyPickedGroups) only exist in that one tenant."
+                  },
+                  "replacename": {
+                    "$ref": "#/components/schemas/LabelValue"
+                  },
+                  "selectedTenants": {
+                    "type": "string"
+                  },
+                  "TemplateId": {
+                    "$ref": "#/components/schemas/LabelValue"
+                  },
+                  "TemplateList": {
+                    "$ref": "#/components/schemas/LabelValue"
+                  },
+                  "tenantFilter": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "tenantFilter"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResults"
+                }
+              }
+            }
+          },
+          "207": {
+            "description": "Partial success - some items failed; per-item results are in the body"
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "Endpoint.Autopilot.ReadWrite"
+      }
+    },
+    "/api/AddEnrollmentRestrictionTemplate": {
+      "post": {
+        "summary": "AddEnrollmentRestrictionTemplate",
+        "operationId": "AddEnrollmentRestrictionTemplate",
+        "tags": [
+          "Endpoint > Autopilot"
+        ],
+        "description": "Saves an enrollment (device type) restriction template: platform settings, priority and assignment (all users, or group names with wildcards). Pass GUID to update an existing template. Accepts the template form or a row from ListEnrollmentRestrictions, so a tenant's restriction can be saved as a template.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "GUID": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true,
+                "x-cipp-passthrough": true,
+                "description": "This endpoint forwards the request body onward rather than reading a fixed set of fields. The properties listed here are the ones it is known to read; others may be accepted."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResults"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "Endpoint.Autopilot.ReadWrite",
+        "x-cipp-any-tenant": true
       }
     },
     "/api/AddEquipmentMailbox": {
@@ -4769,6 +4921,9 @@
                       "properties": {
                         "customerId": {
                           "type": "string"
+                        },
+                        "defaultDomainName": {
+                          "type": "string"
                         }
                       }
                     }
@@ -4817,7 +4972,10 @@
           }
         ],
         "x-cipp-role": "Endpoint.Application.ReadWrite",
-        "x-cipp-any-tenant": true
+        "x-cipp-any-tenant": true,
+        "x-cipp-reads-via": [
+          "Resolve-CippBulkSelectedTenant"
+        ]
       }
     },
     "/api/AddNamedLocation": {
@@ -4990,6 +5148,9 @@
                       "properties": {
                         "customerId": {
                           "type": "string"
+                        },
+                        "defaultDomainName": {
+                          "type": "string"
                         }
                       }
                     }
@@ -5043,7 +5204,8 @@
         "x-cipp-role": "Endpoint.Application.ReadWrite",
         "x-cipp-any-tenant": true,
         "x-cipp-reads-via": [
-          "Get-CIPPOfficeAppBody"
+          "Get-CIPPOfficeAppBody",
+          "Resolve-CippBulkSelectedTenant"
         ]
       }
     },
@@ -6728,6 +6890,9 @@
                       "properties": {
                         "customerId": {
                           "type": "string"
+                        },
+                        "defaultDomainName": {
+                          "type": "string"
                         }
                       }
                     }
@@ -6767,7 +6932,10 @@
           }
         ],
         "x-cipp-role": "Endpoint.Application.ReadWrite",
-        "x-cipp-any-tenant": true
+        "x-cipp-any-tenant": true,
+        "x-cipp-reads-via": [
+          "Resolve-CippBulkSelectedTenant"
+        ]
       }
     },
     "/api/AddTeam": {
@@ -8082,6 +8250,9 @@
                       "properties": {
                         "customerId": {
                           "type": "string"
+                        },
+                        "defaultDomainName": {
+                          "type": "string"
                         }
                       }
                     }
@@ -8136,7 +8307,10 @@
           }
         ],
         "x-cipp-role": "Endpoint.Application.ReadWrite",
-        "x-cipp-any-tenant": true
+        "x-cipp-any-tenant": true,
+        "x-cipp-reads-via": [
+          "Resolve-CippBulkSelectedTenant"
+        ]
       }
     },
     "/api/CreateSafeLinksPolicyTemplate": {
@@ -18235,6 +18409,84 @@
         "x-cipp-role": "CIPP.SuperAdmin.ReadWrite"
       }
     },
+    "/api/ExecCippGlobalReplacemap": {
+      "post": {
+        "summary": "Adds, edits or deletes global custom variables.",
+        "operationId": "ExecCippGlobalReplacemap",
+        "tags": [
+          "CIPP > Settings"
+        ],
+        "description": "Global variables apply to every tenant, so they are changed through this endpoint and its own\npermission, separate from the per-tenant custom variables managed through ExecCippReplacemap.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Action": {
+                    "type": "string",
+                    "description": "AddEdit or Delete."
+                  },
+                  "tenantId": {
+                    "type": "string",
+                    "description": "Must be AllTenants: this endpoint only changes global variables."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Action",
+            "in": "query",
+            "description": "AddEdit or Delete.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tenantId",
+            "in": "query",
+            "description": "Must be AllTenants: this endpoint only changes global variables.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Not described statically: this endpoint returns the upstream response as-is, so its fields are determined by the upstream API rather than by CIPP. Call the endpoint to see the actual shape, or add a response schema in backend/Config/openapi-overrides."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "Tenant.GlobalVariables.ReadWrite"
+      }
+    },
     "/api/ExecCippLogsSas": {
       "post": {
         "summary": "Generate a read-only SAS token for the CippLogs table",
@@ -23203,6 +23455,146 @@
           }
         ],
         "x-cipp-role": "Exchange.Mailbox.ReadWrite"
+      }
+    },
+    "/api/ExecEnterpriseAppPermission": {
+      "post": {
+        "summary": "ExecEnterpriseAppPermission",
+        "operationId": "ExecEnterpriseAppPermission",
+        "tags": [
+          "Tenant > Administration > Application Approval"
+        ],
+        "description": "Adds or removes API permissions on an enterprise application (service principal). Application permissions are\napp role assignments. Delegated permissions are added to the tenant-wide (AllPrincipals) consent grant; removing\na delegated scope strips it from every grant the app holds for that API, per-user grants included, and deletes\ngrants left without scopes.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Action": {
+                    "type": "string"
+                  },
+                  "ResourceId": {
+                    "$ref": "#/components/schemas/LabelValue"
+                  },
+                  "ServicePrincipalId": {
+                    "type": "string"
+                  },
+                  "tenantFilter": {
+                    "type": "string"
+                  },
+                  "Type": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "tenantFilter"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResults"
+                }
+              }
+            }
+          },
+          "207": {
+            "description": "Partial success - some items failed; per-item results are in the body"
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "Tenant.Application.ReadWrite"
+      }
+    },
+    "/api/ExecEnterpriseAppRole": {
+      "post": {
+        "summary": "ExecEnterpriseAppRole",
+        "operationId": "ExecEnterpriseAppRole",
+        "tags": [
+          "Tenant > Administration > Application Approval"
+        ],
+        "description": "Adds or removes Entra directory role assignments held by an enterprise application (service principal).\nRoles are assigned tenant-wide; removal takes the role assignment ids, so assignments scoped to an\nadministrative unit can be removed too. The CIPP-SAM application's own roles are refused.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Action": {
+                    "type": "string"
+                  },
+                  "ServicePrincipalId": {
+                    "type": "string"
+                  },
+                  "tenantFilter": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "tenantFilter"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResults"
+                }
+              }
+            }
+          },
+          "207": {
+            "description": "Partial success - some items failed; per-item results are in the body"
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "Identity.Role.ReadWrite"
       }
     },
     "/api/ExecExchangeRoleRepair": {
@@ -29964,36 +30356,135 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "mailboxRequests": {
+                    "type": "array",
+                    "description": "Bulk format. One entry per calendar mailbox; replaces the top-level userID and permissions.",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "userID",
+                        "permissions"
+                      ],
+                      "properties": {
+                        "userID": {
+                          "type": "string",
+                          "description": "UPN or object id of the mailbox whose calendar is modified."
+                        },
+                        "permissions": {
+                          "type": "array",
+                          "description": "Permission changes to apply to the mailbox's calendar folder.",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "UserID": {
+                                "description": "Grantee: UPN, recipient id, or the display name Exchange reports. A single value, a {label,value} object, or an array of either.",
+                                "oneOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "$ref": "#/components/schemas/LabelValue"
+                                  },
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "$ref": "#/components/schemas/LabelValue"
+                                    }
+                                  }
+                                ]
+                              },
+                              "PermissionLevel": {
+                                "description": "Folder access right, e.g. Reviewer or Editor. A string or a {label,value} object.",
+                                "oneOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "$ref": "#/components/schemas/LabelValue"
+                                  }
+                                ]
+                              },
+                              "Modification": {
+                                "type": "string",
+                                "enum": [
+                                  "Add",
+                                  "Remove"
+                                ]
+                              },
+                              "FolderName": {
+                                "type": "string",
+                                "description": "Calendar folder name, localized per mailbox (e.g. Kalender). Defaults to Calendar."
+                              },
+                              "CanViewPrivateItems": {
+                                "type": "boolean"
+                              },
+                              "SendNotificationToUser": {
+                                "type": "boolean"
+                              },
+                              "DisplayName": {
+                                "type": "string",
+                                "description": "Name used in log and result messages when UserID is an id."
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
                   "permissions": {
                     "type": "array",
+                    "description": "Permission changes to apply to the mailbox's calendar folder.",
                     "items": {
                       "type": "object",
                       "properties": {
+                        "UserID": {
+                          "description": "Grantee: UPN, recipient id, or the display name Exchange reports. A single value, a {label,value} object, or an array of either.",
+                          "oneOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "$ref": "#/components/schemas/LabelValue"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/components/schemas/LabelValue"
+                              }
+                            }
+                          ]
+                        },
+                        "PermissionLevel": {
+                          "description": "Folder access right, e.g. Reviewer or Editor. A string or a {label,value} object.",
+                          "oneOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "$ref": "#/components/schemas/LabelValue"
+                            }
+                          ]
+                        },
+                        "Modification": {
+                          "type": "string",
+                          "enum": [
+                            "Add",
+                            "Remove"
+                          ]
+                        },
+                        "FolderName": {
+                          "type": "string",
+                          "description": "Calendar folder name, localized per mailbox (e.g. Kalender). Defaults to Calendar."
+                        },
                         "CanViewPrivateItems": {
-                          "type": "string"
+                          "type": "boolean"
+                        },
+                        "SendNotificationToUser": {
+                          "type": "boolean"
                         },
                         "DisplayName": {
                           "type": "string",
-                          "description": "TargetUser may be a recipient id, so log the display name the caller saw"
-                        },
-                        "FolderName": {
-                          "type": "string"
-                        },
-                        "Modification": {
-                          "type": "string"
-                        },
-                        "PermissionLevel": {
-                          "$ref": "#/components/schemas/LabelValue"
-                        },
-                        "SendNotificationToUser": {
-                          "type": "string"
-                        },
-                        "UserID": {
-                          "type": "array",
-                          "items": {
-                            "$ref": "#/components/schemas/LabelValue"
-                          },
-                          "description": "Handle UserID as array or single value"
+                          "description": "Name used in log and result messages when UserID is an id."
                         }
                       }
                     }
@@ -30003,13 +30494,13 @@
                   },
                   "userID": {
                     "type": "string",
-                    "description": "UPN of the mailbox to modify calendar permissions for"
+                    "description": "Legacy single-mailbox format: UPN or object id of the mailbox whose calendar is modified."
                   }
                 },
                 "required": [
-                  "tenantFilter",
-                  "userID"
-                ]
+                  "tenantFilter"
+                ],
+                "description": "Either one mailbox (userID + permissions) or many (mailboxRequests), all in the same tenant."
               }
             }
           }
@@ -30408,7 +30899,8 @@
             "bearerAuth": []
           }
         ],
-        "x-cipp-role": "Exchange.Mailbox.ReadWrite"
+        "x-cipp-role": "Exchange.Mailbox.ReadWrite",
+        "x-cipp-override-reason": "permissions is read off each mailboxRequests element (or the legacy top-level body), so the generator loses the element shape behind the loop variable."
       }
     },
     "/api/ExecModifyContactPerms": {
@@ -33833,6 +34325,70 @@
           }
         ],
         "x-cipp-role": "Endpoint.MEM.ReadWrite"
+      }
+    },
+    "/api/ExecRemoveEnrollmentRestriction": {
+      "post": {
+        "summary": "ExecRemoveEnrollmentRestriction",
+        "operationId": "ExecRemoveEnrollmentRestriction",
+        "tags": [
+          "Endpoint > Autopilot"
+        ],
+        "description": "Deletes an enrollment (device type) restriction: every Graph object behind it (ids), which for Android is both the work profile and the device administrator object. Only single-platform restrictions can be deleted; the tenant's default restriction is refused.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "displayName": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "ids": {
+                    "type": "string"
+                  },
+                  "tenantFilter": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "tenantFilter"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResults"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "Endpoint.Autopilot.ReadWrite"
       }
     },
     "/api/ExecRemoveLibraryPermission": {
@@ -45510,6 +46066,9 @@
                       "Categories": {
                         "x-cipp-field-source": "frontend"
                       },
+                      "DirectoryRoleCount": {
+                        "x-cipp-field-source": "frontend"
+                      },
                       "HasAllPrincipalsGrant": {
                         "x-cipp-field-source": "frontend"
                       },
@@ -52847,6 +53406,168 @@
         "x-cipp-any-tenant": true
       }
     },
+    "/api/ListEnrollmentRestrictions": {
+      "get": {
+        "summary": "ListEnrollmentRestrictions",
+        "operationId": "ListEnrollmentRestrictions",
+        "tags": [
+          "Endpoint > Autopilot"
+        ],
+        "description": "Lists a tenant's enrollment (device type) restrictions for specific groups, one row per restriction as the Intune portal shows them: the two objects behind an Android restriction are combined. Each row carries the flat settings the add, edit and template forms use, its priority, and its assignment (AssignTo, customGroup and the readable PolicyAssignment). The tenant's default restriction is listed last on each platform with isDefault true and priority 'Default', including tvOS and visionOS; it is read-only here and managed by the DefaultPlatformRestrictions standard. platform (comma-separated: android, ios, macOS, tvOS, visionOS, windows) limits the rows to those platforms.",
+        "parameters": [
+          {
+            "name": "platform",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/tenantFilter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResults"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "Endpoint.Autopilot.Read"
+      }
+    },
+    "/api/ListEnrollmentRestrictionTemplates": {
+      "get": {
+        "summary": "ListEnrollmentRestrictionTemplates",
+        "operationId": "ListEnrollmentRestrictionTemplates",
+        "tags": [
+          "Endpoint > Autopilot"
+        ],
+        "description": "Lists the saved enrollment (device type) restriction templates with their platform settings, priority and assignment. Pass ID to return a single template. These are CIPP templates, not a tenant's deployed restrictions.",
+        "parameters": [
+          {
+            "name": "ID",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "description": "Derived from the fields written into the storage table it reads, and the columns the CIPP UI renders. Fields taken from the storage writers may be omitted by this endpoint, and the response may carry computed fields not listed here.",
+                    "properties": {
+                      "ContentHash": {
+                        "x-cipp-field-source": "storage"
+                      },
+                      "description": {
+                        "x-cipp-field-source": "frontend"
+                      },
+                      "displayName": {
+                        "x-cipp-field-source": "frontend"
+                      },
+                      "ETag": {
+                        "type": "string",
+                        "x-cipp-field-source": "storage"
+                      },
+                      "GUID": {
+                        "x-cipp-field-source": "storage"
+                      },
+                      "JSON": {
+                        "x-cipp-field-source": "storage"
+                      },
+                      "Package": {
+                        "x-cipp-field-source": "storage"
+                      },
+                      "PartitionKey": {
+                        "x-cipp-field-source": "storage"
+                      },
+                      "Permissions": {
+                        "type": "string",
+                        "x-cipp-field-source": "storage"
+                      },
+                      "platformLabel": {
+                        "x-cipp-field-source": "frontend"
+                      },
+                      "PolicyAssignment": {
+                        "x-cipp-field-source": "frontend"
+                      },
+                      "priority": {
+                        "x-cipp-field-source": "frontend"
+                      },
+                      "RowKey": {
+                        "x-cipp-field-source": "storage"
+                      },
+                      "SHA": {
+                        "type": "string",
+                        "x-cipp-field-source": "storage"
+                      },
+                      "Source": {
+                        "x-cipp-field-source": "storage"
+                      },
+                      "SourcePath": {
+                        "x-cipp-field-source": "storage"
+                      },
+                      "TemplateName": {
+                        "x-cipp-field-source": "storage"
+                      },
+                      "Timestamp": {
+                        "type": "string",
+                        "x-cipp-field-source": "storage"
+                      },
+                      "UpdatedBy": {
+                        "x-cipp-field-source": "storage"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "Endpoint.Autopilot.Read",
+        "x-cipp-any-tenant": true
+      }
+    },
     "/api/ListEquipment": {
       "get": {
         "summary": "ListEquipment",
@@ -55092,7 +55813,6 @@
           {
             "name": "QueueId",
             "in": "query",
-            "description": "Use raw JSON passthrough for AllTenants cached results when no post-processing is needed.",
             "required": false,
             "schema": {
               "type": "string"
@@ -55463,6 +56183,10 @@
                         "x-cipp-field-source": "backend"
                       },
                       "membershipRule": {
+                        "type": "string",
+                        "x-cipp-field-source": "graph"
+                      },
+                      "membershipRuleProcessingState": {
                         "type": "string",
                         "x-cipp-field-source": "graph"
                       },
@@ -74305,6 +75029,69 @@
           }
         ],
         "x-cipp-role": "Security.DlpCompliancePolicy.ReadWrite"
+      }
+    },
+    "/api/RemoveEnrollmentRestrictionTemplate": {
+      "post": {
+        "summary": "RemoveEnrollmentRestrictionTemplate",
+        "operationId": "RemoveEnrollmentRestrictionTemplate",
+        "tags": [
+          "Endpoint > Autopilot"
+        ],
+        "description": "Deletes a saved enrollment restriction template. Restrictions already deployed from it are not changed.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ID": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "ID",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResults"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "Endpoint.Autopilot.ReadWrite",
+        "x-cipp-any-tenant": true
       }
     },
     "/api/RemoveExConnector": {

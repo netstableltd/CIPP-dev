@@ -585,6 +585,17 @@ export const nativeMenuItems = withAddonMenuItems([
             permissions: ['Endpoint.Autopilot.*'],
           },
           {
+            title: 'Enrollment Restrictions',
+            path: '/endpoint/autopilot/enrollment-restrictions',
+            permissions: ['Endpoint.Autopilot.*'],
+          },
+          {
+            title: 'Enrollment Restriction Templates',
+            path: '/endpoint/autopilot/enrollment-restriction-templates',
+            permissions: ['Endpoint.Autopilot.*'],
+            scope: 'global',
+          },
+          {
             title: 'Status Pages',
             path: '/endpoint/autopilot/list-status-pages',
             permissions: ['Endpoint.Autopilot.*'],
@@ -1169,6 +1180,7 @@ export const nativeMenuItems = withAddonMenuItems([
           {
             title: 'Compare CA Policies',
             path: '/tenant/tools/compare-ca-policies',
+            docsPath: 'tools/tenant-tools/compare-ca-policies',
             permissions: ['Tenant.ConditionalAccess.*'],
             scope: 'global',
           },
