@@ -35,12 +35,12 @@ function Get-CIPPAddonStatus {
             MinVersion         = $M.cipp.minVersion
             TestedWith         = @($M.cipp.testedWith)
             TestedOnLatest     = if ($Latest) { [bool](@($M.cipp.testedWith) | Where-Object { (& $MajorMinor $_) -eq (& $MajorMinor $Latest) }) } else { $null }
-            Menu               = @($M.menu)
-            Extends            = @($M.extends)
-            Endpoints          = @($M.endpoints)
+            Menu               = @($M.menu | Where-Object { $_ })
+            Extends            = @($M.extends | Where-Object { $_ })
+            Endpoints          = @($M.endpoints | Where-Object { $_ })
             DependsOn          = [pscustomobject]@{ Functions = @($M.dependsOn.functions).Count; Frontend = @($M.dependsOn.frontend).Count }
-            CoreChanges        = @($M.coreChanges)
-            Storage            = @($M.storage)
+            CoreChanges        = @($M.coreChanges | Where-Object { $_ })
+            Storage            = @($M.storage | Where-Object { $_ })
             PackageAvailable   = [bool]$Package
             PackageSha256      = if ($Package) { $Package.Check.Sha256 } else { $null }
             PackageBytes       = if ($Package) { $Package.Check.Bytes } else { $null }

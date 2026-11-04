@@ -105,6 +105,36 @@ describe('CippAddonManager', () => {
     )
   })
 
+  it('shows what an add-on adds to instead of a menu place, and copes with empty entries', () => {
+    setList({
+      CippVersion: '11.3.0',
+      Addons: [
+        {
+          ...addon,
+          Id: 'bulk-email-domain',
+          Name: 'Bulk email domain',
+          Menu: [],
+          Extends: [
+            null,
+            { where: 'Identity Management > Users > Edit Properties' },
+          ],
+        },
+        { ...addon, Extends: [null] },
+      ],
+      Uploads: [],
+    })
+    renderWithProviders(<CippAddonManager />)
+    const bulk = within(screen.getByTestId('addon-bulk-email-domain'))
+    expect(
+      bulk.getByText('Identity Management > Users > Edit Properties')
+    ).toBeInTheDocument()
+    expect(bulk.queryByText('In the menu')).toBeNull()
+    expect(bulk.queryByRole('link', { name: /Open/ })).toBeNull()
+    expect(
+      within(screen.getByTestId('addon-claude-m365')).queryByText('Adds to')
+    ).toBeNull()
+  })
+
   it('lists what is missing for an add-on with a problem', () => {
     setList({
       CippVersion: '11.3.0',

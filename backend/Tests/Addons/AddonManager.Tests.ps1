@@ -315,6 +315,16 @@ Describe 'Community Additions add-ons' {
     }
 
     Describe 'Invoke-ListAddons' {
+        It 'leaves no empty entries in an add-on''s lists when its manifest leaves a part out' {
+            $R = Invoke-ListAddons -Request (& $script:Request @{} 'ListAddons')
+            foreach ($A in $R.Body.Addons) {
+                foreach ($Field in 'Menu', 'Extends', 'Endpoints', 'CoreChanges', 'Storage') {
+                    @($A.$Field | Where-Object { $null -eq $_ }).Count | Should -Be 0 -Because "$($A.Id).$Field"
+                }
+            }
+            @(($R.Body.Addons | Where-Object Id -eq 'claude-m365').Extends).Count | Should -Be 0
+            ($R.Body.Addons | Where-Object Id -eq 'bulk-email-domain').Extends[0].where | Should -Match 'Edit Properties'
+        }
         It 'lists the installed add-ons with their state and the uploads' {
             $script:Saved.Add([pscustomobject]@{ PartitionKey = 'Upload'; RowKey = 'claude-m365_9.0.0'; AddonId = 'claude-m365'; Name = 'Claude'; Version = '9.0.0'; MinVersion = '11.0.0'; TestedWith = '11.2.1'; Warnings = '["no tests"]'; UploadedAt = '2026-10-30T00:00:00Z' })
             $R = Invoke-ListAddons -Request (& $script:Request @{} 'ListAddons')

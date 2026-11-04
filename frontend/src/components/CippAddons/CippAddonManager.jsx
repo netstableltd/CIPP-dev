@@ -182,13 +182,15 @@ const InstalledAddon = ({ addon, latest, onToggle, busy }) => {
               </Typography>
             </>
           ) : null}
-          {(addon.Extends ?? []).length > 0 && (
+          {(addon.Extends ?? []).filter(Boolean).length > 0 && (
             <>
               <Typography component="dt" variant="body2">
                 Adds to
               </Typography>
               <Typography component="dd" variant="body2">
-                {addon.Extends.map((e) => e.where).join('; ')}
+                {addon.Extends.filter(Boolean)
+                  .map((e) => e.where)
+                  .join('; ')}
               </Typography>
             </>
           )}
