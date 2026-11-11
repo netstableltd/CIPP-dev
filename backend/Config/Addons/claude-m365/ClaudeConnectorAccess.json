@@ -1,6 +1,6 @@
 {
   "_comment": "Claude for Microsoft 365 add-on (claude-m365). Microsoft Graph delegated scopes on the 'M365 MCP Server for Claude' app, grouped into what Claude can read (readAreas) and what it can change (levels). Scope lists follow Anthropic's Microsoft 365 connector docs: https://claude.com/docs/third-party/claude-desktop/connectors-m365 and https://support.claude.com/en/articles/12684923.",
-  "alwaysKeep": ["User.Read", "User.ReadBasic.All", "offline_access", "openid", "profile", "email"],
+  "alwaysKeep": ["User.Read", "User.ReadBasic.All", "People.Read", "offline_access", "openid", "profile", "email"],
   "readAreas": [
     {
       "id": "mail",
@@ -28,7 +28,7 @@
       "noun": "Teams chats and channels",
       "label": "Teams chats and channels",
       "description": "Read Teams chats and channel messages the person can see.",
-      "scopes": ["Chat.Read", "Chat.ReadBasic", "ChatMember.Read", "ChatMessage.Read", "Channel.ReadBasic.All", "ChannelMessage.Read.All"]
+      "scopes": ["Chat.Read", "Chat.ReadBasic", "ChatMember.Read", "ChatMessage.Read", "Channel.ReadBasic.All", "ChannelMessage.Read.All", "Team.ReadBasic.All"]
     },
     {
       "id": "meetings",

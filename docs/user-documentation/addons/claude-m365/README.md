@@ -42,6 +42,8 @@ The PDF (**Preview PDF** or **Download PDF**) uses the CIPP branding and has:
 | 3. Personal assistant | Also send and forward email, manage meetings, out-of-office and mail rules | `Mail.Send`, `Calendars.ReadWrite`, `MailboxSettings.ReadWrite` |
 | 4. Full access | Also change OneDrive and SharePoint files, and post in Teams | `Files.ReadWrite.All`, `ChatMessage.Send`, `ChannelMessage.Send`, `Chat.Create` |
 
+Always kept, whatever the level: `openid`, `profile`, `email`, `offline_access`, `User.Read`, `User.ReadBasic.All` and `People.Read` (looking people up). The Teams area includes `Team.ReadBasic.All` (listing the person's teams). Claude's connector asks for these two even at Level 1 (seen in November 2026), so without them people get *needs admin approval*. After updating CIPP, save step 4 again in each tenant to add them.
+
 The levels, their wording in the PDF and their permissions are in `backend/Config/Addons/claude-m365/ClaudeConnectorAccess.json`. Claude can only ever do what the person using it could do themselves; Claude can read shared mailboxes but can't change them at any level.
 
 ## Current setup
