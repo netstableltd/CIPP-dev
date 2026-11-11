@@ -22,6 +22,9 @@
       "name": "Addons > bulk-email-domain"
     },
     {
+      "name": "Addons > chatgpt-m365"
+    },
+    {
       "name": "Addons > claude-m365"
     },
     {
@@ -18201,6 +18204,237 @@
           }
         ],
         "x-cipp-role": "Tenant.ConditionalAccess.ReadWrite"
+      }
+    },
+    "/api/ExecChatGPTConnector": {
+      "post": {
+        "summary": "ExecChatGPTConnector",
+        "operationId": "ExecChatGPTConnector",
+        "tags": [
+          "Addons > chatgpt-m365"
+        ],
+        "description": "Community Additions > ChatGPT for Microsoft 365 (add-on chatgpt-m365). Action AddApps adds OpenAI's ChatGPT app to the tenant (tenantFilter). Action Apply limits ChatGPT to the chosen Users: through the access group GroupName (default SG-ChatGPT-Users) or, with AssignUsersDirectly, user by user. LockUserConsent also stops users approving apps themselves and turns on admin consent requests. RemoveOtherDirect removes direct assignments for people not in the group. Apply and Action Access (access only) also take ReadAreas (what ChatGPT can read for everyone: mail, calendar, files, teams, meetings, tasks), TenantLevel (access level for everyone: read, drafts, assistant, full) and PeopleLevels (extra access for individual people: [{ User, Level }]). With no admin consent yet, Access gives it for exactly the chosen ReadAreas and TenantLevel (both needed). See Set-CIPPChatGPTConnector and Config/Addons/chatgpt-m365/ChatGPTConnectorAccess.json.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Action": {
+                    "type": "string"
+                  },
+                  "AssignUsersDirectly": {
+                    "type": "string"
+                  },
+                  "GroupName": {
+                    "type": "string"
+                  },
+                  "LockUserConsent": {
+                    "type": "string"
+                  },
+                  "PeopleLevels": {
+                    "type": "string"
+                  },
+                  "ReadAreas": {
+                    "type": "string"
+                  },
+                  "RemoveOtherDirect": {
+                    "type": "string"
+                  },
+                  "tenantFilter": {
+                    "$ref": "#/components/schemas/LabelValue"
+                  },
+                  "TenantLevel": {
+                    "$ref": "#/components/schemas/LabelValue"
+                  },
+                  "Users": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "tenantFilter"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResults"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "Tenant.Application.ReadWrite"
+      }
+    },
+    "/api/ExecChatGPTConnectorCustomerPdf": {
+      "post": {
+        "summary": "ExecChatGPTConnectorCustomerPdf",
+        "operationId": "ExecChatGPTConnectorCustomerPdf",
+        "tags": [
+          "Addons > chatgpt-m365"
+        ],
+        "description": "Community Additions > ChatGPT for Microsoft 365 (add-on chatgpt-m365): the customer information PDF for the tenant (tenantFilter). Explains the options for giving ChatGPT access to Microsoft 365, what we recommend having first (third-party backup, Entra ID P1, Microsoft Defender, Business Premium) filled in from the tenant, the four access levels with pros and cons, and what to reply with. Optional ContactName (who it is addressed to) and PreparedBy (who it is from). Returns application/pdf with the CIPP branding.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ContactName": {
+                    "type": "string"
+                  },
+                  "PreparedBy": {
+                    "type": "string"
+                  },
+                  "tenantFilter": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "tenantFilter"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/tenantFilter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Not described statically: this endpoint returns the upstream response as-is, so its fields are determined by the upstream API rather than by CIPP. Call the endpoint to see the actual shape, or add a response schema in backend/Config/openapi-overrides."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "Tenant.Application.Read"
+      }
+    },
+    "/api/ExecChatGPTConnectorSummaryPdf": {
+      "post": {
+        "summary": "ExecChatGPTConnectorSummaryPdf",
+        "operationId": "ExecChatGPTConnectorSummaryPdf",
+        "tags": [
+          "Addons > chatgpt-m365"
+        ],
+        "description": "Community Additions > ChatGPT for Microsoft 365 (add-on chatgpt-m365): the end-of-setup summary PDF for the tenant (tenantFilter). Read from the tenant: who can use ChatGPT and at what level, what ChatGPT can read, the safeguards in place, anything not finished, and what happens next. GroupName is the access group (default SG-ChatGPT-Users). Optional ContactName (who it is addressed to) and PreparedBy (who it is from). The uploaded connection guide (ExecChatGPTConnectorGuide) is added at the end unless IncludeGuide is false. Returns application/pdf with the CIPP branding.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ContactName": {
+                    "type": "string"
+                  },
+                  "GroupName": {
+                    "type": "string"
+                  },
+                  "IncludeGuide": {
+                    "type": "string"
+                  },
+                  "PreparedBy": {
+                    "type": "string"
+                  },
+                  "tenantFilter": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "tenantFilter"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/tenantFilter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Not described statically: this endpoint returns the upstream response as-is, so its fields are determined by the upstream API rather than by CIPP. Call the endpoint to see the actual shape, or add a response schema in backend/Config/openapi-overrides."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "Tenant.Application.Read"
       }
     },
     "/api/ExecCIPPDBCache": {
@@ -49019,6 +49253,63 @@
         ],
         "x-cipp-role": "Tenant.ConditionalAccess.Read",
         "x-cipp-any-tenant": true
+      }
+    },
+    "/api/ListChatGPTConnector": {
+      "get": {
+        "summary": "ListChatGPTConnector",
+        "operationId": "ListChatGPTConnector",
+        "tags": [
+          "Addons > chatgpt-m365"
+        ],
+        "description": "Community Additions > ChatGPT for Microsoft 365 (add-on chatgpt-m365): how far the tenant (tenantFilter) is through setting up OpenAI's ChatGPT connector. Read-only. Also returns what the tenant already has (Readiness: backup, Entra ID P1, Defender, Business Premium), what ChatGPT can read and change (Access) the options (Options: read areas and access levels) and the uploaded connection guide, if any (Guide). GroupName is the access group to look for (default SG-ChatGPT-Users).",
+        "parameters": [
+          {
+            "name": "GroupName",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/tenantFilter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "description": "Not described statically: this endpoint returns the upstream response as-is, so its fields are determined by the upstream API rather than by CIPP. Call the endpoint to see the actual shape, or add a response schema in backend/Config/openapi-overrides."
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "Tenant.Application.Read"
       }
     },
     "/api/ListCheckExtAlerts": {

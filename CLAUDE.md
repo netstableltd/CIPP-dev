@@ -25,6 +25,8 @@ A fork of [CyberDrain/CIPP](https://github.com/CyberDrain/CIPP) (CIPP-NG: PowerS
   - `claude-m365`: Claude for Microsoft 365 connector setup, access levels, customer PDFs.
   - `shared-mailbox`: customer questions PDF, create/configure a shared mailbox, "ready" PDF.
   - `bulk-email-domain`: "Email Domain" in Users > Edit Properties (alias or primary address in bulk).
+  - `chatgpt-m365`: ChatGPT for Microsoft 365 (OpenAI's one Entra app): CIPP gives admin consent for only
+    the chosen access, then the admin matches the actions in ChatGPT's admin console. Built on the shared kit.
     First add-on that extends a CIPP page; candidate for an upstream PR (follows CyberDrain/CIPP#6013).
   - Manager: Community Additions > Settings > Add-ons (`ListAddons`, `ExecAddon`, `ExecAddonDownload`).
   - Shared kit: `backend/Modules/CIPPCore/Public/AddonKit`, `AddonManager`, `frontend/src/components/CippAddons`,

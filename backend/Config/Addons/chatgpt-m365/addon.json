@@ -1,0 +1,90 @@
+{
+  "schema": 1,
+  "id": "chatgpt-m365",
+  "name": "ChatGPT for Microsoft 365",
+  "version": "1.0.0",
+  "description": "Sets up OpenAI's ChatGPT apps for Microsoft 365 (Outlook, Teams, SharePoint) in a tenant, limited to the people you choose: adds the ChatGPT app, assigns people, gives admin consent for exactly the chosen read areas and access level (for everyone and for named people), shows what to match in ChatGPT's admin console, and makes branded PDFs for the customer before and after.",
+  "author": "Netstable",
+  "category": "Standard process",
+  "cipp": {
+    "minVersion": "11.0.0",
+    "testedWith": [
+      "11.3.0"
+    ]
+  },
+  "menu": [
+    {
+      "title": "ChatGPT for Microsoft 365",
+      "path": "/addons/chatgpt-m365",
+      "permissions": [
+        "Tenant.Application.*"
+      ],
+      "placement": "Community Additions",
+      "preferredPlacement": "Tenant Administration > Applications"
+    }
+  ],
+  "endpoints": [
+    "ExecChatGPTConnector",
+    "ExecChatGPTConnectorCustomerPdf",
+    "ExecChatGPTConnectorSummaryPdf",
+    "ListChatGPTConnector"
+  ],
+  "guides": [
+    {
+      "key": "connection",
+      "title": "Connecting ChatGPT to Microsoft 365",
+      "what": "Your own step-by-step guide with screenshots (a Word document), added to the end of the setup summary PDF."
+    }
+  ],
+  "dependsOn": {
+    "functions": [
+      "ConvertFrom-CIPPDocxGuide",
+      "ConvertTo-CIPPODataFilterValue",
+      "ConvertTo-CippReportPdf",
+      "Get-CIPPAddonGuide",
+      "Get-CippException",
+      "Get-CippReportTenantName",
+      "Get-Tenants",
+      "New-CippReportAlertBox",
+      "New-CippReportBullets",
+      "New-CippReportHeading",
+      "New-CippReportInfoBox",
+      "New-CippReportInfoBoxColumns",
+      "New-CippReportNote",
+      "New-CippReportPage",
+      "New-CippReportParagraph",
+      "New-CippReportStatRow",
+      "New-CippReportTable",
+      "New-GraphGetRequest",
+      "New-GraphPOSTRequest",
+      "Write-LogMessage"
+    ],
+    "frontend": [
+      "src/api/ApiCall",
+      "src/components/CippAddons/CippAddonGuideUpload",
+      "src/components/CippAddons/CippAddonPdfCard",
+      "src/components/CippAddons/CippAddonStepResults",
+      "src/components/CippCards/CippPageCard",
+      "src/components/CippComponents/CippFormComponent",
+      "src/components/CippComponents/CippFormUserSelector",
+      "src/hooks/use-settings",
+      "src/layouts/index"
+    ]
+  },
+  "coreChanges": [
+    {
+      "area": "Report PDF renderer (CIPPSharp)",
+      "files": [
+        "backend/Shared/CIPPSharp/Reporting/ReportComponents.cs"
+      ],
+      "what": "Adds the 'image' and 'imagerow' report blocks (pictures in the connection guide) and the opt-in %coverpanel% cover variable (readable cover text). Without them the PDFs still render, without pictures and with the plain cover."
+    }
+  ],
+  "storage": [
+    {
+      "table": "AddonGuides",
+      "what": "The uploaded connection guide (row chatgpt-m365 / connection)."
+    }
+  ],
+  "graphPermissions": "Uses CIPP's existing delegated access (GDAP): service principals, OAuth2 permission grants (including creating the tenant-wide grant), app role assignments, groups, authorization and admin consent request policies."
+}

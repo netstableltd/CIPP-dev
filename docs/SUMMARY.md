@@ -381,6 +381,7 @@
   * [Claude for Microsoft 365](user-documentation/addons/claude-m365/README.md)
   * [Shared mailbox](user-documentation/addons/shared-mailbox/README.md)
   * [Bulk email domain](user-documentation/addons/bulk-email-domain/README.md)
+  * [ChatGPT for Microsoft 365](user-documentation/addons/chatgpt-m365/README.md)
   * [Settings](user-documentation/community/settings/addons.md)
     * [Add-ons](user-documentation/community/settings/addons.md)
 * [Tools](user-documentation/tools/README.md)
