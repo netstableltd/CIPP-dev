@@ -32,7 +32,7 @@ BeforeAll {
     $script:ClientAppId = '08ad6f98-a4f8-4635-bb8d-f1a3044760f0'
     $script:ServerAppId = '07c030f6-5743-41b7-ba00-0a6e85f37c17'
     $script:GaRole = '62e90394-69f5-4237-9190-012177145e10'
-    $script:ReadScopes = 'User.Read User.ReadBasic.All People.Read offline_access Mail.Read Mail.ReadBasic Mail.Read.Shared MailboxFolder.Read MailboxItem.Read Calendars.Read Calendars.Read.Shared Files.Read Files.Read.All Sites.Read.All Chat.Read Chat.ReadBasic ChatMember.Read ChatMessage.Read Channel.ReadBasic.All ChannelMessage.Read.All Team.ReadBasic.All OnlineMeetings.Read OnlineMeetingTranscript.Read.All OnlineMeetingAiInsight.Read OnlineMeetingArtifact.Read.All OnlineMeetingRecording.Read.All'
+    $script:ReadScopes = 'User.Read User.ReadBasic.All People.Read offline_access openid profile email Mail.Read Mail.ReadBasic Mail.Read.Shared MailboxFolder.Read MailboxItem.Read Calendars.Read Calendars.Read.Shared Files.Read Files.Read.All Sites.Read.All Chat.Read Chat.ReadBasic ChatMember.Read ChatMessage.Read Channel.ReadBasic.All ChannelMessage.Read.All Team.ReadBasic.All OnlineMeetings.Read OnlineMeetingTranscript.Read.All OnlineMeetingAiInsight.Read OnlineMeetingArtifact.Read.All OnlineMeetingRecording.Read.All'
     $script:WriteScopes = 'Mail.Send Mail.ReadWrite MailboxSettings.ReadWrite Calendars.ReadWrite Files.ReadWrite.All ChatMessage.Send ChannelMessage.Send Chat.Create'
     $script:Scopes = { param($Grant) @("$($Grant.scope)" -split '\s+' | Where-Object { $_ }) }
     $script:TenantGrant = { $script:T.Grants | Where-Object { $_.clientId -eq 'sp-server' -and $_.consentType -eq 'AllPrincipals' } }
@@ -346,6 +346,17 @@ Describe 'Access levels and read areas' {
         $S | Should -Contain 'Sites.Read.All'
         $null = Set-CIPPClaudeConnector -TenantFilter 'contoso.com' -Action Access -ReadAreas 'mail', 'calendar', 'files', 'teams', 'meetings'
         (& $script:Scopes (& $script:TenantGrant)) | Should -Contain 'Chat.Read'
+    }
+
+    It 'adds permissions Claude asks for at every level when the grant is missing them' {
+        New-FakeTenant -GroupExists -ReadOnlyConsent
+        $G = & $script:TenantGrant
+        $G.scope = (@(& $script:Scopes $G) | Where-Object { $_ -notin 'People.Read', 'Team.ReadBasic.All' }) -join ' '
+        $R = Set-CIPPClaudeConnector -TenantFilter 'contoso.com' -Action Access -TenantLevel 'read' -ReadAreas 'mail', 'calendar', 'files', 'teams', 'meetings'
+        $S = & $script:Scopes (& $script:TenantGrant)
+        $S | Should -Contain 'People.Read'
+        $S | Should -Contain 'Team.ReadBasic.All'
+        ($R | Where-Object { $_.Step -eq 'Access' -and $_.Status -eq 'Success' }).Message | Should -Match 'People\.Read'
     }
 
     It 'does nothing when access is already as asked' {

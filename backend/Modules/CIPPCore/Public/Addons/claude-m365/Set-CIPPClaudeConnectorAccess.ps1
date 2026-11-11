@@ -72,6 +72,14 @@ function Set-CIPPClaudeConnectorAccess {
     foreach ($S in $Current) { $New.Add($S) }
     $Changes = [System.Collections.Generic.List[string]]::new()
 
+    # Permissions Claude asks for at every level (for example People.Read, added in November 2026): add any
+    # the grant is missing, so people aren't told the app needs admin approval.
+    if ($TenantLevel -or $PSBoundParameters.ContainsKey('ReadAreas')) {
+        $MissingBase = @($Config.alwaysKeep | Where-Object { $New -notcontains $_ })
+        foreach ($S in $MissingBase) { $New.Add($S) }
+        if ($MissingBase.Count -gt 0) { $Changes.Add("added $($MissingBase -join ', '), which Claude asks for at every level") }
+    }
+
     if ($PSBoundParameters.ContainsKey('ReadAreas') -and $null -ne $ReadAreas) {
         foreach ($Area in $Config.readAreas) {
             if ($ReadAreas -contains $Area.id) {
