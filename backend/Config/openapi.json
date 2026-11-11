@@ -18368,7 +18368,7 @@
         "tags": [
           "Addons > chatgpt-m365"
         ],
-        "description": "Community Additions > ChatGPT for Microsoft 365 (add-on chatgpt-m365): the end-of-setup summary PDF for the tenant (tenantFilter). Read from the tenant: who can use ChatGPT and at what level, what ChatGPT can read, the safeguards in place, anything not finished, and what happens next. GroupName is the access group (default SG-ChatGPT-Users). Optional ContactName (who it is addressed to) and PreparedBy (who it is from). The uploaded connection guide (ExecChatGPTConnectorGuide) is added at the end unless IncludeGuide is false. Returns application/pdf with the CIPP branding.",
+        "description": "Community Additions > ChatGPT for Microsoft 365 (add-on chatgpt-m365): the end-of-setup summary PDF for the tenant (tenantFilter). Read from the tenant: who can use ChatGPT and at what level, what ChatGPT can read, the safeguards in place, anything not finished, and what happens next. GroupName is the access group (default SG-ChatGPT-Users). Optional ContactName (who it is addressed to) and PreparedBy (who it is from). The uploaded connection guide (ExecAddonGuide, AddonId chatgpt-m365, Key connection) is added at the end unless IncludeGuide is false. Returns application/pdf with the CIPP branding.",
         "requestBody": {
           "required": true,
           "content": {

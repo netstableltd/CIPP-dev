@@ -462,8 +462,8 @@ export const CippChatGPTConnectorProcess = ({ tenant }) => {
             <Box component="ul" sx={{ pl: 2.5, my: 0 }}>
               <Typography component="li" variant="body2">
                 In ChatGPT, as a workspace owner or admin of the customer's
-                Business, Enterprise or Edu workspace: Admin console &gt; Apps
-                (or Plugins). Turn on Outlook Email, Outlook Calendar, Teams and
+                Business, Enterprise or Edu workspace: Admin console &gt; Plugins
+                (Apps in older workspaces). Turn on Outlook Email, Outlook Calendar, Teams and
                 SharePoint as wanted.
               </Typography>
               <Typography component="li" variant="body2">

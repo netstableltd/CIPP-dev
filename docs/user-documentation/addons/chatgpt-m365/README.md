@@ -17,7 +17,7 @@ This process adds the app, makes it **assignment-only** so only the people you c
 ## How it differs from Claude
 
 * **One app, not two.**
-* **No consent page step.** OpenAI starts admin consent from inside ChatGPT (Admin console > Apps > *Review permissions in Microsoft Entra*) and doesn't publish a consent link. That route grants every permission for every action turned on in ChatGPT. Instead, CIPP writes the tenant-wide grant itself with only the chosen read areas and level, so nobody has more access, even for a moment.
+* **No consent page step.** OpenAI starts admin consent from inside ChatGPT (Admin console > Plugins > *Configure Microsoft permissions*, or *Review permissions in Microsoft Entra* in workspaces still on Apps) and doesn't publish a consent link. That route grants every permission for every action turned on in ChatGPT. Instead, CIPP writes the tenant-wide grant itself with only the chosen read areas and level, so nobody has more access, even for a moment.
 * **ChatGPT's own settings must match.** ChatGPT asks Microsoft for the permissions of every action turned on in its admin console. If an action is on but its permission isn't granted, people see *Need admin approval* when they connect. Step 4 shows what to turn off for the chosen level.
 * **Higher levels for named people need ChatGPT Enterprise or Edu.** There, a role can have extra actions on. On ChatGPT Business, actions are the same for everyone, so give everyone one level.
 * **Shared mailboxes.** ChatGPT can send from and change shared mailboxes and shared calendars (`Mail.Send.Shared`, `Mail.ReadWrite.Shared`, `Calendars.ReadWrite.Shared`). That is only in Level 4.
@@ -62,7 +62,7 @@ The top of the page shows:
    * Higher levels for named people work as for Claude: a per-person grant with only what their level adds.
    * Saving also removes any approvals people gave themselves.
 4. **Match it in ChatGPT** (by hand, as a workspace owner or admin):
-   * Admin console > Apps: turn on the Microsoft apps you want.
+   * Admin console > Plugins (Apps in older workspaces): turn on the Microsoft apps you want.
    * Turn off the actions above the chosen level. The page shows which, for the level chosen.
    * Set the apps' action permission to *Allow read actions* or *Always ask*, so ChatGPT asks before it sends or changes anything.
    * On Enterprise/Edu, give people with a higher level a role with those actions on.

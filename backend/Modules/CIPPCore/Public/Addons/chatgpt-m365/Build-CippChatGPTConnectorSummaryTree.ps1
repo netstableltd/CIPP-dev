@@ -140,7 +140,7 @@ function Build-CippChatGPTConnectorSummaryTree {
     }
 
     $blocks.Add((New-CippReportBullets -Title 'What happens next' -Items @(
-                @{ label = 'Connect'; text = $(if ($Guide -and @($Guide.Blocks).Count -gt 0) { 'Each person connects Microsoft 365 in ChatGPT and signs in with their work account. The guide at the end of this document shows how, step by step.' } else { 'Each person opens Apps in ChatGPT (Settings > Apps), connects Outlook, Teams or SharePoint and signs in with their work account.' }) }
+                @{ label = 'Connect'; text = $(if ($Guide -and @($Guide.Blocks).Count -gt 0) { 'Each person connects Microsoft 365 in ChatGPT and signs in with their work account. The guide at the end of this document shows how, step by step.' } else { 'Each person opens Settings > Plugins in ChatGPT (Settings > Apps in some workspaces), connects Outlook, Teams or SharePoint and signs in with their work account.' }) }
                 @{ label = 'Check before it acts'; text = 'ChatGPT asks before it sends an email, invite or Teams message, or changes anything. Read what it is about to do before confirming.' }
                 @{ label = 'Changes'; text = 'To add or remove people, or change what ChatGPT can do, email us. Changes take effect straight away; people may need to reconnect the Microsoft apps in ChatGPT.' }
                 @{ label = 'Something odd?'; text = 'If ChatGPT does something unexpected, or an email seems to be trying to instruct it, tell us straight away.' }
