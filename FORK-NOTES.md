@@ -2,6 +2,8 @@
 
 This fork of [CyberDrain/CIPP](https://github.com/CyberDrain/CIPP) is where Netstable develops a **Reports** area for CIPP (a consolidated Reports menu, scheduled internal pre-check and customer reports, and third-party report integrations starting with Atera). The intent is to offer the work back upstream as pull requests to `CyberDrain/CIPP:dev`.
 
+Instructions for Claude Code sessions are in `CLAUDE.md` (public-safe; private instance details stay in Dave's local notes). Upstream's `.gitignore` excludes `CLAUDE.md`, so it is force-added here (`git add -f`); keep it out of PR branches cut for upstream.
+
 Design notes live with the project docs (see `docs/06-reports-module-design.md` in the project folder; they will be moved into this repo once stable).
 
 ## Branches
