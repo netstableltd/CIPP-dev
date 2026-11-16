@@ -33590,7 +33590,7 @@
         "tags": [
           "Addons > password-handover"
         ],
-        "description": "Community Additions > Password hand-over (add-on password-handover): saves the add-on's settings (Settings: expireAfterDays 1-90, expireAfterViews 1-100, passphrase email or none, retrievalStep, mustChange, signInUrl, subject, message with {link}), or with Reset true goes back to the defaults. Stored in table AddonSettings.",
+        "description": "Community Additions > Password hand-over (add-on password-handover): saves the add-on's settings (Settings: serverUrl, blank for the integration's server; expireAfterDays 1-90, expireAfterViews 1-100, passphrase email or none, retrievalStep, mustChange, signInUrl, subject, message with {link}), with Reset true goes back to the defaults, or with Test true makes a throwaway link (1 view, 1 day) on Settings.serverUrl (or the integration's server) to check it works. Stored in table AddonSettings.",
         "requestBody": {
           "required": false,
           "content": {
@@ -33622,13 +33622,21 @@
                       "retrievalStep": {
                         "type": "boolean"
                       },
+                      "serverUrl": {
+                        "type": "string",
+                        "description": "A throwaway push (1 day, 1 view) to the address on the page, saved or not."
+                      },
                       "signInUrl": {
                         "type": "string"
                       },
                       "subject": {
                         "type": "string"
                       }
-                    }
+                    },
+                    "description": "A throwaway push (1 day, 1 view) to the address on the page, saved or not."
+                  },
+                  "Test": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -62603,7 +62611,7 @@
         "tags": [
           "Addons > password-handover"
         ],
-        "description": "Community Additions > Password hand-over (add-on password-handover): the add-on's settings (link days and views, passphrase, the message to the customer and its placeholders) and whether a Password Pusher server is set up in Settings > Integrations. Never returns the API key.",
+        "description": "Community Additions > Password hand-over (add-on password-handover): the add-on's settings (link days and views, passphrase, the message to the customer and its placeholders) and which Password Pusher server it uses (its own address, or the one in Settings > Integrations). Never returns the API key.",
         "responses": {
           "200": {
             "description": "Success",

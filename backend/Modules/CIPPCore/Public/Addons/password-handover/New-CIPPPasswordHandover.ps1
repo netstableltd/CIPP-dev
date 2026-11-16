@@ -5,14 +5,15 @@ function New-CIPPPasswordHandover {
         a number of days or views, then writes the message to send the customer.
 
     .DESCRIPTION
-        Checks the Password Pusher server is set up before touching the password, so a missing setup
-        never leaves a reset password with no way to send it. If the link can't be made after the
-        reset, the password is returned instead, with a warning.
+        The link is made first, with the new password, and the password is reset only once the link
+        exists. So if Password Pusher isn't set up or doesn't answer, nothing is reset and the
+        password is never shown in plain text. If the reset then fails, the link holds a password
+        nobody uses and simply expires.
         Directory-synced users are reset through password writeback, which always asks for a new
         password at next sign-in.
 
     .OUTPUTS
-        Results for CippApiResults: the link, the message to send (subject and body), or a warning.
+        Results for CippApiResults: the link and the message to send (subject and body).
 
     .FUNCTIONALITY
         Internal
@@ -36,29 +37,16 @@ function New-CIPPPasswordHandover {
     if ($Settings.expireAfterViews -lt 1 -or $Settings.expireAfterViews -gt 100) { throw 'The link can be opened from 1 to 100 times.' }
     $MustChangeNext = if ($null -eq $MustChange -or "$MustChange" -eq '') { [bool]$Settings.mustChange } else { [System.Convert]::ToBoolean("$MustChange") }
 
-    # The server first: no reset without a way to hand the password over.
-    $Connection = Get-CIPPPasswordHandoverConnection
+    $Connection = Get-CIPPPasswordHandoverConnection -ServerUrl $Settings.serverUrl
 
     $User = New-GraphGetRequest -uri "https://graph.microsoft.com/v1.0/users/$($UserID)?`$select=id,displayName,userPrincipalName,onPremisesSyncEnabled" -noPagination $true -tenantid $TenantFilter
     $Upn = if ($User.userPrincipalName) { $User.userPrincipalName } else { $UserID }
     $Name = if ($User.displayName) { $User.displayName } elseif ($DisplayName) { $DisplayName } else { $Upn }
     $Synced = $User.onPremisesSyncEnabled -eq $true
-
-    $Password = New-passwordString
     if (-not $PSCmdlet.ShouldProcess($Upn, 'Reset the password and make a link')) { return }
-    if ($Synced) {
-        $Body = @{ newPassword = $Password } | ConvertTo-Json -Compress
-        $null = New-GraphPostRequest -uri "https://graph.microsoft.com/beta/users/$($User.id ?? $UserID)/authentication/methods/28c10230-6103-485e-b985-444c60001490/resetPassword" -tenantid $TenantFilter -type POST -body $Body
-    } else {
-        $Body = @{ passwordProfile = @{ forceChangePasswordNextSignIn = $MustChangeNext; password = $Password } } | ConvertTo-Json -Compress
-        $null = New-GraphPostRequest -uri "https://graph.microsoft.com/v1.0/users/$($User.id ?? $UserID)" -tenantid $TenantFilter -type PATCH -body $Body
-    }
-    $ResetText = if ($Synced) {
-        "Sent a password reset for $Name ($Upn) through password writeback. It is applied on the local server shortly and they must choose a new password when they sign in."
-    } else {
-        "Reset the password for $Name ($Upn)$(if ($MustChangeNext) { '; they must choose a new one when they sign in' })."
-    }
 
+    # 1. The link, with the new password in it. Nothing has changed yet if this fails.
+    $Password = New-passwordString
     try {
         $Push = @{
             Connection        = $Connection
@@ -73,17 +61,21 @@ function New-CIPPPasswordHandover {
         $Link = (New-CIPPPwPush @Push).Link
         if (-not $Link) { throw 'Password Pusher gave no link.' }
     } catch {
-        $ErrorMessage = Get-CippException -Exception $_
-        Write-LogMessage -headers $Headers -API $APIName -tenant $TenantFilter -message "Reset the password for $Upn but couldn't make the Password Pusher link: $($ErrorMessage.NormalizedError)" -Sev 'Warning' -LogData $ErrorMessage
-        return @(
-            [pscustomobject]@{
-                resultText = "$ResetText The link couldn't be made ($($ErrorMessage.NormalizedError)), so here is the new password instead. Send it to the customer another safe way."
-                copyField  = $Password
-                state      = 'warning'
-            }
-        )
+        throw "The Password Pusher link couldn't be made, so the password was not reset: $($_.Exception.Message)"
     }
 
+    # 2. The reset.
+    if ($Synced) {
+        $Body = @{ newPassword = $Password } | ConvertTo-Json -Compress
+        $null = New-GraphPostRequest -uri "https://graph.microsoft.com/beta/users/$($User.id ?? $UserID)/authentication/methods/28c10230-6103-485e-b985-444c60001490/resetPassword" -tenantid $TenantFilter -type POST -body $Body
+        $ResetText = "Sent a password reset for $Name ($Upn) through password writeback. It is applied on the local server shortly and they must choose a new password when they sign in."
+    } else {
+        $Body = @{ passwordProfile = @{ forceChangePasswordNextSignIn = $MustChangeNext; password = $Password } } | ConvertTo-Json -Compress
+        $null = New-GraphPostRequest -uri "https://graph.microsoft.com/v1.0/users/$($User.id ?? $UserID)" -tenantid $TenantFilter -type PATCH -body $Body
+        $ResetText = "Reset the password for $Name ($Upn)$(if ($MustChangeNext) { '; they must choose a new one when they sign in' })."
+    }
+
+    # 3. The message.
     $ExpiresOn = (Get-Date).Date.AddDays($Settings.expireAfterDays)
     $Fill = @{ Settings = $Settings; DisplayName = $Name; UserPrincipalName = $Upn; Link = $Link; ExpiresOn = $ExpiresOn; MustChange = $MustChangeNext; Synced = $Synced }
     $Subject = Format-CIPPPasswordHandoverMessage -Template $Settings.subject @Fill

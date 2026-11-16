@@ -5,7 +5,7 @@ function Get-CIPPPasswordHandoverSettings {
         password-handover / settings) over the defaults in Config/Addons/password-handover.
 
     .OUTPUTS
-        Hashtable: expireAfterDays, expireAfterViews, passphrase (email or none), retrievalStep, mustChange,
+        Hashtable: serverUrl (blank: the Password Pusher integration's server), expireAfterDays, expireAfterViews, passphrase (email or none), retrievalStep, mustChange,
         signInUrl, subject, message, placeholders, and Saved (true once someone has saved their own).
 
     .FUNCTIONALITY
@@ -19,7 +19,7 @@ function Get-CIPPPasswordHandoverSettings {
         $script:CIPPPasswordHandoverDefaults = Get-Content -Path (Join-Path $Root 'Config/Addons/password-handover/PasswordHandoverDefaults.json') -Raw | ConvertFrom-Json
     }
     $Defaults = $script:CIPPPasswordHandoverDefaults
-    $Keys = 'expireAfterDays', 'expireAfterViews', 'passphrase', 'retrievalStep', 'mustChange', 'signInUrl', 'subject', 'message'
+    $Keys = 'serverUrl', 'expireAfterDays', 'expireAfterViews', 'passphrase', 'retrievalStep', 'mustChange', 'signInUrl', 'subject', 'message'
 
     $Settings = @{ Saved = $false; placeholders = @($Defaults.placeholders) }
     foreach ($Key in $Keys) { $Settings[$Key] = $Defaults.$Key }
@@ -38,6 +38,7 @@ function Get-CIPPPasswordHandoverSettings {
         }
         $Settings.Saved = $true
     }
+    $Settings.serverUrl = "$($Settings.serverUrl)".Trim().TrimEnd('/')
     $Settings.expireAfterDays = [int]$Settings.expireAfterDays
     $Settings.expireAfterViews = [int]$Settings.expireAfterViews
     $Settings.retrievalStep = [bool]$Settings.retrievalStep

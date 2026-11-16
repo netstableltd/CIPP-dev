@@ -10,6 +10,8 @@ function Test-CIPPPasswordHandoverSettings {
     [CmdletBinding()]
     param([Parameter(Mandatory)]$Settings)
 
+    $ServerUrl = "$($Settings.serverUrl)".Trim().TrimEnd('/')
+    if ($ServerUrl -and $ServerUrl -notmatch '^https://[A-Za-z0-9.-]+(:\d+)?(/[^\s<>"]*)?$') { throw 'The Password Pusher address must start with https://.' }
     $Days = "$($Settings.expireAfterDays)" -as [int]
     if (-not $Days -or $Days -lt 1 -or $Days -gt 90) { throw 'The link can last from 1 to 90 days.' }
     $Views = "$($Settings.expireAfterViews)" -as [int]
@@ -25,6 +27,7 @@ function Test-CIPPPasswordHandoverSettings {
     if ($Message -notmatch '\{link\}') { throw 'The message must include {link}, or the customer gets no link.' }
 
     [ordered]@{
+        serverUrl        = $ServerUrl
         expireAfterDays  = $Days
         expireAfterViews = $Views
         passphrase       = $Passphrase

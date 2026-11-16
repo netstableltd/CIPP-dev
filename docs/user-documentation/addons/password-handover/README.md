@@ -14,9 +14,12 @@ You need the **Identity.User.ReadWrite** permission to use it, and **CIPP.AppSet
 
 ## Before you start: the Password Pusher server
 
-The links are made on the Password Pusher server set in **Settings > Integrations > Password Pusher**: its address, and an API key if your server needs one. This add-on uses that server, but its own expiry settings, so you don't need to switch the integration on. If you do switch it on, CIPP's own password results (Reset Password, new users, Temporary Access Passes) also give links, with the integration's expiry settings.
+Give the add-on a Password Pusher server, in one of two ways:
 
-If no server is set up, nothing is reset: the action says so and stops. If the link can't be made after the reset (the server is down, say), you get the new password instead, with a warning to send it another safe way.
+* **Password Pusher address** on the Password hand-over page: your own server, used without an API key (anonymous pushes, which most self-hosted servers allow). **Test** makes a throwaway link (1 view, 1 day) to check it works, before or after you save.
+* Or leave that blank to use the server in **Settings > Integrations > Password Pusher**, with its API key. You don't need to switch the integration on: if you do, CIPP's own password results (Reset Password, new users, Temporary Access Passes) also give links, with the integration's expiry settings.
+
+The link is made first, and the password is reset only once the link exists. If there is no server, or it doesn't answer, nothing is reset and the action says why. The new password is never shown in plain text.
 
 ## In the dialog
 
@@ -31,6 +34,7 @@ The results show the link (with how long it lasts and the passphrase) and the me
 
 | Setting | Starts at | What it does |
 | --- | --- | --- |
+| Password Pusher address | Blank (the integration's server) | See above. |
 | Lasts (days) | 14 | 1 to 90. |
 | Can be opened (times) | 7 | 1 to 100. |
 | Passphrase | The user's email address | Anyone who finds the link also has to know whose password it is. Or none. |

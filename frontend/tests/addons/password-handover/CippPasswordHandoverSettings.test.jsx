@@ -47,6 +47,7 @@ describe('CippPasswordHandoverSettings', () => {
     load({ Configured: true, BaseUrl: 'https://pw.example.com', Authenticated: true })
     renderWithProviders(<CippPasswordHandoverSettings />)
     expect(screen.getByText('https://pw.example.com')).toBeInTheDocument()
+    expect(screen.getByText(/from the Password Pusher integration, with its API key/)).toBeInTheDocument()
     expect(screen.getByLabelText('Lasts (days)')).toHaveValue(14)
     expect(screen.getByLabelText('Can be opened (times)')).toHaveValue(7)
     expect(screen.getByLabelText('Message preview')).toHaveTextContent('opened 7 times')
@@ -67,5 +68,22 @@ describe('CippPasswordHandoverSettings', () => {
     fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'No link here' } })
     expect(screen.getByText(/must include \{link\}/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save settings' })).toBeDisabled()
+  })
+
+  it('tests the address on the page before it is saved', () => {
+    load({ Configured: false })
+    renderWithProviders(<CippPasswordHandoverSettings />)
+    fireEvent.change(screen.getByLabelText('Password Pusher address'), {
+      target: { value: 'https://pw.example.com' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Test' }))
+    expect(mutate).toHaveBeenCalledWith({
+      url: '/api/ExecPasswordHandoverSettings',
+      data: { Test: true, Settings: { serverUrl: 'https://pw.example.com' } },
+    })
+    fireEvent.change(screen.getByLabelText('Password Pusher address'), {
+      target: { value: 'http://pw.example.com' },
+    })
+    expect(screen.getByText(/address must start with https/)).toBeInTheDocument()
   })
 })

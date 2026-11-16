@@ -2,8 +2,8 @@
   "schema": 1,
   "id": "password-handover",
   "name": "Password hand-over",
-  "version": "1.0.0",
-  "description": "Adds Reset Password and Send Link to the user actions: resets the password, puts the new one behind a Password Pusher link that stops working after a set number of days and views (14 days and 7 views to start with, with the user's email address as the passphrase), and gives you the message to send the customer. Uses the Password Pusher server from Settings > Integrations, with its own expiry settings, and never resets a password when there is no server to send it with.",
+  "version": "1.1.0",
+  "description": "Adds Reset Password and Send Link to the user actions: resets the password, puts the new one behind a Password Pusher link that stops working after a set number of days and views (14 days and 7 views to start with, with the user's email address as the passphrase), and gives you the message to send the customer. Uses its own Password Pusher address, or the server from Settings > Integrations, with its own expiry settings. The link is made before the password is reset, so a password is never reset without a link, or shown in plain text.",
   "author": "Netstable",
   "category": "Standard process",
   "cipp": {

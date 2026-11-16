@@ -35,6 +35,9 @@ export const fillHandoverMessage = (template, settings, sample = {}) => {
 
 /** What's wrong with the settings, in words, or null when they can be saved. */
 export const handoverSettingsProblem = (s) => {
+  const server = String(s.serverUrl ?? '').trim()
+  if (server && !/^https:\/\/[A-Za-z0-9.-]+(:\d+)?(\/[^\s<>"]*)?$/.test(server))
+    return 'The Password Pusher address must start with https://.'
   const days = Number(s.expireAfterDays)
   const views = Number(s.expireAfterViews)
   if (!Number.isInteger(days) || days < 1 || days > 90)
@@ -56,6 +59,7 @@ export const handoverSettingsProblem = (s) => {
 /** The settings as the server takes them. */
 export const handoverSettingsBody = (s) => ({
   Settings: {
+    serverUrl: String(s.serverUrl ?? '').trim().replace(/\/+$/, ''),
     expireAfterDays: Number(s.expireAfterDays),
     expireAfterViews: Number(s.expireAfterViews),
     passphrase: s.passphrase === 'email' ? 'email' : 'none',

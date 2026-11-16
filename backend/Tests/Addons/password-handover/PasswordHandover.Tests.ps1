@@ -90,6 +90,7 @@ Describe 'Password hand-over add-on' {
             @{ Why = 'an odd passphrase'; Change = @{ passphrase = 'secret' }; Message = 'email address or none' }
             @{ Why = 'a plain http sign-in address'; Change = @{ signInUrl = 'http://office.com' }; Message = 'https' }
             @{ Why = 'a message with no link'; Change = @{ message = 'Hello' }; Message = '\{link\}' }
+            @{ Why = 'a plain http server'; Change = @{ serverUrl = 'http://pw.example.com' }; Message = 'Password Pusher address' }
         ) {
             $Good = @{ expireAfterDays = 14; expireAfterViews = 7; passphrase = 'email'; retrievalStep = $true; mustChange = $true; signInUrl = 'https://www.office.com'; subject = 'Hi'; message = 'Here: {link}' }
             foreach ($K in $Change.Keys) { $Good[$K] = $Change[$K] }
@@ -122,7 +123,7 @@ Describe 'Password hand-over add-on' {
     Describe 'New-CIPPPasswordHandover' {
         It 'resets nothing when no Password Pusher server is set up' {
             $script:ExtConfig = $null
-            { New-CIPPPasswordHandover -TenantFilter 'contoso.com' -UserID 'jane@contoso.com' } | Should -Throw '*Settings > Integrations > Password Pusher*'
+            { New-CIPPPasswordHandover -TenantFilter 'contoso.com' -UserID 'jane@contoso.com' } | Should -Throw '*Set up Password Pusher first*'
             @($script:Calls | Where-Object { $_ -match '^(PATCH|POST)' }).Count | Should -Be 0
         }
         It 'resets a cloud user and makes a 14-day, 7-view link with their email as passphrase' {
@@ -162,13 +163,21 @@ Describe 'Password hand-over add-on' {
             $R[0].resultText | Should -Match 'password writeback'
             $R[1].copyField | Should -Match 'choose your own password'
         }
-        It 'gives the password with a warning if the link fails after the reset' {
+        It 'resets nothing, and never shows the password, when the link fails' {
             $script:PushFails = $true
-            $R = New-CIPPPasswordHandover -TenantFilter 'contoso.com' -UserID 'jane@contoso.com'
-            @($R).Count | Should -Be 1
-            $R[0].state | Should -Be 'warning'
-            $R[0].copyField | Should -Be 'Synthetic-Pass-123'
-            $R[0].resultText | Should -Match "link couldn't be made"
+            { New-CIPPPasswordHandover -TenantFilter 'contoso.com' -UserID 'jane@contoso.com' } | Should -Throw '*was not reset*'
+            @($script:Calls | Where-Object { $_ -match '^(PATCH|POST)' }).Count | Should -Be 0
+        }
+        It 'uses the add-on''s own server without the integration''s API key' {
+            $script:Saved.Add([pscustomobject]@{ PartitionKey = 'password-handover'; RowKey = 'settings'; Settings = '{"serverUrl":"https://own.example.com/"}' })
+            $null = New-CIPPPasswordHandover -TenantFilter 'contoso.com' -UserID 'jane@contoso.com'
+            $script:Push.Connection.BaseUrl | Should -Be 'https://own.example.com'
+            $script:Push.Connection.Headers.ContainsKey('Authorization') | Should -BeFalse
+        }
+        It 'works with only the add-on''s server and no integration at all' {
+            $script:ExtConfig = $null
+            $script:Saved.Add([pscustomobject]@{ PartitionKey = 'password-handover'; RowKey = 'settings'; Settings = '{"serverUrl":"https://own.example.com"}' })
+            (New-CIPPPasswordHandover -TenantFilter 'contoso.com' -UserID 'jane@contoso.com')[0].copyField | Should -Be 'https://own.example.com/p/tok123/r'
         }
         It 'refuses a server address that is not https' {
             $script:ExtConfig = & $script:Server @{ BaseUrl = 'http://pw.example.com' }
@@ -209,6 +218,22 @@ Describe 'Password hand-over add-on' {
             (Get-CIPPPasswordHandoverSettings).expireAfterDays | Should -Be 10
             (Invoke-ExecPasswordHandoverSettings -Request (& $script:Request @{ Reset = $true } 'ExecPasswordHandoverSettings')).StatusCode | Should -Be 200
             (Get-CIPPPasswordHandoverSettings).expireAfterDays | Should -Be 14
+        }
+        It 'ExecPasswordHandoverSettings makes a throwaway test link on the address given' {
+            $R = Invoke-ExecPasswordHandoverSettings -Request (& $script:Request @{ Test = $true; Settings = @{ serverUrl = 'https://own.example.com' } } 'ExecPasswordHandoverSettings')
+            $R.StatusCode | Should -Be 200
+            $R.Body.Results | Should -Match 'It works: https://own.example.com'
+            $script:Push.ExpireAfterViews | Should -Be 1
+            $script:Push.Payload | Should -Match 'test link'
+            $script:PushFails = $true
+            (Invoke-ExecPasswordHandoverSettings -Request (& $script:Request @{ Test = $true; Settings = @{} } 'ExecPasswordHandoverSettings')).Body.Results | Should -Match "couldn't be made"
+            $script:Saved.Count | Should -Be 0
+        }
+        It 'ListPasswordHandover says when the add-on uses its own server' {
+            $script:Saved.Add([pscustomobject]@{ PartitionKey = 'password-handover'; RowKey = 'settings'; Settings = '{"serverUrl":"https://own.example.com"}' })
+            $R = Invoke-ListPasswordHandover -Request (& $script:Request @{} 'ListPasswordHandover')
+            $R.Body.Server.Source | Should -Be 'addon'
+            $R.Body.Server.Authenticated | Should -BeFalse
         }
         It 'ExecPasswordHandoverSettings refuses bad settings and keeps nothing' {
             $R = Invoke-ExecPasswordHandoverSettings -Request (& $script:Request @{ Settings = @{ expireAfterDays = 200 } } 'ExecPasswordHandoverSettings')

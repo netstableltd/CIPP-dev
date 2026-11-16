@@ -24,26 +24,25 @@ import {
 
 const integrationUrl = '/cipp/integrations/configure?id=PWPush'
 
-/** Where the links are made: CIPP's Password Pusher integration. */
+/** Which Password Pusher server makes the links: the add-on's own, or the integration's. */
 const ServerStatus = ({ server }) => {
   if (!server?.Configured)
     return (
       <Alert severity="warning">
-        No Password Pusher server is set up yet, so no password can be handed over.
-        Add your server in{' '}
-        <Link href={integrationUrl}>Settings &gt; Integrations &gt; Password Pusher</Link>{' '}
-        (the address, and an API key if your server needs one). You don&apos;t need to switch
-        the integration on for this add-on to use it.
+        No Password Pusher server is set up yet, so no password can be handed over. Give its
+        address below, or set it in{' '}
+        <Link href={integrationUrl}>Settings &gt; Integrations &gt; Password Pusher</Link>.
       </Alert>
     )
   return (
     <Alert severity="success">
       Links are made on <b>{server.BaseUrl}</b>
-      {server.Authenticated ? ', signed in with your API key' : ', without an API key'}.
+      {server.Source === 'addon'
+        ? ', the address saved here (without an API key).'
+        : `, from the Password Pusher integration${server.Authenticated ? ', with its API key' : ''}.`}
       {server.IntegrationEnabled
         ? ' The integration is also switched on, so CIPP’s own password results (Reset Password, new users, TAP) give links too, with the integration’s own expiry settings.'
-        : ''}{' '}
-      <Link href={integrationUrl}>Change it</Link>.
+        : ''}
     </Alert>
   )
 }
@@ -71,6 +70,7 @@ export const CippPasswordHandoverSettings = () => {
 
 const SettingsForm = ({ saved, server }) => {
   const [s, setS] = useState({
+    serverUrl: saved.serverUrl ?? '',
     expireAfterDays: saved.expireAfterDays,
     expireAfterViews: saved.expireAfterViews,
     passphrase: saved.passphrase,
@@ -81,6 +81,8 @@ const SettingsForm = ({ saved, server }) => {
     message: saved.message,
   })
   const save = ApiPostCall({ relatedQueryKeys: ['PasswordHandoverSettings'] })
+  const test = ApiPostCall({})
+  const testResult = test.data?.data?.Results ?? test.error?.response?.data?.Results
   const set = (key) => (e) =>
     setS({ ...s, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value })
   const problem = handoverSettingsProblem(s)
@@ -99,6 +101,32 @@ const SettingsForm = ({ saved, server }) => {
         <CardContent>
           <Typography variant="h6">The link</Typography>
           <Stack spacing={2} sx={{ mt: 2 }}>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="flex-start">
+              <TextField
+                label="Password Pusher address"
+                placeholder={server?.IntegrationUrl || 'https://pwpush.com'}
+                helperText="Leave blank to use the server in Settings > Integrations > Password Pusher (with its API key)."
+                value={s.serverUrl}
+                onChange={set('serverUrl')}
+                sx={{ flex: 1 }}
+              />
+              <Button
+                variant="outlined"
+                disabled={test.isPending}
+                onClick={() =>
+                  test.mutate({
+                    url: '/api/ExecPasswordHandoverSettings',
+                    data: { Test: true, Settings: { serverUrl: s.serverUrl.trim() } },
+                  })
+                }
+                sx={{ mt: 1 }}
+              >
+                {test.isPending ? 'Testing…' : 'Test'}
+              </Button>
+            </Stack>
+            {testResult && (
+              <Alert severity={test.isError ? 'error' : 'success'}>{String(testResult)}</Alert>
+            )}
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
               <TextField
                 type="number"
