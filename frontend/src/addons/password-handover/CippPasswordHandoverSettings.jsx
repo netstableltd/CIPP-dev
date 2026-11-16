@@ -134,6 +134,7 @@ const SettingsForm = ({ saved, server }) => {
                 value={s.expireAfterDays}
                 onChange={set('expireAfterDays')}
                 slotProps={{ htmlInput: { min: 1, max: 90 } }}
+                sx={{ minWidth: 200 }}
               />
               <TextField
                 type="number"
@@ -141,6 +142,7 @@ const SettingsForm = ({ saved, server }) => {
                 value={s.expireAfterViews}
                 onChange={set('expireAfterViews')}
                 slotProps={{ htmlInput: { min: 1, max: 100 } }}
+                sx={{ minWidth: 200 }}
               />
             </Stack>
             <Box>
