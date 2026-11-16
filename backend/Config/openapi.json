@@ -28,6 +28,9 @@
       "name": "Addons > claude-m365"
     },
     {
+      "name": "Addons > password-handover"
+    },
+    {
       "name": "Addons > shared-mailbox"
     },
     {
@@ -33500,6 +33503,173 @@
         "x-cipp-any-tenant": true
       }
     },
+    "/api/ExecPasswordHandover": {
+      "post": {
+        "summary": "ExecPasswordHandover",
+        "operationId": "ExecPasswordHandover",
+        "tags": [
+          "Addons > password-handover"
+        ],
+        "description": "Community Additions > Password hand-over (add-on password-handover): resets the password of one user (ID, their sign-in name or id, in tenantFilter) and returns a Password Pusher link to the new password, plus the message to send the customer. Optional MustChange (choose a new password at next sign-in), ExpireAfterDays (1-90) and ExpireAfterViews (1-100); anything left out uses the add-on's saved settings. Needs Settings > Integrations > Password Pusher to have a server address; nothing is reset without one.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "displayName": {
+                    "type": "string"
+                  },
+                  "ID": {
+                    "type": "string"
+                  },
+                  "MustChange": {
+                    "type": "string"
+                  },
+                  "tenantFilter": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "tenantFilter"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "ID",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/tenantFilter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResults"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "Identity.User.ReadWrite"
+      }
+    },
+    "/api/ExecPasswordHandoverSettings": {
+      "post": {
+        "summary": "ExecPasswordHandoverSettings",
+        "operationId": "ExecPasswordHandoverSettings",
+        "tags": [
+          "Addons > password-handover"
+        ],
+        "description": "Community Additions > Password hand-over (add-on password-handover): saves the add-on's settings (Settings: expireAfterDays 1-90, expireAfterViews 1-100, passphrase email or none, retrievalStep, mustChange, signInUrl, subject, message with {link}), or with Reset true goes back to the defaults. Stored in table AddonSettings.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Reset": {
+                    "type": "boolean"
+                  },
+                  "Settings": {
+                    "type": "object",
+                    "properties": {
+                      "expireAfterDays": {
+                        "type": "string"
+                      },
+                      "expireAfterViews": {
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      },
+                      "mustChange": {
+                        "type": "boolean"
+                      },
+                      "passphrase": {
+                        "type": "string"
+                      },
+                      "retrievalStep": {
+                        "type": "boolean"
+                      },
+                      "signInUrl": {
+                        "type": "string"
+                      },
+                      "subject": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResults"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required field or invalid input"
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "CIPP.AppSettings.ReadWrite",
+        "x-cipp-reads-via": [
+          "Test-CIPPPasswordHandoverSettings"
+        ]
+      }
+    },
     "/api/ExecPasswordNeverExpires": {
       "post": {
         "summary": "ExecPasswordNeverExpires",
@@ -62424,6 +62594,47 @@
         ],
         "x-cipp-role": "CIPP.Core.Read",
         "x-cipp-any-tenant": true
+      }
+    },
+    "/api/ListPasswordHandover": {
+      "get": {
+        "summary": "ListPasswordHandover",
+        "operationId": "ListPasswordHandover",
+        "tags": [
+          "Addons > password-handover"
+        ],
+        "description": "Community Additions > Password hand-over (add-on password-handover): the add-on's settings (link days and views, passphrase, the message to the customer and its placeholders) and whether a Password Pusher server is set up in Settings > Integrations. Never returns the API key.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "description": "Not described statically: this endpoint returns the upstream response as-is, so its fields are determined by the upstream API rather than by CIPP. Call the endpoint to see the actual shape, or add a response schema in backend/Config/openapi-overrides."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - invalid or missing bearer token"
+          },
+          "403": {
+            "description": "Forbidden - caller lacks the required RBAC role"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-cipp-role": "Identity.User.Read"
       }
     },
     "/api/ListPendingWebhooks": {

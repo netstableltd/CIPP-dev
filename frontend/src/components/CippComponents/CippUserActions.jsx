@@ -10,6 +10,8 @@ import { CippSharedMailboxLicenseAlert } from './CippSharedMailboxLicenseAlert'
 import { CippFormCondition } from './CippFormCondition'
 import { useWatch } from 'react-hook-form'
 import { ApiGetCall } from '../../api/ApiCall'
+// Fork: add-on actions (Community Additions)
+import { enabledAddonExtensions, userActionExtensions, withAddonUserActions } from '../../utils/addon-extensions'
 
 // Separate component for Manage Licenses form to avoid hook issues
 const ManageLicensesForm = ({ formControl, tenant }) => {
@@ -543,8 +545,11 @@ export const useCippUserActions = () => {
   const canWriteUser = checkPermissions(['Identity.User.ReadWrite'])
   const canWriteMailbox = checkPermissions(['Exchange.Mailbox.ReadWrite'])
   const canWriteGroup = checkPermissions(['Identity.Group.ReadWrite'])
+  // Fork: add-on actions, less those whose add-on is turned off.
+  const featureFlags = ApiGetCall({ url: '/api/ListFeatureFlags', queryKey: 'featureFlags', staleTime: 600000, waiting: userActionExtensions.length > 0 })
+  const addonActions = enabledAddonExtensions(userActionExtensions, featureFlags?.data)
 
-  return [
+  return withAddonUserActions([
     {
       //tested
       label: 'View User',
@@ -1239,7 +1244,7 @@ export const useCippUserActions = () => {
       },
       condition: () => canWriteUser,
     },
-  ]
+  ], addonActions, checkPermissions) // Fork: add-on actions
 }
 
 // Legacy wrapper function for backward compatibility - but this should not be used

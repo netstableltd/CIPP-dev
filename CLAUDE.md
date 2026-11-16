@@ -28,6 +28,9 @@ A fork of [CyberDrain/CIPP](https://github.com/CyberDrain/CIPP) (CIPP-NG: PowerS
   - `chatgpt-m365`: ChatGPT for Microsoft 365 (OpenAI's one Entra app): CIPP gives admin consent for only
     the chosen access, then the admin matches the actions in ChatGPT's admin console. Built on the shared kit.
     First add-on that extends a CIPP page; candidate for an upstream PR (follows CyberDrain/CIPP#6013).
+  - `password-handover`: "Reset Password and Send Link" in the user actions menu (extension point `userActions`):
+    resets, makes a Password Pusher link (own days/views/passphrase settings, server from Settings > Integrations),
+    returns the link and a message for the customer.
   - Manager: Community Additions > Settings > Add-ons (`ListAddons`, `ExecAddon`, `ExecAddonDownload`).
   - Shared kit: `backend/Modules/CIPPCore/Public/AddonKit`, `AddonManager`, `frontend/src/components/CippAddons`,
     extension points in `frontend/src/utils/addon-extensions.js`.

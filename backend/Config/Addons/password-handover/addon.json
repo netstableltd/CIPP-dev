@@ -1,0 +1,76 @@
+{
+  "schema": 1,
+  "id": "password-handover",
+  "name": "Password hand-over",
+  "version": "1.0.0",
+  "description": "Adds Reset Password and Send Link to the user actions: resets the password, puts the new one behind a Password Pusher link that stops working after a set number of days and views (14 days and 7 views to start with, with the user's email address as the passphrase), and gives you the message to send the customer. Uses the Password Pusher server from Settings > Integrations, with its own expiry settings, and never resets a password when there is no server to send it with.",
+  "author": "Netstable",
+  "category": "Standard process",
+  "cipp": {
+    "minVersion": "11.3.0",
+    "testedWith": [
+      "11.3.0"
+    ]
+  },
+  "menu": [
+    {
+      "title": "Password hand-over",
+      "path": "/addons/password-handover",
+      "permissions": [
+        "Identity.User.*"
+      ],
+      "placement": "Community Additions",
+      "preferredPlacement": "Identity Management > Administration"
+    }
+  ],
+  "extends": [
+    {
+      "point": "userActions",
+      "where": "Identity Management > Users > user actions (after Reset Password)",
+      "file": "frontend/src/addons/password-handover/userActions.js"
+    }
+  ],
+  "endpoints": [
+    "ExecPasswordHandover",
+    "ExecPasswordHandoverSettings",
+    "ListPasswordHandover"
+  ],
+  "dependsOn": {
+    "functions": [
+      "Add-CIPPAzDataTableEntity",
+      "Get-CIPPAzDataTableEntity",
+      "Get-CippException",
+      "Get-CIPPPwPushVersion",
+      "Get-CIPPTable",
+      "Get-ExtensionAPIKey",
+      "New-CIPPPwPush",
+      "New-GraphGetRequest",
+      "New-GraphPostRequest",
+      "New-passwordString",
+      "Remove-CIPPAzDataTableEntity",
+      "Write-LogMessage"
+    ],
+    "frontend": [
+      "src/api/ApiCall",
+      "src/components/CippCards/CippPageCard",
+      "src/layouts/index"
+    ]
+  },
+  "coreChanges": [
+    {
+      "area": "User actions menu (extension point)",
+      "files": [
+        "frontend/src/components/CippComponents/CippUserActions.jsx",
+        "frontend/src/utils/addon-extensions.js"
+      ],
+      "what": "A generic extension point: add-ons can add actions to the user actions menu through a userActions.js file, placed after a named CIPP action. Without add-ons the menu is unchanged."
+    }
+  ],
+  "storage": [
+    {
+      "table": "AddonSettings",
+      "what": "The link and message settings (row password-handover / settings). No passwords or links are stored."
+    }
+  ],
+  "graphPermissions": "Uses CIPP's existing delegated access (GDAP): Microsoft Graph users (read and password reset), as CIPP's own Reset Password does."
+}

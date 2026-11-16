@@ -50,6 +50,48 @@ const loadUserBulkEdit = () => {
 
 export const userBulkEditExtensions = loadUserBulkEdit()
 
+/**
+ * userActions.js(x): extra actions in the user actions menu (Identity Management > Users, the user's
+ * page and JIT admin). Export `userActions`, an array of CIPP action objects (label, type, url, data,
+ * fields, confirmText, multiPost, icon, defaultvalues ...) plus:
+ *   permissions   who sees it (default ['Identity.User.ReadWrite'])
+ *   after         the label of the CIPP action to place it after (default: at the end)
+ */
+const loadUserActions = () => {
+  try {
+    const context = require.context('../addons', true, /^\.\/[a-z0-9-]+\/userActions\.jsx?$/)
+    return context.keys().flatMap((key) => {
+      const addonId = key.split('/')[1]
+      const actions = context(key)?.userActions ?? []
+      return (Array.isArray(actions) ? actions : [])
+        .filter((a) => a?.label && a?.url)
+        .map((a) => ({ ...a, addonId, isAddonExtension: true }))
+    })
+  } catch {
+    return []
+  }
+}
+
+export const userActionExtensions = loadUserActions()
+
+/**
+ * Puts add-on actions into CIPP's own list: each after the action named in `after`, or at the end.
+ * `allowed(permissions)` decides who sees each one.
+ */
+export const withAddonUserActions = (actions, extensions, allowed) => {
+  const list = [...actions]
+  for (const { permissions, after, addonId, isAddonExtension, ...action } of extensions) {
+    const entry = {
+      ...action,
+      condition: () => allowed(permissions ?? ['Identity.User.ReadWrite']),
+    }
+    const at = after ? list.findIndex((a) => a?.label === after) : -1
+    if (at === -1) list.push(entry)
+    else list.splice(at + 1, 0, entry)
+  }
+  return list
+}
+
 /** Drops the extensions of add-ons whose feature flag is turned off (shown while flags load). */
 export const enabledAddonExtensions = (extensions, featureFlags) => {
   if (!Array.isArray(featureFlags)) return extensions

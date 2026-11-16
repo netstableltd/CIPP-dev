@@ -11,7 +11,7 @@ const ROOTS = [
     // fork: add-on extension files (utils/addon-extensions.js)
     suffix: '/addons',
     base: '/src/addons',
-    modules: import.meta.glob('/src/addons/*/userBulkEdit.{js,jsx}', { eager: true }),
+    modules: import.meta.glob('/src/addons/*/{userBulkEdit,userActions}.{js,jsx}', { eager: true }),
   },
   {
     // fork: Community Additions add-on manifests (utils/addon-menu.js), outside the frontend
