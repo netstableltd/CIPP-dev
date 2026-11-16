@@ -62,6 +62,7 @@ Describe 'Get-CIPPReportSettings' {
         $s.ReportDayMode | Should -Be 'FirstWorkingDay'
         $s.PrecheckLeadDays | Should -Be 5
         $s.DefaultDeliveryMode | Should -Be 'Review'
+        $s.DefaultReportPeriod | Should -Be 'LastMonth'
         $s.CustomerSendEnabled | Should -BeFalse
         $s.TimeZone | Should -Be 'Europe/London'
     }
@@ -106,6 +107,7 @@ Describe 'Invoke-ExecReportSettings' {
         $Saved.ReportDayMode | Should -Be 'FirstWorkingDay'
         $Saved.TimeZone | Should -Be 'UTC'
         $Saved.DefaultDeliveryMode | Should -Be 'Review'
+        $Saved.DefaultReportPeriod | Should -Be 'LastMonth'
         $Saved.CustomerSendEnabled | Should -BeFalse
         $Saved.ModifiedBy | Should -Be 'dave@contoso.com'
     }
@@ -139,6 +141,7 @@ Describe 'Invoke-ExecReportSettings' {
         @{ Case = 'a bad email'; Overrides = @{ PrecheckRecipients = 'not-an-email' } }
         @{ Case = 'a bad time'; Overrides = @{ SendTime = '25:00' } }
         @{ Case = 'an unknown delivery mode'; Overrides = @{ DefaultDeliveryMode = @{ value = 'Sometimes' } } }
+        @{ Case = 'an unknown report period'; Overrides = @{ DefaultReportPeriod = @{ value = 'Fortnight' } } }
         @{ Case = 'a day of month out of range'; Overrides = @{ ReportDayMode = @{ value = 'DayOfMonth' }; ReportDay = 31 } }
         @{ Case = 'a lead time out of range'; Overrides = @{ PrecheckLeadDays = 0 } }
         @{ Case = 'an unknown time zone'; Overrides = @{ TimeZone = @{ value = 'Mars/Olympus' } } }

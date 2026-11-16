@@ -67,6 +67,7 @@ function New-CIPPReportDraft {
         Company      = [string]$Result.TenantName
         PeriodKey    = [string]$PeriodInfo.Key
         PeriodLabel  = [string]$PeriodInfo.Label
+        ReportName   = [string]$Result.ReportName
         Status       = 'Draft'
         ReportGUID   = [string]$Result.ReportGUID
         FileName     = [string]$Result.FileName

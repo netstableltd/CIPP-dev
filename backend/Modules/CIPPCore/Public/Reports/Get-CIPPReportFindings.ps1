@@ -77,7 +77,7 @@ function Get-CIPPReportFindings {
         $Score = $Data.M365.SecureScore
         if ($Score -and $Score.Change -le -5) {
             Add-Finding 'securescore-drop' 'Fix' 'Microsoft 365' 'Secure Score dropped' "Secure Score fell by $([math]::Abs($Score.Change)) points since $($Score.ChangeSince.ToString('d MMM')). Check for disabled policies or new uncovered controls." @() `
-                'Your Microsoft Secure Score dropped this month. We are reviewing the cause.'
+                "Your Microsoft Secure Score dropped this $(if ($Data.Period.Monthly -ne $false) { 'month' } else { 'period' }). We are reviewing the cause."
         }
         $Full = @($Data.M365.MailboxesNearlyFull)
         if ($Full.Count -gt 0) {

@@ -35872,6 +35872,9 @@
                   "ReportDay": {
                     "type": "string"
                   },
+                  "ReportPeriod": {
+                    "type": "string"
+                  },
                   "ScheduleMode": {
                     "type": "string"
                   },
@@ -35988,7 +35991,7 @@
         "tags": [
           "Reports"
         ],
-        "description": "Works with customer report drafts (Reports > Review). Action: Generate (TenantId + Period; creates or regenerates the draft, with Overrides when given), Approve, Reopen (back to draft), Send (emails the approved PDF to the company's recipients; needs \"Allow sending\" on in Reports > Settings) or Discard. Id is the draft's id for the last four.",
+        "description": "Works with customer report drafts (Reports > Review). Action: Generate (TenantId + Period - LastMonth, ThisMonth, RollingMonth, Last30Days, yyyy-MM, Scheduled (the company's usual period) or Custom with StartDate and EndDate; creates or regenerates the draft, with Overrides when given), Approve, Reopen (back to draft), Send (emails the approved PDF to the company's recipients; needs \"Allow sending\" on in Reports > Settings) or Discard. Id is the draft's id for the last four.",
         "requestBody": {
           "required": false,
           "content": {
@@ -35997,6 +36000,9 @@
                 "type": "object",
                 "properties": {
                   "Action": {
+                    "type": "string"
+                  },
+                  "EndDate": {
                     "type": "string"
                   },
                   "Id": {
@@ -36037,7 +36043,10 @@
                     }
                   },
                   "Period": {
-                    "$ref": "#/components/schemas/LabelValue"
+                    "type": "string"
+                  },
+                  "StartDate": {
+                    "type": "string"
                   },
                   "TenantId": {
                     "$ref": "#/components/schemas/LabelValue"
@@ -36083,7 +36092,10 @@
           }
         ],
         "x-cipp-role": "CIPP.Reports.ReadWrite",
-        "x-cipp-any-tenant": true
+        "x-cipp-any-tenant": true,
+        "x-cipp-reads-via": [
+          "Resolve-CIPPReportPeriodRequest"
+        ]
       }
     },
     "/api/ExecReportSettings": {
@@ -36106,6 +36118,10 @@
                   },
                   "DefaultDeliveryMode": {
                     "type": "string"
+                  },
+                  "DefaultReportPeriod": {
+                    "type": "string",
+                    "description": "What a report covers by default (each company can change it)."
                   },
                   "DefaultSections": {
                     "type": "string",
@@ -36174,7 +36190,7 @@
         "tags": [
           "Reports"
         ],
-        "description": "Generates a customer report or pre-check for one company on demand (the Test button). The PDF is stored under Generated Reports and, if SendTo is given, emailed only to those addresses - never to the company's customer recipients. ReportType is Customer or Precheck; Period is LastMonth, ThisMonth or yyyy-MM.",
+        "description": "Generates a customer report or pre-check for one company on demand (the Test button). The PDF is stored under Generated Reports and, if SendTo is given, emailed only to those addresses - never to the company's customer recipients. ReportType is Customer or Precheck; Period is LastMonth, ThisMonth, RollingMonth, Last30Days, yyyy-MM, Scheduled (the company's usual period) or Custom with StartDate and EndDate.",
         "requestBody": {
           "required": false,
           "content": {
@@ -36182,6 +36198,9 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "EndDate": {
+                    "type": "string"
+                  },
                   "Period": {
                     "type": "string"
                   },
@@ -36189,6 +36208,9 @@
                     "type": "string"
                   },
                   "SendTo": {
+                    "type": "string"
+                  },
+                  "StartDate": {
                     "type": "string"
                   },
                   "tenantFilter": {
@@ -36233,7 +36255,10 @@
           }
         ],
         "x-cipp-role": "CIPP.Reports.ReadWrite",
-        "x-cipp-any-tenant": true
+        "x-cipp-any-tenant": true,
+        "x-cipp-reads-via": [
+          "Resolve-CIPPReportPeriodRequest"
+        ]
       }
     },
     "/api/ExecReprocessUserLicenses": {
@@ -63118,6 +63143,9 @@
                       "Recipients": {
                         "x-cipp-field-source": "frontend"
                       },
+                      "ReportCovers": {
+                        "x-cipp-field-source": "frontend"
+                      },
                       "ScheduleMode": {
                         "x-cipp-field-source": "frontend"
                       },
@@ -63271,6 +63299,10 @@
                         "x-cipp-field-source": "frontend"
                       },
                       "ReportGUID": {
+                        "type": "string",
+                        "x-cipp-field-source": "storage"
+                      },
+                      "ReportName": {
                         "type": "string",
                         "x-cipp-field-source": "storage"
                       },

@@ -22,7 +22,8 @@ function Invoke-CIPPReportGeneration {
         Customer or Precheck.
 
     .PARAMETER Period
-        LastMonth (default), ThisMonth or yyyy-MM.
+        Any period Get-CIPPReportPeriod accepts: LastMonth (default), ThisMonth, RollingMonth, LastNDays,
+        yyyy-MM or yyyy-MM-dd_yyyy-MM-dd.
 
     .PARAMETER SendTo
         Addresses to email (comma/semicolon separated). Blank = generate and store only.
@@ -107,7 +108,8 @@ function Invoke-CIPPReportGeneration {
         $Baseline = $null
         if ($SectionPlan.Sections -contains 'm365-baseline') { $Baseline = Get-CIPPReportBaselineSection -TenantFilter $Domain -TenantName $Data.TenantName }
         $Tree = Build-CippCustomerReportTree -Data $Data -Findings $CustomerFindings -Summary $Summary -Sections $SectionPlan.Sections -ExtraSections $SectionPlan.ExtraSections -Baseline $Baseline
-        $ReportName = 'Monthly IT Report'
+        # A month-long period is the monthly report; any other range is just the IT report.
+        $ReportName = if ($PeriodInfo.Monthly) { 'Monthly IT Report' } else { 'IT Report' }
         $PresetKey = 'customerReport'
     } else {
         $Tree = Build-CippReportPrecheckTree -Companies @(@{ TenantName = $Data.TenantName; TenantFilter = $Domain; Findings = $Findings }) -Period $PeriodInfo
@@ -170,7 +172,7 @@ function Invoke-CIPPReportGeneration {
     if ($Recipients.Count -gt 0) {
         $Subject = "$($Data.TenantName) $([char]0x2014) $ReportName $([char]0x2014) $($PeriodInfo.Label)$(if ($Test) { ' (TEST)' })"
         $Intro = if ($ReportType -eq 'Customer') {
-            "Please find attached the monthly IT report for $([System.Net.WebUtility]::HtmlEncode($Data.TenantName)) covering $($PeriodInfo.Label)."
+            "Please find attached the $($ReportName.ToLower() -replace '\bit\b', 'IT') for $([System.Net.WebUtility]::HtmlEncode($Data.TenantName)) covering $($PeriodInfo.Label)."
         } else {
             "Attached is the pre-check for $([System.Net.WebUtility]::HtmlEncode($Data.TenantName)) ahead of the $($PeriodInfo.Label) report: $(@($Findings | Where-Object Severity -EQ 'Block').Count) block, $(@($Findings | Where-Object Severity -EQ 'Fix').Count) fix and $(@($Findings | Where-Object Severity -EQ 'Info').Count) info item(s)."
         }
@@ -234,6 +236,7 @@ function Invoke-CIPPReportGeneration {
         Domain     = $Domain
         PeriodKey  = $PeriodInfo.Key
         PeriodLabel = $PeriodInfo.Label
+        ReportName = $ReportName
         Sections   = $(if ($SectionPlan) { @($PlannedSections) } else { @() })
         Bytes      = $Bytes
     }

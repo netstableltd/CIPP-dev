@@ -110,6 +110,78 @@ Describe 'Get-CIPPReportPeriod' {
         $P.Label | Should -Match 'to date'
     }
     It 'rejects nonsense' { { Get-CIPPReportPeriod -Period 'Soon' } | Should -Throw }
+
+    Context 'ranges for mid-month and on-demand reports' {
+        BeforeAll { $script:Mid = [datetime]::new(2026, 11, 16, 10, 30, 0, [DateTimeKind]::Utc) }
+        It 'RollingMonth is one month up to the end of yesterday' {
+            $P = Get-CIPPReportPeriod -Period 'RollingMonth' -Now $Mid
+            $P.Start | Should -Be ([datetime]::new(2026, 10, 16, 0, 0, 0, [DateTimeKind]::Utc))
+            $P.End | Should -Be ([datetime]::new(2026, 11, 16, 0, 0, 0, [DateTimeKind]::Utc))
+            $P.Key | Should -Be '2026-10-16_2026-11-15'
+            $P.Label | Should -Be "16 October $([char]0x2013) 15 November 2026"
+            $P.Kind | Should -Be 'Range'
+            $P.Monthly | Should -BeTrue
+            $P.IsPartial | Should -BeFalse
+        }
+        It 'Last30Days is the 30 whole days up to yesterday and still the monthly report' {
+            $P = Get-CIPPReportPeriod -Period 'Last30Days' -Now $Mid
+            $P.Start | Should -Be ([datetime]::new(2026, 10, 17, 0, 0, 0, [DateTimeKind]::Utc))
+            $P.Days | Should -Be 30
+            $P.Key | Should -Be '2026-10-17_2026-11-15'
+            $P.Monthly | Should -BeTrue
+        }
+        It 'a week is not the monthly report' {
+            $P = Get-CIPPReportPeriod -Period 'Last7Days' -Now $Mid
+            $P.Days | Should -Be 7
+            $P.Monthly | Should -BeFalse
+            $P.Label | Should -Be "9 $([char]0x2013) 15 November 2026"
+        }
+        It 'custom dates include both days' {
+            $P = Get-CIPPReportPeriod -Period '2026-11-01_2026-11-15' -Now $Mid
+            $P.Start | Should -Be ([datetime]::new(2026, 11, 1, 0, 0, 0, [DateTimeKind]::Utc))
+            $P.End | Should -Be ([datetime]::new(2026, 11, 16, 0, 0, 0, [DateTimeKind]::Utc))
+            $P.Days | Should -Be 15
+            $P.IsPartial | Should -BeFalse
+        }
+        It 'custom dates across a year end' {
+            (Get-CIPPReportPeriod -Period '2025-12-20_2026-01-19' -Now $Mid).Label | Should -Be "20 December 2025 $([char]0x2013) 19 January 2026"
+            (Get-CIPPReportPeriod -Period '2026-11-03_2026-11-03' -Now $Mid).Label | Should -Be '3 November 2026'
+        }
+        It 'a range that is a calendar month is that month (same draft)' {
+            $P = Get-CIPPReportPeriod -Period '2026-10-01_2026-10-31' -Now $Mid
+            $P.Key | Should -Be '2026-10'
+            $P.Label | Should -Be 'October 2026'
+            $P.Kind | Should -Be 'Month'
+        }
+        It 'a range that has not finished runs to now, keeping its dates in the key' {
+            $P = Get-CIPPReportPeriod -Period '2026-11-01_2026-11-30' -Now $Mid
+            $P.Key | Should -Be '2026-11'
+            $P.IsPartial | Should -BeTrue
+            $P.End | Should -Be $Mid
+            $Q = Get-CIPPReportPeriod -Period '2026-11-10_2026-11-20' -Now $Mid
+            $Q.Key | Should -Be '2026-11-10_2026-11-20'
+            $Q.Label | Should -Match 'to date'
+        }
+        It 'the key resolves back to the same dates (drafts regenerate from it)' {
+            foreach ($Name in 'RollingMonth', 'Last30Days', 'Last7Days', '2026-11-01_2026-11-15', 'LastMonth') {
+                $P = Get-CIPPReportPeriod -Period $Name -Now $Mid
+                $Again = Get-CIPPReportPeriod -Period $P.Key -Now $Mid.AddDays(3)
+                $Again.Start | Should -Be $P.Start
+                $Again.Key | Should -Be $P.Key
+            }
+        }
+        It 'rejects <Period>' -ForEach @(
+            @{ Period = '2026-11-15_2026-11-01' }
+            @{ Period = '2025-01-01_2026-06-30' }
+            @{ Period = '2026-12-01_2026-12-05' }
+            @{ Period = '2026-02-30_2026-03-01' }
+            @{ Period = 'Last0Days' }
+            @{ Period = 'Last400Days' }
+            @{ Period = '2027-01' }
+        ) {
+            { Get-CIPPReportPeriod -Period $Period -Now $Mid } | Should -Throw
+        }
+    }
 }
 
 Describe 'Get-CIPPCustomerReportData' {
@@ -201,6 +273,12 @@ Describe 'Report trees' {
         $T = Build-CippCustomerReportTree -Data @{ TenantName = 'X'; Period = $Period; M365 = $Data.M365; Atera = $null } -Findings @()
         $Bytes = ConvertTo-CippReportPdf -Blocks $T.Blocks -Variables $T.Variables -TenantName 'X' -ReportName 'T'
         [Text.Encoding]::ASCII.GetString($Bytes[0..4]) | Should -Be '%PDF-'
+    }
+    It 'a report for a short period is the IT report, not the monthly one' {
+        $Week = Get-CIPPReportPeriod -Period 'Last7Days' -Now $Now
+        $T = Build-CippCustomerReportTree -Data @{ TenantName = 'X'; Period = $Week; M365 = $Data.M365; Atera = $null } -Findings @()
+        $T.Variables.coverlabel | Should -Be 'IT Report'
+        (Build-CippCustomerReportTree -Data @{ TenantName = 'X'; Period = $Period; M365 = $Data.M365; Atera = $null } -Findings @()).Variables.coverlabel | Should -Be 'Monthly IT Report'
     }
     It 'pre-check renders and orders held companies first' {
         $T = Build-CippReportPrecheckTree -Period $Period -Companies @(

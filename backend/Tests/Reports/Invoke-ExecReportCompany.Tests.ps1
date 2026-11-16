@@ -94,6 +94,9 @@ Describe 'Get-CIPPReportCompanies' {
         $Con = $Rows | Where-Object TenantId -EQ 't1'
         $Con.Enabled | Should -BeTrue
         $Con.EffectiveDeliveryMode | Should -Be 'Auto'
+        $Con.ReportPeriod | Should -Be 'Default'
+        $Con.EffectiveReportPeriod | Should -Be 'LastMonth'
+        $Con.ReportCovers | Should -Be 'Previous calendar month (default)'
         $Con.AteraCustomer | Should -Be 'Contoso Ltd'
         $Con.DataStatus | Should -Be 'OK'
         ($Rows | Where-Object TenantId -EQ 't2').DataStatus | Should -Match 'connection error'
@@ -153,6 +156,13 @@ Describe 'Invoke-ExecReportCompany' {
         $Saved.ReportDay | Should -Be 3
     }
 
+    It 'saves what the report covers' {
+        $r = Invoke-ExecReportCompany -Request (New-CompanyRequest @{ TenantId = 't1'; ReportPeriod = @{ label = 'One month up to yesterday'; value = 'RollingMonth' } })
+        $r.StatusCode | Should -Be 200
+        $Saved.ReportPeriod | Should -Be 'RollingMonth'
+        $Saved.DeliveryMode | Should -Be 'Auto'
+    }
+
     It 'stores a paused-until date from unix seconds' {
         $r = Invoke-ExecReportCompany -Request (New-CompanyRequest @{ TenantId = 't1'; ScheduleMode = 'Paused'; PausedUntil = 1798761600 })
         $r.StatusCode | Should -Be 200
@@ -182,6 +192,7 @@ Describe 'Invoke-ExecReportCompany' {
         @{ Case = 'a custom schedule without a day'; Body = @{ TenantId = 't1'; ScheduleMode = 'Custom'; ReportDay = '' } }
         @{ Case = 'a pause without a date'; Body = @{ TenantId = 't1'; ScheduleMode = 'Paused' } }
         @{ Case = 'an unknown delivery mode'; Body = @{ TenantId = 't1'; DeliveryMode = 'Sometimes' } }
+        @{ Case = 'an unknown report period'; Body = @{ TenantId = 't1'; ReportPeriod = 'Fortnight' } }
         @{ Case = 'a request with nothing to change'; Body = @{ TenantId = 't1' } }
     ) {
         $r = Invoke-ExecReportCompany -Request (New-CompanyRequest $Body)

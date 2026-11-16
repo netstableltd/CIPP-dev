@@ -36,8 +36,9 @@ function Send-CIPPReportDraft {
     $Pdf = Get-CIPPAzDataTableEntity @PdfTable -Filter "RowKey eq '$($Draft.ReportGUID)'" | Select-Object -First 1
     if (-not $Pdf -or -not $Pdf.Pdf) { throw 'The approved PDF could not be found. Regenerate the draft and approve it again.' }
 
-    $Subject = "$($Draft.Company) $([char]0x2014) Monthly IT Report $([char]0x2014) $($Draft.PeriodLabel)"
-    $Html = '<p>Please find attached the monthly IT report for {0} covering {1}.</p><p>If you would like to talk any of it through, just reply to this email.</p>' -f [System.Net.WebUtility]::HtmlEncode($Draft.Company), [System.Net.WebUtility]::HtmlEncode($Draft.PeriodLabel)
+    $ReportName = if ("$($Draft.ReportName)") { "$($Draft.ReportName)" } else { 'Monthly IT Report' }
+    $Subject = "$($Draft.Company) $([char]0x2014) $ReportName $([char]0x2014) $($Draft.PeriodLabel)"
+    $Html = '<p>Please find attached the {2} for {0} covering {1}.</p><p>If you would like to talk any of it through, just reply to this email.</p>' -f [System.Net.WebUtility]::HtmlEncode($Draft.Company), [System.Net.WebUtility]::HtmlEncode($Draft.PeriodLabel), ($ReportName.ToLower() -replace '\bit\b', 'IT')
     $FileName = if ($Draft.FileName) { "$($Draft.FileName)" } else { "$($Pdf.FileName)" }
     $Attachment = @(@{ Name = $FileName; ContentType = 'application/pdf'; ContentBytes = "$($Pdf.Pdf)" })
 

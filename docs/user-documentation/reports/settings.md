@@ -9,5 +9,6 @@ Defaults for every company in the Reports area. Companies can override most of t
 | Report day | First working day of the month, or a fixed day (1-28). |
 | Send time / Time zone | When scheduled reports go out, in the given time zone. |
 | Default delivery | Review then send, Send automatically, or Manual only. |
+| Report covers | What each report covers unless a company says otherwise: the previous calendar month, one month up to yesterday (for reports sent mid-month), or the last 30 days. |
 | Default report sections | The sections, in order, for companies without their own list. Empty means every built-in section except the Microsoft 365 baseline. |
 | Allow sending reports to customer recipients | Master switch. While off, nothing is ever sent to a customer recipient; pre-checks and Test sends to typed addresses still work. Leave it off on test or development instances. |

@@ -59,6 +59,11 @@ function Invoke-ExecReportSettings {
     $DeliveryMode = "$(Get-FieldValue $Body.DefaultDeliveryMode)"
     if ($DeliveryMode -notin @('Review', 'Auto', 'Manual')) { $Errors.Add('Default delivery must be Review, Auto or Manual.') }
 
+    # What a report covers by default (each company can change it).
+    $ReportPeriod = "$(Get-FieldValue $Body.DefaultReportPeriod)"
+    if (-not $ReportPeriod) { $ReportPeriod = 'LastMonth' }
+    if ($ReportPeriod -notin @('LastMonth', 'RollingMonth', 'Last30Days')) { $Errors.Add('Reports cover must be LastMonth, RollingMonth or Last30Days.') }
+
     # Ordered list of sections for the main report; blank = all built-in sections.
     $DefaultSections = @(ConvertFrom-CIPPReportSectionList $Body.DefaultSections)
     foreach ($Id in $DefaultSections) {
@@ -86,6 +91,7 @@ function Invoke-ExecReportSettings {
         SendTime            = $SendTime
         TimeZone            = $TimeZone
         DefaultDeliveryMode = $DeliveryMode
+        DefaultReportPeriod = $ReportPeriod
         CustomerSendEnabled = [bool]$Body.CustomerSendEnabled
         DefaultSections     = if ($DefaultSections.Count -gt 0) { ConvertTo-Json -InputObject @($DefaultSections) -Compress } else { '' }
         ModifiedBy          = "$User"

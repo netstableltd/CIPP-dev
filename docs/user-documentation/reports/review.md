@@ -4,7 +4,7 @@ description: Review, change, approve and send each customer's monthly report.
 
 # Review
 
-**Reports > Review** lists customer report drafts. A draft is the customer report exactly as it would be sent; you can change it, then approve it, then send it. Create one from **Reports > Companies > Create draft for review** (choose the month). Nothing is emailed when a draft is created.
+**Reports > Review** lists customer report drafts. A draft is the customer report exactly as it would be sent; you can change it, then approve it, then send it. Create one from **Reports > Companies > Create draft for review**: choose the company's usual period, a month, the last 7, 30 or 90 days, or custom dates (see [Companies](companies.md)). Nothing is emailed when a draft is created.
 
 Open a draft with **Review and edit**. The PDF is on the right; on the left you can:
 

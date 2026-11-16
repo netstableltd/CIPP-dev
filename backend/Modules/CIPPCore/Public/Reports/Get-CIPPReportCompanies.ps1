@@ -23,6 +23,7 @@ function Get-CIPPReportCompanies {
     )
 
     $Global = Get-CIPPReportSettings
+    $PeriodNames = @{ LastMonth = 'Previous calendar month'; RollingMonth = 'One month up to yesterday'; Last30Days = 'Last 30 days' }
     $Table = Get-CIPPTable -TableName 'ReportCompanies'
     $Rows = @(Get-CIPPAzDataTableEntity @Table -Filter "PartitionKey eq 'Company'")
     $Settings = @{}
@@ -54,6 +55,8 @@ function Get-CIPPReportCompanies {
         $Enabled = [System.Convert]::ToBoolean((& $Get 'Enabled' $false))
         $DeliveryMode = & $Get 'DeliveryMode' 'Default'
         $ScheduleMode = & $Get 'ScheduleMode' 'Default'
+        $ReportPeriod = & $Get 'ReportPeriod' 'Default'
+        $EffectivePeriod = if ($ReportPeriod -ne 'Default') { $ReportPeriod } elseif ("$($Global.DefaultReportPeriod)") { "$($Global.DefaultReportPeriod)" } else { 'LastMonth' }
         $PrecheckRecipients = & $Get 'PrecheckRecipients' ''
         $Mapping = $Mappings[$Tenant.customerId]
         $SectionIds = @(ConvertFrom-CIPPReportSectionList (& $Get 'Sections' ''))
@@ -75,6 +78,9 @@ function Get-CIPPReportCompanies {
             ScheduleMode                = $ScheduleMode
             ReportDay                   = $(if ([int](& $Get 'ReportDay' 0) -gt 0) { "$([int](& $Get 'ReportDay' 0))" } else { '' })
             PausedUntil                 = & $Get 'PausedUntil' ''
+            ReportPeriod                = $ReportPeriod
+            EffectiveReportPeriod       = $EffectivePeriod
+            ReportCovers                = "$(if ($PeriodNames[$EffectivePeriod]) { $PeriodNames[$EffectivePeriod] } else { $EffectivePeriod })$(if ($ReportPeriod -eq 'Default') { ' (default)' })"
             Notes                       = & $Get 'Notes' ''
             Sections                    = $Sections
             SectionsSummary             = if ($Sections.Count -gt 0) { ($Sections.label -join ', ') } else { "Default ($DefaultSectionNames)" }

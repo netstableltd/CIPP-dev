@@ -8,6 +8,7 @@ import CippFormComponent from '../../../components/CippComponents/CippFormCompon
 import { CippFormCondition } from '../../../components/CippComponents/CippFormCondition'
 import { ApiGetCall } from '../../../api/ApiCall'
 import { CippReportSectionsPicker } from '../../../components/CippReports/CippReportSectionsPicker'
+import { reportCoverOptions } from '../../../utils/report-periods'
 
 const reportDayModes = [
   { label: 'First working day of the month', value: 'FirstWorkingDay' },
@@ -58,6 +59,10 @@ const Page = () => {
         SendTime: s.SendTime,
         TimeZone: toOption(timeZones, s.TimeZone),
         DefaultDeliveryMode: toOption(deliveryModes, s.DefaultDeliveryMode),
+        DefaultReportPeriod: toOption(
+          reportCoverOptions,
+          s.DefaultReportPeriod || 'LastMonth'
+        ),
         CustomerSendEnabled: Boolean(s.CustomerSendEnabled),
         // Labels come from the section catalog inside the picker.
         DefaultSections: (s.DefaultSections || []).map((id) => ({
@@ -194,6 +199,19 @@ const Page = () => {
               options={deliveryModes}
               disabled={loading}
               formControl={formControl}
+            />
+          </Grid>
+          <Grid size={{ xs: 12, md: 6 }}>
+            <CippFormComponent
+              type="autoComplete"
+              label="Report covers"
+              name="DefaultReportPeriod"
+              multiple={false}
+              creatable={false}
+              options={reportCoverOptions}
+              disabled={loading}
+              formControl={formControl}
+              helperText="For reports sent mid-month, choose one month up to yesterday or the last 30 days."
             />
           </Grid>
 

@@ -5,7 +5,7 @@ function Invoke-ExecReportTestRun {
     .ROLE
         CIPP.Reports.ReadWrite
     .DESCRIPTION
-        Generates a customer report or pre-check for one company on demand (the Test button). The PDF is stored under Generated Reports and, if SendTo is given, emailed only to those addresses - never to the company's customer recipients. ReportType is Customer or Precheck; Period is LastMonth, ThisMonth or yyyy-MM.
+        Generates a customer report or pre-check for one company on demand (the Test button). The PDF is stored under Generated Reports and, if SendTo is given, emailed only to those addresses - never to the company's customer recipients. ReportType is Customer or Precheck; Period is LastMonth, ThisMonth, RollingMonth, Last30Days, yyyy-MM, Scheduled (the company's usual period) or Custom with StartDate and EndDate.
     #>
     [CmdletBinding()]
     param($Request, $TriggerMetadata)
@@ -25,13 +25,10 @@ function Invoke-ExecReportTestRun {
     if (-not $TenantId) { $TenantId = "$(Get-FieldValue $Body.tenantFilter)" }
     $ReportType = "$(Get-FieldValue $Body.ReportType)"
     if (-not $ReportType) { $ReportType = 'Customer' }
-    $Period = "$(Get-FieldValue $Body.Period)"
-    if (-not $Period) { $Period = 'LastMonth' }
     $SendTo = @("$(Get-FieldValue $Body.SendTo)" -split '[,;\s]+' | Where-Object { $_ })
 
     $Errors = [System.Collections.Generic.List[string]]::new()
     if ($ReportType -notin @('Customer', 'Precheck')) { $Errors.Add('Report type must be Customer or Precheck.') }
-    if ($Period -notmatch '^(LastMonth|ThisMonth|\d{4}-\d{2})$') { $Errors.Add('Period must be LastMonth, ThisMonth or yyyy-MM.') }
     foreach ($Address in $SendTo) { if ($Address -notmatch '^[^@\s]+@[^@\s]+\.[^@\s]+$') { $Errors.Add("'$Address' is not a valid email address.") } }
     if ($SendTo.Count -gt 5) { $Errors.Add('Send a test to at most 5 addresses.') }
     if ($Errors.Count -gt 0) {
@@ -40,6 +37,12 @@ function Invoke-ExecReportTestRun {
     $Tenant = Get-Tenants -IncludeErrors | Where-Object { $_.customerId -eq $TenantId -or $_.defaultDomainName -eq $TenantId } | Select-Object -First 1
     if (-not (Test-CIPPReportAccess -Request $Request -Tenant $Tenant)) {
         return ([HttpResponseContext]@{ StatusCode = [HttpStatusCode]::Forbidden; Body = @{ Results = 'You do not have access to this tenant.' } })
+    }
+    # Any period (Last 30 days, custom dates, the company's usual period), not just months.
+    try {
+        $Period = Resolve-CIPPReportPeriodRequest -Body $Body -TenantId $Tenant.customerId
+    } catch {
+        return ([HttpResponseContext]@{ StatusCode = [HttpStatusCode]::BadRequest; Body = @{ Results = "$($_.Exception.Message)" } })
     }
 
     try {

@@ -5,7 +5,7 @@ function Invoke-ExecReportDraft {
     .ROLE
         CIPP.Reports.ReadWrite
     .DESCRIPTION
-        Works with customer report drafts (Reports > Review). Action: Generate (TenantId + Period; creates or regenerates the draft, with Overrides when given), Approve, Reopen (back to draft), Send (emails the approved PDF to the company's recipients; needs "Allow sending" on in Reports > Settings) or Discard. Id is the draft's id for the last four.
+        Works with customer report drafts (Reports > Review). Action: Generate (TenantId + Period - LastMonth, ThisMonth, RollingMonth, Last30Days, yyyy-MM, Scheduled (the company's usual period) or Custom with StartDate and EndDate; creates or regenerates the draft, with Overrides when given), Approve, Reopen (back to draft), Send (emails the approved PDF to the company's recipients; needs "Allow sending" on in Reports > Settings) or Discard. Id is the draft's id for the last four.
     #>
     [CmdletBinding()]
     param($Request, $TriggerMetadata)
@@ -24,12 +24,15 @@ function Invoke-ExecReportDraft {
 
     if ($Action -eq 'Generate') {
         $TenantId = "$($Body.TenantId.value ?? $Body.TenantId)"
-        $Period = "$($Body.Period.value ?? $Body.Period)"
-        if (-not $Period) { $Period = 'LastMonth' }
-        if ($Period -notmatch '^(LastMonth|ThisMonth|\d{4}-\d{2})$') { return (& $Respond ([HttpStatusCode]::BadRequest) 'Period must be LastMonth, ThisMonth or yyyy-MM.') }
         $Tenant = Get-Tenants -IncludeErrors | Where-Object { $_.customerId -eq $TenantId -or $_.defaultDomainName -eq $TenantId } | Select-Object -First 1
         if (-not $Tenant) { return (& $Respond ([HttpStatusCode]::BadRequest) "Unknown tenant '$TenantId'.") }
         if (-not (Test-CIPPReportAccess -Request $Request -Tenant $Tenant)) { return (& $Respond ([HttpStatusCode]::Forbidden) 'You do not have access to this tenant.') }
+        # Any period (Last 30 days, custom dates, the company's usual period), not just months.
+        try {
+            $Period = Resolve-CIPPReportPeriodRequest -Body $Body -TenantId $Tenant.customerId
+        } catch {
+            return (& $Respond ([HttpStatusCode]::BadRequest) "$($_.Exception.Message)")
+        }
 
         $Overrides = $null
         if ($null -ne $Body.Overrides) {
@@ -72,7 +75,7 @@ function Invoke-ExecReportDraft {
     }
 
     $Id = "$($Body.Id)"
-    if ($Id -notmatch '^[0-9a-fA-F-]{36}_\d{4}-\d{2}$') { return (& $Respond ([HttpStatusCode]::BadRequest) 'Invalid draft id.') }
+    if ($Id -notmatch '^[0-9a-fA-F-]{36}_(\d{4}-\d{2}|\d{4}-\d{2}-\d{2}_\d{4}-\d{2}-\d{2})$') { return (& $Respond ([HttpStatusCode]::BadRequest) 'Invalid draft id.') }
     $Draft = Get-CIPPAzDataTableEntity @Table -Filter "PartitionKey eq 'Draft' and RowKey eq '$Id'" | Select-Object -First 1
     if (-not $Draft) { return (& $Respond ([HttpStatusCode]::NotFound) 'Draft not found.') }
     $Tenant = [pscustomobject]@{ customerId = $Draft.TenantId }

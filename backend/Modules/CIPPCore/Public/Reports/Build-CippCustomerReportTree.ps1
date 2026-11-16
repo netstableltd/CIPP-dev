@@ -51,6 +51,9 @@ function Build-CippCustomerReportTree {
 
     $Name = $Data.TenantName
     $PeriodLabel = $Data.Period.Label
+    # A month-long period is the monthly report; any other range is 'this period'.
+    $Monthly = $Data.Period.Monthly -ne $false
+    $PeriodWord = if ($Monthly) { 'month' } else { 'period' }
     $M = $Data.M365
     $A = $Data.Atera
     $Actions = @($Findings | Where-Object { $_.Customer -and $_.Severity -ne 'Info' })
@@ -79,7 +82,7 @@ function Build-CippCustomerReportTree {
         if ($Stats.Count -gt 0) { $blocks.Add((New-CippReportStatRow -Stats @($Stats))) }
 
         if ($Actions.Count -eq 0) {
-            $blocks.Add((New-CippReportClearBox -Title 'Status: Good' -Content 'Nothing in this month''s checks needs action from you. We will keep monitoring and let you know if that changes.'))
+            $blocks.Add((New-CippReportClearBox -Title 'Status: Good' -Content "Nothing in this $PeriodWord's checks needs action from you. We will keep monitoring and let you know if that changes."))
         } else {
             $Level = if ($Actions.Count -ge 4) { 'Action needed' } else { 'A few things to do' }
             $Colour = if ($Actions.Count -ge 4) { $dangerC } else { $warnC }
@@ -331,7 +334,7 @@ function Build-CippCustomerReportTree {
             }
             if (@($D.AlertsByDevice).Count -gt 0) {
                 $Any = $true
-                $blocks.Add((New-CippReportTable -Title 'Monitoring alerts this month by computer' -Limit 15 -Columns @(
+                $blocks.Add((New-CippReportTable -Title "Monitoring alerts this $PeriodWord by computer" -Limit 15 -Columns @(
                             @{ header = 'Computer'; key = 'name'; width = 1.6; bold = $true }
                             @{ header = 'Alerts'; key = 'alerts'; width = 1; align = 'right' }
                         ) -Rows @($D.AlertsByDevice | ForEach-Object { @{ name = $_.name; alerts = "$($_.alertsInPeriod)" } })))
@@ -395,7 +398,7 @@ function Build-CippCustomerReportTree {
                             @{ header = 'Time'; key = 'time'; width = 0.8; align = 'right' }
                         ) -Rows $Rows))
             } else {
-                $blocks.Add((New-CippReportClearBox -Title 'No support requests' -Content 'You did not need to raise any support requests this month.'))
+                $blocks.Add((New-CippReportClearBox -Title 'No support requests' -Content "You did not need to raise any support requests this $PeriodWord."))
             }
         }
         }
@@ -410,7 +413,7 @@ function Build-CippCustomerReportTree {
             } else {
                 $blocks.Add((New-CippReportStatRow -Stats @(
                             @{ value = "$(@($P.Period).Count)"; label = "Items in $PeriodLabel" }
-                            @{ value = (& $Money $P.PeriodTotal); label = 'Spent this month' }
+                            @{ value = (& $Money $P.PeriodTotal); label = "Spent this $PeriodWord" }
                             @{ value = "$(@($P.Year).Count)"; label = 'Items in 12 months' }
                             @{ value = (& $Money $P.YearTotal); label = 'Spent in 12 months' }
                         )))
@@ -538,7 +541,7 @@ function Build-CippCustomerReportTree {
         if ($Actions.Count -gt 0 -or $Plan.Count -gt 0) {
             $blocks.Add((New-CippReportParagraph -Text 'We will be in touch about anything that needs your approval. If you would like to talk any of this through, just reply to this email or raise a support request.'))
         } else {
-            $blocks.Add((New-CippReportClearBox -Title 'Nothing to action' -Content 'There are no recommendations this month.'))
+            $blocks.Add((New-CippReportClearBox -Title 'Nothing to action' -Content "There are no recommendations this $PeriodWord."))
         }
         }
     }
@@ -567,7 +570,7 @@ function Build-CippCustomerReportTree {
     @{
         Blocks    = @($blocks)
         Variables = @{
-            coverlabel         = 'Monthly IT Report'
+            coverlabel         = $(if ($Monthly) { 'Monthly IT Report' } else { 'IT Report' })
             covertenant        = $Name
             coversubtitle      = "The health and security of IT at $Name for $PeriodLabel."
             covermeta          = ($Meta -join " $([char]0x00B7) ")

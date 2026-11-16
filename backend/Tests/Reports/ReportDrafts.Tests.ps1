@@ -4,7 +4,8 @@
 # added ones) and never the internal pre-check items; a draft is generated with its saved changes,
 # replaces the previous draft PDF and resets approval; approve / reopen / discard / send follow the
 # status rules; sending needs approval, the customer-send switch and recipients, and sends the
-# approved PDF itself; a user without access to the tenant gets nothing.
+# approved PDF itself; a user without access to the tenant gets nothing; a draft can cover any period
+# (the company's usual one, last 30 days, custom dates).
 
 BeforeAll {
     $RepoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSCommandPath))
@@ -33,7 +34,7 @@ BeforeAll {
     $script:AllowedTenants = @('AllTenants')
     function Test-CIPPAccess { param($Request, [switch]$TenantList) $script:AllowedTenants }
 
-    foreach ($Name in 'Test-CIPPReportAccess', 'Get-CIPPReportPeriod', 'Resolve-CIPPReportOverrides', 'New-CIPPReportDraft', 'Remove-CIPPReportStoredPdf', 'Send-CIPPReportDraft', 'Invoke-ExecReportDraft', 'Invoke-ListReportDrafts') {
+    foreach ($Name in 'Test-CIPPReportAccess', 'Get-CIPPReportPeriod', 'Resolve-CIPPReportPeriodRequest', 'Resolve-CIPPReportOverrides', 'New-CIPPReportDraft', 'Remove-CIPPReportStoredPdf', 'Send-CIPPReportDraft', 'Invoke-ExecReportDraft', 'Invoke-ListReportDrafts') {
         . (& $Find "$Name.ps1")
     }
 
@@ -216,5 +217,69 @@ Describe 'Invoke-ListReportDrafts' {
         $One = (Invoke-ListReportDrafts -Request $Req).Body
         $One.Overrides.Note | Should -Be 'Hello'
         @($One.Sections) | Should -Be @('summary')
+    }
+}
+
+Describe 'Resolve-CIPPReportPeriodRequest' {
+    BeforeAll {
+        $script:Mid = [datetime]::new(2026, 11, 16, 10, 30, 0, [DateTimeKind]::Utc)
+        $script:London = [pscustomobject]@{ TimeZone = 'Europe/London'; DefaultReportPeriod = 'LastMonth' }
+    }
+    It 'passes a named period through' {
+        Resolve-CIPPReportPeriodRequest -Body @{ Period = @{ label = 'Last 30 days'; value = 'Last30Days' } } -Settings $London -Now $Mid | Should -Be 'Last30Days'
+    }
+    It 'turns custom dates into a range' {
+        Resolve-CIPPReportPeriodRequest -Body @{ Period = 'Custom'; StartDate = '2026-10-15'; EndDate = '2026-11-14' } -Settings $London -Now $Mid | Should -Be '2026-10-15_2026-11-14'
+    }
+    It 'reads date-picker dates in the reports time zone' {
+        # Midnight on 1 July in London is 23:00 UTC on 30 June.
+        $Start = [DateTimeOffset]::new(2026, 6, 30, 23, 0, 0, [TimeSpan]::Zero).ToUnixTimeSeconds()
+        $End = [DateTimeOffset]::new(2026, 7, 14, 23, 0, 0, [TimeSpan]::Zero).ToUnixTimeSeconds()
+        Resolve-CIPPReportPeriodRequest -Body @{ Period = 'Custom'; StartDate = $Start; EndDate = $End } -Settings $London -Now $Mid | Should -Be '2026-07-01_2026-07-15'
+    }
+    It 'uses the company''s usual period, then the default' {
+        Mock Get-CIPPAzDataTableEntity { [pscustomobject]@{ RowKey = 't'; ReportPeriod = 'RollingMonth' } }
+        Resolve-CIPPReportPeriodRequest -Body @{ Period = 'Scheduled' } -TenantId 't' -Settings $London -Now $Mid | Should -Be 'RollingMonth'
+        Mock Get-CIPPAzDataTableEntity { [pscustomobject]@{ RowKey = 't'; ReportPeriod = 'Default' } }
+        Resolve-CIPPReportPeriodRequest -Body @{} -TenantId 't' -Settings ([pscustomobject]@{ DefaultReportPeriod = 'Last30Days' }) -Now $Mid | Should -Be 'Last30Days'
+        Mock Get-CIPPAzDataTableEntity {}
+        Resolve-CIPPReportPeriodRequest -Body @{} -TenantId 't' -Settings ([pscustomobject]@{}) -Now $Mid | Should -Be 'LastMonth'
+    }
+    It 'explains what is wrong' {
+        { Resolve-CIPPReportPeriodRequest -Body @{ Period = 'Custom'; StartDate = '2026-11-01' } -Settings $London -Now $Mid } | Should -Throw '*end date*'
+        { Resolve-CIPPReportPeriodRequest -Body @{ Period = 'Custom'; StartDate = '2026-11-10'; EndDate = '2026-11-01' } -Settings $London -Now $Mid } | Should -Throw '*on or after*'
+        { Resolve-CIPPReportPeriodRequest -Body @{ Period = 'Fortnight' } -Settings $London -Now $Mid } | Should -Throw '*Unknown report period*'
+    }
+}
+
+Describe 'Drafts for any period' {
+    BeforeAll {
+        Mock Add-CIPPAzDataTableEntity { $script:Saved = $Entity }
+        Mock Write-LogMessage {}
+    }
+    It 'creates a draft for custom dates' {
+        Mock New-CIPPReportDraft { $script:PassedPeriod = $Period; [pscustomobject]@{ Results = 'ok'; RowKey = 'k'; ReportGUID = 'g' } }
+        $r = Invoke-ExecReportDraft -Request (New-DraftRequest @{ Action = 'Generate'; TenantId = '11111111-1111-1111-1111-111111111111'; Period = @{ value = 'Custom' }; StartDate = '2026-10-15'; EndDate = '2026-11-14' })
+        $r.StatusCode | Should -Be 200
+        $PassedPeriod | Should -Be '2026-10-15_2026-11-14'
+    }
+    It 'refuses a custom period with the end before the start' {
+        Mock New-CIPPReportDraft { throw 'should not run' }
+        $r = Invoke-ExecReportDraft -Request (New-DraftRequest @{ Action = 'Generate'; TenantId = '11111111-1111-1111-1111-111111111111'; Period = 'Custom'; StartDate = '2026-11-14'; EndDate = '2026-10-15' })
+        $r.StatusCode | Should -Be 400
+        $r.Body.Results | Should -Match 'on or after'
+    }
+    It 'keys a range draft by its dates and works with it after' {
+        Mock Invoke-CIPPReportGeneration { [pscustomobject]@{ ReportGUID = 'g'; FileName = 'f.pdf'; Findings = @(); Sections = @(); TenantName = 'Contoso Ltd'; ReportName = 'IT Report' } }
+        Mock Get-CIPPAzDataTableEntity {}
+        $R = New-CIPPReportDraft -TenantFilter 'contoso.com' -Period '2026-11-01_2026-11-07'
+        $R.RowKey | Should -Be '11111111-1111-1111-1111-111111111111_2026-11-01_2026-11-07'
+        $Saved.ReportName | Should -Be 'IT Report'
+        $Saved.PeriodLabel | Should -Be "1 $([char]0x2013) 7 November 2026"
+
+        $RangeId = $R.RowKey
+        Mock Get-CIPPAzDataTableEntity { $Row = New-DraftRow 'Draft'; $Row.RowKey = $RangeId; $Row }
+        (Invoke-ExecReportDraft -Request (New-DraftRequest @{ Action = 'Approve'; Id = $RangeId })).StatusCode | Should -Be 200
+        (Invoke-ExecReportDraft -Request (New-DraftRequest @{ Action = 'Approve'; Id = '11111111-1111-1111-1111-111111111111_2026-11-01_x' })).StatusCode | Should -Be 400
     }
 }

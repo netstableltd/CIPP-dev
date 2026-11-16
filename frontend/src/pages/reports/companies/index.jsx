@@ -2,6 +2,10 @@ import { CippTablePage } from '../../../components/CippComponents/CippTablePage.
 import { CippIcons } from '../../../utils/icon-registry'
 import { Layout as DashboardLayout } from '../../../layouts/index'
 import { CippReportSectionsPicker } from '../../../components/CippReports/CippReportSectionsPicker'
+import {
+  reportCoverOptions,
+  reportRunPeriodFields,
+} from '../../../utils/report-periods'
 
 const deliveryOptions = [
   { label: 'Default (from Reports settings)', value: 'Default' },
@@ -53,6 +57,19 @@ const editFields = [
     options: scheduleOptions,
   },
   {
+    type: 'autoComplete',
+    name: 'ReportPeriod',
+    label: 'Report covers',
+    multiple: false,
+    creatable: false,
+    options: [
+      { label: 'Default (from Reports settings)', value: 'Default' },
+      ...reportCoverOptions,
+    ],
+    helperText:
+      'For a report on the 15th, "One month up to yesterday" covers the 15th of last month to the 14th.',
+  },
+  {
     type: 'textField',
     name: 'ReportDay',
     label: 'Report day of month (1-28)',
@@ -92,11 +109,6 @@ const editFields = [
   },
 ]
 
-const periodOptions = [
-  { label: 'Last month', value: 'LastMonth' },
-  { label: 'This month so far', value: 'ThisMonth' },
-]
-
 const testFields = [
   {
     type: 'textField',
@@ -106,15 +118,7 @@ const testFields = [
     helperText:
       "Only these addresses receive the test - never the company's customer recipients. Leave blank to just generate it (it appears under Generated Reports).",
   },
-  {
-    type: 'autoComplete',
-    name: 'Period',
-    label: 'Period',
-    multiple: false,
-    creatable: true,
-    options: periodOptions,
-    helperText: 'Or type a month as YYYY-MM.',
-  },
+  ...reportRunPeriodFields,
 ]
 
 const Page = () => {
@@ -147,7 +151,7 @@ const Page = () => {
       url: '/api/ExecReportDraft',
       icon: <CippIcons.Description />,
       data: { Action: '!Generate', TenantId: 'TenantId' },
-      fields: testFields.filter((f) => f.name === 'Period'),
+      fields: reportRunPeriodFields,
       confirmText:
         'Create the customer report for [displayName] as a draft? Review and change it under Reports > Review before it is approved and sent. Nothing is emailed.',
       multiPost: false,
@@ -204,6 +208,7 @@ const Page = () => {
       'ScheduleMode',
       'ReportDay',
       'PausedUntil',
+      'ReportCovers',
       'SectionsSummary',
       'AteraCustomer',
       'DataStatus',
@@ -224,6 +229,7 @@ const Page = () => {
         'Enabled',
         'EffectiveDeliveryMode',
         'ScheduleMode',
+        'ReportCovers',
         'Recipients',
         'SectionsSummary',
         'AteraCustomer',

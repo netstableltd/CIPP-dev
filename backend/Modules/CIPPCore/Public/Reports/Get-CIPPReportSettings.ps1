@@ -22,6 +22,7 @@ function Get-CIPPReportSettings {
         SendTime              = '09:00'          # local time, HH:mm
         TimeZone              = 'Europe/London'  # IANA or Windows time zone id
         DefaultDeliveryMode   = 'Review'         # Review | Auto | Manual
+        DefaultReportPeriod   = 'LastMonth'      # what a report covers: LastMonth | RollingMonth | Last30Days
         CustomerSendEnabled   = $false           # master switch: when off, nothing is ever sent to customer recipients
         DefaultSections       = ''               # JSON array of section ids (Get-CIPPReportSectionCatalog); blank = all built-in sections
     }

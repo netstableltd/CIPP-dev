@@ -65,6 +65,13 @@ function Invoke-ExecReportCompany {
         if ($Value -notin @('Default', 'Custom', 'Manual', 'Paused')) { $Errors.Add('Schedule must be Default, Custom, Manual or Paused.') } else { $Changes.ScheduleMode = $Value }
     }
 
+    # What this company's report covers; Default = Reports > Settings.
+    if (Test-Field 'ReportPeriod') {
+        $Value = "$(Get-FieldValue $Body.ReportPeriod)"
+        if (-not $Value) { $Value = 'Default' }
+        if ($Value -notin @('Default', 'LastMonth', 'RollingMonth', 'Last30Days')) { $Errors.Add('Report covers must be Default, LastMonth, RollingMonth or Last30Days.') } else { $Changes.ReportPeriod = $Value }
+    }
+
     if (Test-Field 'ReportDay') {
         $Day = 0
         $Raw = "$(Get-FieldValue $Body.ReportDay)"
