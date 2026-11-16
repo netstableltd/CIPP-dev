@@ -49,6 +49,7 @@ function Build-CippClaudeConnectorSummaryTree {
     $enc = { param($t) [System.Net.WebUtility]::HtmlEncode([string]$t) }
     $LevelOf = { param($Id) $Config.levels | Where-Object { $_.id -eq $Id } | Select-Object -First 1 }
     $LevelName = { param($L) if ($L) { "Level $($L.number): $($L.name)" } else { 'Custom permissions' } }
+    $ExtrasOf = { param($Ids) @($Config.extras | Where-Object { @($Ids) -contains $_.id }) }
     $S = $Status
     $Apps = @($S.Apps)
     $Server = $Apps | Where-Object { $_.Key -eq 'Server' } | Select-Object -First 1
@@ -70,13 +71,16 @@ function Build-CippClaudeConnectorSummaryTree {
     }
     $Rows = @($People | Sort-Object Name | ForEach-Object {
             $P = $_
-            $L = if ($Own.ContainsKey($P.Id)) { & $LevelOf $Own[$P.Id].Level } else { $Everyone }
+            $OwnP = if ($Own.ContainsKey($P.Id)) { $Own[$P.Id] } else { $null }
+            $L = if ($OwnP) { & $LevelOf $OwnP.Level } else { $Everyone }
+            # Extras on top of their level, for example Post in Teams.
+            $X = if ($OwnP -and $L) { @(& $ExtrasOf $OwnP.Extras) } else { @() }
             $Upn = if ($P.Upn) { $P.Upn } elseif ($Own.ContainsKey($P.Id)) { $Own[$P.Id].Upn } else { $null }
             @{
                 person = if ($Upn) { "$($P.Name) ($Upn)" } else { "$($P.Name)" }
-                level  = (& $LevelName $L)
-                can    = if ($L) { $L.summary } else { 'A custom set of permissions; ask us for the detail.' }
-                tone   = if (-not $L) { 'warn' } elseif ($L.number -ge 3) { 'warn' } else { 'pass' }
+                level  = "$(& $LevelName $L)$(@($X | ForEach-Object { " + $($_.name)" }) -join '')"
+                can    = if ($L) { (@($L.summary) + @($X | ForEach-Object { "Also: $($_.summary)" })) -join ' ' } else { 'A custom set of permissions; ask us for the detail.' }
+                tone   = if (-not $L) { 'warn' } elseif ($L.number -ge 3 -or $X.Count -gt 0) { 'warn' } else { 'pass' }
             }
         })
     $Higher = @($Rows | Where-Object { $_.level -ne (& $LevelName $Everyone) }).Count

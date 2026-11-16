@@ -13,9 +13,11 @@ function Set-CIPPClaudeConnectorAccess {
                         added back. Omit to leave as is.
         -TenantLevel    Access level for everyone (read, drafts, assistant, full). The tenant-wide grant's
                         write scopes are set to exactly that level's. Omit to leave as is.
-        -PeopleLevels   @(@{ User = id or sign-in name; Level = level id }, ...). Each person gets a per-user
-                        grant with the write scopes their level adds on top of everyone's level; a level that
-                        adds nothing removes their per-user grant. People not listed are left as they are.
+        -PeopleLevels   @(@{ User = id or sign-in name; Level = level id; Extras = @(extra ids) }, ...). Each
+                        person gets a per-user grant with the write scopes their level and extras add on top of
+                        everyone's level; if that adds nothing their per-user grant is removed. Extras (for
+                        example Post in Teams) need Level extrasMinLevel or above: Level 1 promises read only,
+                        so Level 1 with extras is refused for that person. People not listed are left as they are.
 
         Microsoft's admin consent page approves every permission Anthropic's app asks for, including the
         write ones, so re-running consent undoes a lower level. Run this again afterwards.
@@ -147,13 +149,24 @@ function Set-CIPPClaudeConnectorAccess {
         $Key = "$($P.User.value ?? $P.User)".Trim()
         $Level = & $LevelOf "$($P.Level.value ?? $P.Level)"
         if (-not $Key -or -not $Level) { & $Add 'Warning' "Skipped an entry without a person or level."; continue }
+        $ExtraIds = @(@($P.Extras) | ForEach-Object { "$($_.value ?? $_)".Trim() } | Where-Object { $_ } | Select-Object -Unique)
+        $ExtraDefs = @($Config.extras | Where-Object { $ExtraIds -contains $_.id })
+        $Unknown = @($ExtraIds | Where-Object { @($Config.extras | ForEach-Object { $_.id }) -notcontains $_ })
+        if ($Unknown.Count -gt 0) { & $Add 'Warning' "$($Key): skipped unknown extras: $($Unknown -join ', ')." }
         try {
             $U = New-GraphGetRequest -uri "$Graph/users/$([System.Uri]::EscapeDataString($Key))?`$select=id,userPrincipalName,displayName" -tenantid $TenantFilter -noPagination $true | Select-Object -First 1
         } catch { $U = $null }
         if (-not $U.id) { & $Add 'Warning' "User not found, skipped: $Key"; continue }
         $Who = $U.userPrincipalName
 
-        $Extra = @($Level.scopes | Where-Object { $NewScopes -notcontains $_ })
+        # Interlock: Level 1 is read only, so it can't have extras.
+        if ($ExtraDefs.Count -gt 0 -and [int]$Level.number -lt [int]$Config.extrasMinLevel) {
+            & $Add 'Error' "$($Who): Level $($Level.number) is read only, so extras ($(@($ExtraDefs | ForEach-Object { $_.name }) -join ', ')) can't be added. Choose Level $($Config.extrasMinLevel) or above."
+            continue
+        }
+        $Label = "Level $($Level.number): $($Level.name)$(@($ExtraDefs | ForEach-Object { " + $($_.name)" }) -join '')"
+        $Want = @(@($Level.scopes) + @($ExtraDefs | ForEach-Object { $_.scopes }) | Where-Object { $_ } | Select-Object -Unique)
+        $Extra = @($Want | Where-Object { $NewScopes -notcontains $_ })
         $Existing = $Grants | Where-Object { $_.consentType -eq 'Principal' -and $_.principalId -eq $U.id } | Select-Object -First 1
         try {
             if ($Extra.Count -eq 0) {
@@ -161,10 +174,10 @@ function Set-CIPPClaudeConnectorAccess {
                     $null = New-GraphPOSTRequest -uri "$Graph/oauth2PermissionGrants/$($Existing.id)" -tenantid $TenantFilter -type DELETE -body '' -contentType 'application/json'
                     & $Add 'Success' "$($Who): removed their extra access; they now have the same as everyone."
                 } else {
-                    & $Add 'Success' "$($Who): has the same access as everyone, Level $($Level.number) or above."
+                    & $Add 'Success' "$($Who): has the same access as everyone, which already covers $Label."
                 }
-                $Higher = @($TenantSummary.WriteScopes | Where-Object { @($Level.scopes) -notcontains $_ })
-                if ($Higher.Count -gt 0) { & $Add 'Info' "$($Who): everyone already has more than Level $($Level.number), and one person can't have less than everyone." }
+                $Higher = @($TenantSummary.WriteScopes | Where-Object { $Want -notcontains $_ })
+                if ($Higher.Count -gt 0) { & $Add 'Info' "$($Who): everyone already has more than $Label, and one person can't have less than everyone." }
             } else {
                 # Keep any read scopes a person's grant already had; replace its write scopes.
                 $Keep = if ($Existing) { @(& $Split $Existing.scope | Where-Object { $Config.writeScopes -notcontains $_ }) } else { @() }
@@ -173,22 +186,22 @@ function Set-CIPPClaudeConnectorAccess {
                     $OldText = (@(& $Split $Existing.scope) | Sort-Object) -join ' '
                     $NewText = (@(& $Split $Scope) | Sort-Object) -join ' '
                     if ($OldText -eq $NewText) {
-                        & $Add 'Success' "$($Who): already has Level $($Level.number): $($Level.name)."
+                        & $Add 'Success' "$($Who): already has $Label."
                     } else {
                         $null = New-GraphPOSTRequest -uri "$Graph/oauth2PermissionGrants/$($Existing.id)" -tenantid $TenantFilter -type PATCH -body (@{ scope = $Scope } | ConvertTo-Json -Compress) -contentType 'application/json'
-                        & $Add 'Success' "$($Who): changed to Level $($Level.number): $($Level.name) ($($Extra -join ', '))."
+                        & $Add 'Success' "$($Who): changed to $Label ($($Extra -join ', '))."
                     }
                 } else {
                     $Body = @{ clientId = $ServerSpId; consentType = 'Principal'; principalId = $U.id; resourceId = $GraphSp.id; scope = $Scope } | ConvertTo-Json -Compress
                     $null = New-GraphPOSTRequest -uri "$Graph/oauth2PermissionGrants" -tenantid $TenantFilter -type POST -body $Body -contentType 'application/json'
-                    & $Add 'Success' "$($Who): given Level $($Level.number): $($Level.name) ($($Extra -join ', '))."
+                    & $Add 'Success' "$($Who): given $Label ($($Extra -join ', '))."
                 }
                 foreach ($S in $Extra) {
                     $Area = $WriteReads[$S]
                     if ($Area -and $TenantSummary.ReadAreas -notcontains $Area) { & $Add 'Warning' "$($Who): $S also lets Claude read their $($AreaNoun[$Area]), even though that reading is off for everyone." }
                 }
             }
-        } catch { & $Add 'Error' "$($Who): couldn't set Level $($Level.number): $(& $ErrorText $_)" }
+        } catch { & $Add 'Error' "$($Who): couldn't set $($Label): $(& $ErrorText $_)" }
         if ($null -ne $Allowed -and -not $Allowed.Contains("$($U.id)")) {
             & $Add 'Warning' "$($Who) isn't one of the people who can use Claude, so this has no effect until they are added."
         }

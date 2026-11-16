@@ -40,6 +40,20 @@ Read areas: email and contacts, calendar, OneDrive and SharePoint files, Teams c
 
 The levels, the read areas, their wording in the PDF, their permissions and what to turn off in ChatGPT are in `backend/Config/Addons/chatgpt-m365/ChatGPTConnectorAccess.json`. ChatGPT can only ever do what the person using it could do themselves.
 
+## Extras for named people
+
+As for Claude: a named person on **Level 2 or above** can have **extras** on top of their level, for example **Level 3 + Post in Teams** instead of Level 4. Level 1 can't have extras (the interlock), and only extras the level doesn't already include are offered.
+
+| Extra | ChatGPT can also | Graph permissions | Turn on in ChatGPT |
+| --- | --- | --- | --- |
+| Send email | Send and forward email as the person | `Mail.Send` | Outlook Email: sending and forwarding |
+| Manage calendar, contacts and tasks | Meetings, contacts, tasks, out-of-office and mail rules | `Calendars.ReadWrite`, `OnlineMeetings.ReadWrite`, `MailboxSettings.ReadWrite`, `Contacts.ReadWrite`, `Tasks.ReadWrite` | Outlook Calendar and contact write actions; Planner tasks in Teams |
+| Act in shared mailboxes | Send from, change and delete in shared mailboxes, calendars and tasks | `Mail.ReadWrite.Shared`, `Mail.Send.Shared`, `Calendars.ReadWrite.Shared`, `Tasks.ReadWrite.Shared` | Shared mailbox and shared calendar actions |
+| Edit files | Edit and delete OneDrive and SharePoint files, lists and pages | `Files.ReadWrite.All`, `Sites.ReadWrite.All` | SharePoint write actions |
+| Post in Teams | Post in Teams chats and channels, start chats and channels | `ChatMessage.Send`, `ChannelMessage.Send`, `Chat.Create`, `Channel.Create` | Teams: send messages, create chats and channels |
+
+As with higher levels, an extra only works if its actions are on for that person in ChatGPT, which needs a role on ChatGPT Enterprise or Edu. The extras are in `ChatGPTConnectorAccess.json` (`extras`, `extrasMinLevel`).
+
 ## Current setup
 
 The top of the page shows:
@@ -47,7 +61,7 @@ The top of the page shows:
 * whether the app is in the tenant, has admin consent, requires assignment, and who is assigned;
 * the access group and its members;
 * whether users can approve apps themselves, and whether admin consent requests are on;
-* everyone's level and what ChatGPT can read, and anyone with their own level;
+* everyone's level and what ChatGPT can read, and anyone with their own level and extras;
 * **people who approved ChatGPT for themselves**, for example from before user consent was turned off;
 * **other permissions ChatGPT holds**, outside Microsoft Graph. For example SharePoint Online's `MyFiles.Read` and `AllSites.Read` from a person approving the SharePoint app. The levels don't manage these, so they are listed to be checked;
 * whether the tenant has Entra ID P1.
@@ -59,7 +73,7 @@ The top of the page shows:
 3. **Choose what ChatGPT can read and change.**
    * **No consent yet:** **Give consent for this access** creates the tenant-wide grant with the permissions that are always kept, the chosen read areas and the level for everyone.
    * **Consent already there** (for example someone approved it in ChatGPT, which usually gives everything): **Save access** sets it to exactly the chosen level.
-   * Higher levels for named people work as for Claude: a per-person grant with only what their level adds.
+   * Higher levels and extras for named people work as for Claude: a per-person grant with only what their level and extras add. No extras on Level 1.
    * Saving also removes any approvals people gave themselves.
 4. **Match it in ChatGPT** (by hand, as a workspace owner or admin):
    * Admin console > Plugins (Apps in older workspaces): turn on the Microsoft apps you want.
@@ -71,7 +85,7 @@ The top of the page shows:
 
 ## Summary for the customer
 
-As for Claude: a branded PDF of what was set up, read from the tenant at that moment, with an optional connection guide (a Word document uploaded once per CIPP instance) at the end.
+As for Claude: a branded PDF of what was set up (each person with their level and any extras), read from the tenant at that moment, with an optional connection guide (a Word document uploaded once per CIPP instance) at the end.
 
 ## To test before using with customers
 
@@ -90,7 +104,7 @@ Sources: OpenAI's help articles on [admin permissions for apps](https://help.ope
 | Endpoint | Method | Parameters |
 | --- | --- | --- |
 | `ListChatGPTConnector` | GET | `tenantFilter`, `GroupName` (optional) |
-| `ExecChatGPTConnector` | POST | `tenantFilter`, `Action` (`AddApps`, `Apply` or `Access`), `Users` (user ids or sign-in names), `GroupName`, `AssignUsersDirectly`, `LockUserConsent`, `RemoveOtherDirect`; for `Apply` and `Access`: `ReadAreas` (`mail`, `calendar`, `files`, `teams`, `meetings`, `tasks`), `TenantLevel` (`read`, `drafts`, `assistant`, `full`), `PeopleLevels` (`[{ User, Level }]`). With no consent yet, `Access` needs both `ReadAreas` and `TenantLevel`. |
+| `ExecChatGPTConnector` | POST | `tenantFilter`, `Action` (`AddApps`, `Apply` or `Access`), `Users` (user ids or sign-in names), `GroupName`, `AssignUsersDirectly`, `LockUserConsent`, `RemoveOtherDirect`; for `Apply` and `Access`: `ReadAreas` (`mail`, `calendar`, `files`, `teams`, `meetings`, `tasks`), `TenantLevel` (`read`, `drafts`, `assistant`, `full`), `PeopleLevels` (`[{ User, Level, Extras }]`; `Extras` are `send`, `calendar`, `shared`, `files`, `teams`, from Level 2 up: Level 1 with extras is refused with 400). With no consent yet, `Access` needs both `ReadAreas` and `TenantLevel`. |
 | `ExecChatGPTConnectorCustomerPdf` | POST | `tenantFilter`, `ContactName`, `PreparedBy` (both optional). Returns `application/pdf`. |
 | `ExecChatGPTConnectorSummaryPdf` | POST | `tenantFilter`, `GroupName`, `ContactName`, `PreparedBy`, `IncludeGuide` (all but `tenantFilter` optional). Returns `application/pdf`. |
 | `ExecAddonGuide` (shared) | POST | `AddonId` `chatgpt-m365`, `Key` `connection`, `Action` (`Upload` or `Remove`); for `Upload`: `FileName` (.docx) and `Data` (base64 or a data URL, up to 10 MB). |

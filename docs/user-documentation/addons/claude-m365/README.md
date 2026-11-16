@@ -28,8 +28,8 @@ The PDF (**Preview PDF** or **Download PDF**) uses the CIPP branding and has:
 
 * the request: there are various ways to give Claude access, and we recommend starting with limited access;
 * **Before you start**: a third-party backup, Entra ID P1 and Microsoft Defender, each with whether the customer has it, and a note on Microsoft 365 Business Premium as our default;
-* **Access levels**: a comparison table, then each level with what Claude can and can't do and its pros and cons (two levels to a page);
-* **Next steps**: how we keep it safe, and a list to copy into their reply: who, a level for everyone, higher levels for named people, anything Claude shouldn't read, and quotes for anything missing.
+* **Access levels**: a comparison table, the **extras** a named person on Level 2 or above can have on top of their level (for example Post in Teams), then each level with what Claude can and can't do and its pros and cons (two levels to a page);
+* **Next steps**: how we keep it safe, and a list to copy into their reply: who, a level for everyone, higher levels or extras for named people, anything Claude shouldn't read, and quotes for anything missing.
 
 **Addressed to** and **From** are optional names for the letter.
 
@@ -45,6 +45,24 @@ The PDF (**Preview PDF** or **Download PDF**) uses the CIPP branding and has:
 Always kept, whatever the level: `openid`, `profile`, `email`, `offline_access`, `User.Read`, `User.ReadBasic.All` and `People.Read` (looking people up). The Teams area includes `Team.ReadBasic.All` (listing the person's teams). Claude's connector asks for these two even at Level 1 (seen in November 2026), so without them people get *needs admin approval*. After updating CIPP, save step 4 again in each tenant to add them.
 
 The levels, their wording in the PDF and their permissions are in `backend/Config/Addons/claude-m365/ClaudeConnectorAccess.json`. Claude can only ever do what the person using it could do themselves; Claude can read shared mailboxes but can't change them at any level.
+
+## Extras for named people
+
+A named person on **Level 2 or above** can also have **extras** on top of their level, without moving them up a level. For example, someone on Level 3 who wants Claude to post in Teams gets **Level 3 + Post in Teams**, rather than Level 4, which would also let Claude edit and delete files.
+
+| Extra | Claude can also | Graph permissions |
+| --- | --- | --- |
+| Send email | Send and forward email as the person | `Mail.Send` |
+| Manage calendar | Create, accept and change meetings, set out-of-office replies and mail rules | `Calendars.ReadWrite`, `MailboxSettings.ReadWrite` |
+| Edit files | Create, edit, move and delete OneDrive and SharePoint files the person can edit | `Files.ReadWrite.All` |
+| Post in Teams | Post in Teams chats and channels, and start new chats, as the person | `ChatMessage.Send`, `ChannelMessage.Send`, `Chat.Create` |
+
+* **Interlock: no extras on Level 1.** Level 1 promises the customer that Claude can't change anything, and every extra changes something. On Level 1 the extras show greyed out; the API refuses Level 1 with extras; and moving someone down to Level 1 removes their extras.
+* Only extras the person's level doesn't already include are offered (Level 3 already sends email, so it only offers Edit files and Post in Teams).
+* Extras are for named people only; everyone's level is always a plain level.
+* There's no way to limit Teams posting to particular teams or channels: Microsoft's permission covers everywhere the person can post. Claude desktop asks the person to approve each message before it is sent.
+
+The extras, their wording and their permissions are in `ClaudeConnectorAccess.json` (`extras`, `extrasMinLevel`).
 
 ## Current setup
 
@@ -68,7 +86,7 @@ The top of the page shows where the tenant is: whether each app is there, has ad
 4. **Choose what Claude can read and change.** **Save access** sets, on the *M365 MCP Server for Claude* app's Microsoft Graph permissions:
    * **What Claude can read, for everyone**: email, calendar, OneDrive and SharePoint files, Teams chats and channels, Teams meetings. Switching one off removes its read permissions for everyone.
    * **Access level for everyone**: the write permissions of everyone are set to exactly the chosen level's.
-   * **Higher levels for named people**: each person gets their own grant with only the permissions their level adds on top of everyone's. Removing a person from the list, or choosing a level no higher than everyone's, removes their grant. A person also needs to be one of the people who can use Claude (step 3).
+   * **Higher levels and extras for named people**: each person gets their own grant with only the permissions their level and extras add on top of everyone's. Tick extras under the person's level; on Level 1 they are greyed out (see [Extras for named people](#extras-for-named-people)). Removing a person from the list, or choosing a level no higher than everyone's, removes their grant. A person also needs to be one of the people who can use Claude (step 3).
 
    Microsoft's consent page approves every permission Anthropic's app asks for, including the write ones, so straight after step 2 everyone has Level 4. The page warns about this and starts the choice at Level 1. **If anyone approves the consent page again, save this step again.** A write permission that also reads (for example `Mail.ReadWrite`) lets Claude read that area for the person even if the area is switched off; the results say so.
 5. **Finish in Claude** (by hand):
@@ -80,7 +98,7 @@ The top of the page shows where the tenant is: whether each app is there, has ad
 
 When setup is done, **Summary for the customer** at the bottom of the page makes a branded PDF to send them, read from the tenant as it is at that moment:
 
-* **What we've set up**: how many people can use Claude, everyone's level and how many have a higher one; a table of each person with their level and what Claude can do for them; what Claude can read; and a **Still to finish** box if consent hasn't been given, Claude isn't limited to named people yet, or everyone still has full access from the consent page.
+* **What we've set up**: how many people can use Claude, everyone's level and how many have a higher one; a table of each person with their level and any extras (for example *Level 3: Personal assistant + Post in Teams*) and what Claude can do for them; what Claude can read; and a **Still to finish** box if consent hasn't been given, Claude isn't limited to named people yet, or everyone still has full access from the consent page.
 * **Keeping it safe**: named people only, no unapproved apps, app requests reviewed, third-party backup and Microsoft Defender, each *In place* or *Not in place*, with a recommendation for anything missing; and what happens next (connecting Microsoft 365 in Claude, approving before it sends, asking us for changes, reporting anything odd).
 
 **Addressed to** and **From** are optional, as for the information PDF.
@@ -113,7 +131,7 @@ Sources: Anthropic's [Connect to Microsoft 365](https://claude.com/docs/third-pa
 | Endpoint | Method | Parameters |
 | --- | --- | --- |
 | `ListClaudeConnector` | GET | `tenantFilter`, `GroupName` (optional) |
-| `ExecClaudeConnector` | POST | `tenantFilter`, `Action` (`AddApps`, `Apply` or `Access`), `Users` (user ids or sign-in names), `GroupName`, `AssignUsersDirectly`, `LockUserConsent`, `RemoveOtherDirect`; for `Apply` and `Access`: `ReadAreas` (`mail`, `calendar`, `files`, `teams`, `meetings`), `TenantLevel` (`read`, `drafts`, `assistant`, `full`), `PeopleLevels` (`[{ User, Level }]`) |
+| `ExecClaudeConnector` | POST | `tenantFilter`, `Action` (`AddApps`, `Apply` or `Access`), `Users` (user ids or sign-in names), `GroupName`, `AssignUsersDirectly`, `LockUserConsent`, `RemoveOtherDirect`; for `Apply` and `Access`: `ReadAreas` (`mail`, `calendar`, `files`, `teams`, `meetings`), `TenantLevel` (`read`, `drafts`, `assistant`, `full`), `PeopleLevels` (`[{ User, Level, Extras }]`; `Extras` are `send`, `calendar`, `files`, `teams`, from Level 2 up: Level 1 with extras is refused with 400) |
 | `ExecClaudeConnectorCustomerPdf` | POST | `tenantFilter`, `ContactName`, `PreparedBy` (both optional). Returns `application/pdf`. |
 | `ExecClaudeConnectorSummaryPdf` | POST | `tenantFilter`, `GroupName`, `ContactName`, `PreparedBy`, `IncludeGuide` (all but `tenantFilter` optional). Returns `application/pdf`. |
 | `ExecClaudeConnectorGuide` | POST | `Action` (`Upload` or `Remove`); for `Upload`: `FileName` (.docx) and `Data` (base64 or a data URL, up to 10 MB). |

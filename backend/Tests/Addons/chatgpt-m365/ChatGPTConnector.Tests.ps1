@@ -406,6 +406,36 @@ Describe 'Access levels and read areas' {
         @($R | Where-Object Status -EQ 'Error').Count | Should -Be 0
     }
 
+    It 'gives one person a level plus an extra (Level 3 + Post in Teams), and reports it' {
+        New-FakeTenant -GroupExists -ReadOnlyConsent
+        $R = Set-CIPPChatGPTConnector -TenantFilter 'contoso.com' -Action Access -PeopleLevels @(@{ User = 'jo@contoso.com'; Level = 'assistant'; Extras = @('teams') })
+        $Want = @('Mail.ReadWrite', 'Mail.Send', 'MailboxSettings.ReadWrite', 'Contacts.ReadWrite', 'Calendars.ReadWrite', 'OnlineMeetings.ReadWrite', 'Tasks.ReadWrite', 'ChatMessage.Send', 'ChannelMessage.Send', 'Chat.Create', 'Channel.Create') | Sort-Object
+        (& $script:Scopes (& $script:UserGrant 'u-jo') | Sort-Object) | Should -Be $Want
+        (($R | Where-Object { $_.Step -eq 'Access' -and $_.Status -eq 'Success' }).Message -join ' ') | Should -Match 'Level 3: Personal assistant \+ Post in Teams'
+        $S = Get-CIPPChatGPTConnectorStatus -TenantFilter 'contoso.com'
+        $P = $S.Access.People | Where-Object { $_.UserId -eq 'u-jo' }
+        $P.Level | Should -Be 'assistant'
+        @($P.Extras) | Should -Be @('teams')
+        # Dropping the extra keeps the level.
+        $null = Set-CIPPChatGPTConnector -TenantFilter 'contoso.com' -Action Access -PeopleLevels @(@{ User = 'jo@contoso.com'; Level = 'assistant' })
+        (& $script:Scopes (& $script:UserGrant 'u-jo')) | Should -Not -Contain 'ChatMessage.Send'
+    }
+
+    It 'refuses extras on Level 1, which is read only (interlock)' {
+        New-FakeTenant -GroupExists -ReadOnlyConsent
+        $R = Set-CIPPChatGPTConnector -TenantFilter 'contoso.com' -Action Access -PeopleLevels @(@{ User = 'jo@contoso.com'; Level = 'read'; Extras = @('teams') })
+        & $script:UserGrant 'u-jo' | Should -BeNullOrEmpty
+        ($R | Where-Object Status -EQ 'Error').Message | Should -Match 'read only'
+    }
+
+    It 'moving a person down to Level 1 removes their extras too' {
+        New-FakeTenant -GroupExists -ReadOnlyConsent
+        $null = Set-CIPPChatGPTConnector -TenantFilter 'contoso.com' -Action Access -PeopleLevels @(@{ User = 'jo@contoso.com'; Level = 'drafts'; Extras = @('teams') })
+        (& $script:Scopes (& $script:UserGrant 'u-jo')) | Should -Contain 'ChatMessage.Send'
+        $null = Set-CIPPChatGPTConnector -TenantFilter 'contoso.com' -Action Access -PeopleLevels @(@{ User = 'jo@contoso.com'; Level = 'read' })
+        & $script:UserGrant 'u-jo' | Should -BeNullOrEmpty
+    }
+
     It 'reports access in the status' {
         New-FakeTenant -GroupExists
         $S = Get-CIPPChatGPTConnectorStatus -TenantFilter 'contoso.com'
@@ -495,6 +525,18 @@ Describe 'Build-CippChatGPTConnectorCustomerTree' {
     }
 }
 
+Describe 'Get-CIPPChatGPTConnectorScopeSummary extras' {
+    It 'matches a level exactly, a level plus whole extras, or custom' {
+        $L3 = @('Mail.ReadWrite', 'Mail.Send', 'MailboxSettings.ReadWrite', 'Contacts.ReadWrite', 'Calendars.ReadWrite', 'OnlineMeetings.ReadWrite', 'Tasks.ReadWrite')
+        (Get-CIPPChatGPTConnectorScopeSummary -Scopes $L3).Level | Should -Be 'assistant'
+        $S = Get-CIPPChatGPTConnectorScopeSummary -Scopes (@($L3) + @('ChatMessage.Send', 'ChannelMessage.Send', 'Chat.Create', 'Channel.Create'))
+        $S.Level | Should -Be 'assistant'
+        @($S.Extras) | Should -Be @('teams')
+        # Only part of an extra's permissions: not a level plus extras.
+        (Get-CIPPChatGPTConnectorScopeSummary -Scopes (@($L3) + @('ChatMessage.Send'))).Level | Should -Be 'custom'
+    }
+}
+
 Describe 'Invoke-ExecChatGPTConnector access options' {
     BeforeEach { New-FakeTenant -GroupExists }
     It 'rejects an unknown level' {
@@ -510,6 +552,12 @@ Describe 'Invoke-ExecChatGPTConnector access options' {
     }
     It 'rejects a bad person' {
         (Invoke-ExecChatGPTConnector -Request @{ Body = @{ tenantFilter = 'contoso.com'; Action = 'Access'; PeopleLevels = @(@{ User = '../x'; Level = 'read' }) }; Headers = @{}; Params = @{} }).StatusCode | Should -Be 400
+    }
+    It 'rejects an unknown extra, and extras on Level 1 (interlock)' {
+        (Invoke-ExecChatGPTConnector -Request @{ Body = @{ tenantFilter = 'contoso.com'; Action = 'Access'; PeopleLevels = @(@{ User = 'jo@contoso.com'; Level = 'assistant'; Extras = @('admin') }) }; Headers = @{}; Params = @{} }).StatusCode | Should -Be 400
+        $R = Invoke-ExecChatGPTConnector -Request @{ Body = @{ tenantFilter = 'contoso.com'; Action = 'Access'; PeopleLevels = @(@{ User = 'jo@contoso.com'; Level = 'read'; Extras = @('teams') }) }; Headers = @{}; Params = @{} }
+        $R.StatusCode | Should -Be 400
+        "$($R.Body.Results)" | Should -Match 'read only'
     }
     It 'takes picker values and sets access' {
         $R = Invoke-ExecChatGPTConnector -Request @{ Body = @{ tenantFilter = 'contoso.com'; Action = 'Access'; TenantLevel = @{ value = 'read' }; PeopleLevels = @(@{ User = @{ value = 'jo@contoso.com' }; Level = @{ value = 'drafts' } }) }; Headers = @{}; Params = @{} }

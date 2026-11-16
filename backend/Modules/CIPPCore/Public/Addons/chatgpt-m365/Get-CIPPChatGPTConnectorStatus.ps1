@@ -118,15 +118,18 @@ function Get-CIPPChatGPTConnectorStatus {
             $Access.People = @($Grants | Where-Object { $_.consentType -eq 'Principal' } | ForEach-Object {
                     $G = $_
                     $Scopes = @("$($G.scope)" -split '\s+' | Where-Object { $_ })
-                    $Summary = Get-CIPPChatGPTConnectorScopeSummary -Scopes $Scopes
+                    # Their level is everyone's permissions plus their own grant (which holds only what's extra).
+                    $Summary = Get-CIPPChatGPTConnectorScopeSummary -Scopes (@($Access.TenantScopes) + $Scopes | Select-Object -Unique)
+                    $Own = Get-CIPPChatGPTConnectorScopeSummary -Scopes $Scopes
                     $U = try { New-GraphGetRequest -uri "https://graph.microsoft.com/v1.0/users/$($G.principalId)?`$select=id,displayName,userPrincipalName" -tenantid $TenantFilter -noPagination $true | Select-Object -First 1 } catch { $null }
                     [pscustomobject]@{
                         UserId      = $G.principalId
                         Name        = if ($U.displayName) { $U.displayName } else { $G.principalId }
                         Upn         = $U.userPrincipalName
                         Scopes      = $Scopes
-                        WriteScopes = @($Summary.WriteScopes)
+                        WriteScopes = @($Own.WriteScopes)
                         Level       = $Summary.Level
+                        Extras      = @($Summary.Extras)
                         # A grant with read scopes is the person approving ChatGPT themselves; CIPP's own
                         # per-person grants hold write scopes only.
                         SelfApproved = [bool]($Scopes | Where-Object { $Config.writeScopes -notcontains $_ -and $_ -notin @('openid', 'profile', 'email', 'offline_access') })

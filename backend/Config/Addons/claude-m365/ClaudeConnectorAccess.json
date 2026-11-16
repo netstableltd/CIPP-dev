@@ -1,5 +1,5 @@
 {
-  "_comment": "Claude for Microsoft 365 add-on (claude-m365). Microsoft Graph delegated scopes on the 'M365 MCP Server for Claude' app, grouped into what Claude can read (readAreas) and what it can change (levels). Scope lists follow Anthropic's Microsoft 365 connector docs: https://claude.com/docs/third-party/claude-desktop/connectors-m365 and https://support.claude.com/en/articles/12684923.",
+  "_comment": "Claude for Microsoft 365 add-on (claude-m365). Microsoft Graph delegated scopes on the 'M365 MCP Server for Claude' app, grouped into what Claude can read (readAreas) and what it can change (levels). Scope lists follow Anthropic's Microsoft 365 connector docs: https://claude.com/docs/third-party/claude-desktop/connectors-m365 and https://support.claude.com/en/articles/12684923. extras are capabilities a named person can have on top of their own level; they need Level extrasMinLevel or above, as Level 1 promises read only.",
   "alwaysKeep": ["User.Read", "User.ReadBasic.All", "People.Read", "offline_access", "openid", "profile", "email"],
   "readAreas": [
     {
@@ -39,6 +39,33 @@
     }
   ],
   "writeScopes": ["Mail.ReadWrite", "Mail.Send", "Calendars.ReadWrite", "MailboxSettings.ReadWrite", "Files.ReadWrite.All", "ChatMessage.Send", "ChannelMessage.Send", "Chat.Create"],
+  "extrasMinLevel": 2,
+  "extras": [
+    {
+      "id": "send",
+      "name": "Send email",
+      "summary": "Send and forward email as the person.",
+      "scopes": ["Mail.Send"]
+    },
+    {
+      "id": "calendar",
+      "name": "Manage calendar",
+      "summary": "Create, accept and change meetings, and set out-of-office replies and mail rules.",
+      "scopes": ["Calendars.ReadWrite", "MailboxSettings.ReadWrite"]
+    },
+    {
+      "id": "files",
+      "name": "Edit files",
+      "summary": "Create, edit, move and delete OneDrive and SharePoint files the person can edit.",
+      "scopes": ["Files.ReadWrite.All"]
+    },
+    {
+      "id": "teams",
+      "name": "Post in Teams",
+      "summary": "Post in Teams chats and channels, and start new chats, as the person.",
+      "scopes": ["ChatMessage.Send", "ChannelMessage.Send", "Chat.Create"]
+    }
+  ],
   "levels": [
     {
       "id": "read",

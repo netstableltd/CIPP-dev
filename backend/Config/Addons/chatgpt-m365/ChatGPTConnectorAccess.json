@@ -1,5 +1,5 @@
 {
-  "_comment": "ChatGPT for Microsoft 365 add-on (chatgpt-m365). Microsoft Graph delegated scopes on OpenAI's 'ChatGPT' app (e0476654-c1d5-430b-ab80-70cbd947616a), grouped into what ChatGPT can read (readAreas) and what it can change (levels). One app carries every Microsoft connector (Outlook Email, Outlook Calendar, Teams, SharePoint). Scope lists follow OpenAI's help articles 12512241 (Outlook), 12552368 (Teams), 12143177 (SharePoint) and 11509118 (admin permissions), and the grants seen in real tenants in November 2026. writeReads: write scopes that also let ChatGPT read an area, for the 'reading is off but...' warning.",
+  "_comment": "ChatGPT for Microsoft 365 add-on (chatgpt-m365). Microsoft Graph delegated scopes on OpenAI's 'ChatGPT' app (e0476654-c1d5-430b-ab80-70cbd947616a), grouped into what ChatGPT can read (readAreas) and what it can change (levels). One app carries every Microsoft connector (Outlook Email, Outlook Calendar, Teams, SharePoint). Scope lists follow OpenAI's help articles 12512241 (Outlook), 12552368 (Teams), 12143177 (SharePoint) and 11509118 (admin permissions), and the grants seen in real tenants in November 2026. writeReads: write scopes that also let ChatGPT read an area, for the 'reading is off but...' warning. extras are capabilities a named person can have on top of their own level; they need Level extrasMinLevel or above, as Level 1 promises read only.",
   "alwaysKeep": ["openid", "profile", "email", "offline_access", "User.Read", "User.ReadBasic.All", "People.Read", "MailboxSettings.Read"],
   "readAreas": [
     {
@@ -58,6 +58,44 @@
     "OnlineMeetings.ReadWrite": "meetings",
     "Tasks.ReadWrite": "tasks", "Tasks.ReadWrite.Shared": "tasks"
   },
+  "extrasMinLevel": 2,
+  "extras": [
+    {
+      "id": "send",
+      "name": "Send email",
+      "summary": "Send and forward email as the person.",
+      "scopes": ["Mail.Send"],
+      "chatgptActions": "Outlook Email: also allow sending and forwarding email."
+    },
+    {
+      "id": "calendar",
+      "name": "Manage calendar, contacts and tasks",
+      "summary": "Create, accept and change meetings, manage contacts and tasks, and set out-of-office replies and mail rules.",
+      "scopes": ["Calendars.ReadWrite", "OnlineMeetings.ReadWrite", "MailboxSettings.ReadWrite", "Contacts.ReadWrite", "Tasks.ReadWrite"],
+      "chatgptActions": "Outlook Calendar: allow the write actions for the person's own calendar; Outlook Email: allow contact actions; Teams: allow Planner tasks."
+    },
+    {
+      "id": "shared",
+      "name": "Act in shared mailboxes",
+      "summary": "Send from, change and delete in shared mailboxes, shared calendars and shared tasks the person can open.",
+      "scopes": ["Mail.ReadWrite.Shared", "Mail.Send.Shared", "Calendars.ReadWrite.Shared", "Tasks.ReadWrite.Shared"],
+      "chatgptActions": "Outlook Email and Outlook Calendar: also allow the shared mailbox and shared calendar actions."
+    },
+    {
+      "id": "files",
+      "name": "Edit files",
+      "summary": "Create, edit, move and delete OneDrive and SharePoint files, lists and pages the person can edit.",
+      "scopes": ["Files.ReadWrite.All", "Sites.ReadWrite.All"],
+      "chatgptActions": "SharePoint: allow the write actions."
+    },
+    {
+      "id": "teams",
+      "name": "Post in Teams",
+      "summary": "Post in Teams chats and channels, and start new chats and channels, as the person.",
+      "scopes": ["ChatMessage.Send", "ChannelMessage.Send", "Chat.Create", "Channel.Create"],
+      "chatgptActions": "Teams: allow sending messages and creating chats and channels."
+    }
+  ],
   "levels": [
     {
       "id": "read",

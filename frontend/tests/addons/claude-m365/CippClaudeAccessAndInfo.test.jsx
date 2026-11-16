@@ -6,6 +6,8 @@ import {
   CippClaudeAccessStep,
   claudeAccessDefaults,
   claudeAccessBody,
+  extrasBeyond,
+  allowsExtras,
 } from '../../../src/addons/claude-m365/CippClaudeAccessStep'
 import {
   CippClaudeCustomerInfo,
@@ -85,8 +87,22 @@ const AREAS = [
     description: 'Read chats.',
   },
 ]
+const EXTRAS = [
+  { id: 'send', name: 'Send email', summary: 'Send.', scopes: ['Mail.Send'] },
+  {
+    id: 'teams',
+    name: 'Post in Teams',
+    summary: 'Post as the person.',
+    scopes: ['ChatMessage.Send'],
+  },
+]
 const status = (access) => ({
-  Options: { Levels: LEVELS, ReadAreas: AREAS },
+  Options: {
+    Levels: LEVELS,
+    ReadAreas: AREAS,
+    Extras: EXTRAS,
+    ExtrasMinLevel: 2,
+  },
   Access: access,
 })
 
@@ -129,7 +145,11 @@ describe('claudeAccessDefaults', () => {
     )
     expect(d.tenantLevel).toBe('drafts')
     expect(d.people).toEqual([
-      { user: { value: 'u1', label: 'Jo (jo@c.com)' }, level: 'assistant' },
+      {
+        user: { value: 'u1', label: 'Jo (jo@c.com)' },
+        level: 'assistant',
+        extras: [],
+      },
     ])
   })
   it('turns every area on when nothing is known yet', () => {
@@ -137,6 +157,97 @@ describe('claudeAccessDefaults', () => {
       mail: true,
       teams: true,
     })
+  })
+})
+
+describe('extras for named people', () => {
+  it('offers only extras the level does not include, and none on Level 1 (interlock)', () => {
+    const l3 = LEVELS.find((l) => l.id === 'assistant')
+    expect(extrasBeyond(EXTRAS, l3).map((e) => e.id)).toEqual(['teams'])
+    expect(
+      allowsExtras(
+        LEVELS.find((l) => l.id === 'read'),
+        2
+      )
+    ).toBe(false)
+    expect(
+      allowsExtras(
+        LEVELS.find((l) => l.id === 'drafts'),
+        2
+      )
+    ).toBe(true)
+  })
+
+  it('sends extras from Level 2 up, and drops them on Level 1', () => {
+    const body = claudeAccessBody(
+      'contoso.com',
+      {
+        areas: { mail: true },
+        tenantLevel: 'read',
+        people: [
+          {
+            user: { value: 'u1' },
+            level: 'assistant',
+            extras: ['teams', 'send'],
+          },
+          { user: { value: 'u2' }, level: 'read', extras: ['teams'] },
+        ],
+      },
+      status({ People: [] })
+    )
+    expect(body.PeopleLevels).toEqual([
+      { User: 'u1', Level: 'assistant', Extras: ['teams'] },
+      { User: 'u2', Level: 'read', Extras: [] },
+    ])
+  })
+
+  it('loads a person with Level 3 + Post in Teams, and saves it back', () => {
+    const s = status({
+      TenantScopes: ['Mail.Read'],
+      ReadAreas: ['mail'],
+      Level: 'read',
+      People: [
+        {
+          UserId: 'u1',
+          Name: 'Mark',
+          Upn: 'mark@contoso.com',
+          Level: 'assistant',
+          Extras: ['teams'],
+        },
+      ],
+    })
+    const d = claudeAccessDefaults(s)
+    expect(d.people[0]).toMatchObject({ level: 'assistant', extras: ['teams'] })
+    expect(claudeAccessBody('contoso.com', d, s).PeopleLevels).toEqual([
+      { User: 'u1', Level: 'assistant', Extras: ['teams'] },
+    ])
+  })
+
+  it('shows the extras for a person, and blocks them on Level 1', () => {
+    renderWithProviders(
+      <CippClaudeAccessStep
+        tenant="contoso.com"
+        status={status({
+          TenantScopes: ['Mail.Read'],
+          ReadAreas: ['mail'],
+          Level: 'read',
+          People: [
+            { UserId: 'u1', Name: 'Mark', Level: 'assistant', Extras: [] },
+            { UserId: 'u2', Name: 'Jo', Level: 'read', Extras: [] },
+          ],
+        })}
+      />
+    )
+    const teams = screen.getAllByRole('checkbox', { name: 'Post in Teams' })
+    expect(teams[0]).toBeEnabled()
+    expect(teams[1]).toBeDisabled()
+    expect(
+      screen.getByText(/Level 1 is read only, so it can't have extras/)
+    ).toBeInTheDocument()
+    // Level 3 already includes Send email, so only Jo (Level 1) sees it, greyed out.
+    const send = screen.getAllByRole('checkbox', { name: 'Send email' })
+    expect(send).toHaveLength(1)
+    expect(send[0]).toBeDisabled()
   })
 })
 
@@ -165,8 +276,8 @@ describe('claudeAccessBody', () => {
       ReadAreas: ['mail'],
       TenantLevel: 'read',
       PeopleLevels: [
-        { User: 'u2', Level: 'drafts' },
-        { User: 'u1', Level: 'read' },
+        { User: 'u2', Level: 'drafts', Extras: [] },
+        { User: 'u1', Level: 'read', Extras: [] },
       ],
     })
   })
@@ -237,7 +348,7 @@ describe('CippClaudeAccessStep', () => {
         Action: 'Access',
         ReadAreas: ['mail'],
         TenantLevel: 'drafts',
-        PeopleLevels: [{ User: 'u-sam', Level: 'drafts' }],
+        PeopleLevels: [{ User: 'u-sam', Level: 'drafts', Extras: [] }],
       },
     })
   })

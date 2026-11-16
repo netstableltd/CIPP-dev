@@ -122,6 +122,14 @@ function Build-CippClaudeConnectorCustomerTree {
                 @{ label = 'Different levels for different people'; text = 'For example Level 1 for everyone and Level 2 for two people who want help with email.' }
                 @{ label = 'What Claude can read'; text = "Any of these can be switched off for everyone: $((@($Config.readAreas | ForEach-Object { $_.noun }) -join ', '))." }
             )))
+    if (@($Config.extras).Count -gt 0) {
+        $blocks.Add((New-CippReportHeading -Title 'Extras for named people'))
+        $blocks.Add((New-CippReportParagraph -Text "A named person on Level $($Config.extrasMinLevel) or above can also have one or more of these on top of their level, without moving them to a higher level: for example Level 3 with Post in Teams. Level 1 stays read only, so it can't have extras."))
+        $blocks.Add((New-CippReportTable -Columns @(
+                    @{ header = 'Extra'; key = 'name'; width = 2.0; bold = $true }
+                    @{ header = 'Claude can also'; key = 'summary'; width = 4.8 }
+                ) -Rows @($Config.extras | ForEach-Object { @{ name = $_.name; summary = $_.summary } })))
+    }
 
     # Two levels to a page: the lower-risk pair, then the higher-risk pair.
     $Pages = @(
@@ -160,7 +168,7 @@ function Build-CippClaudeConnectorCustomerTree {
     $Reply = [System.Collections.Generic.List[string]]::new()
     $Reply.Add('1. Who should be able to use Claude:')
     $Reply.Add('2. Level for everyone (we suggest Level 1, Read only):')
-    $Reply.Add('3. Anyone who needs a higher level, and which level:')
+    $Reply.Add('3. Anyone who needs a higher level or extras, and which:')
     $Reply.Add('4. Anything Claude should NOT read (email, calendar, files, Teams chats, Teams meetings):')
     if ($Missing.Count -gt 0) { $Reply.Add("5. Would you like a quote for: $($Missing -join '; ')?") }
     $blocks.Add((New-CippReportInfoBox -Title 'Your reply' -Lines -Content ($Reply -join "`n")))

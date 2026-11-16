@@ -225,6 +225,13 @@ export const CippClaudeConnectorProcess = ({ tenant }) => {
     const l = levels.find((x) => x.id === id)
     return l ? `Level ${l.number}: ${l.name}` : null
   }
+  const extraNames = (ids) =>
+    (ids ?? [])
+      .map(
+        (id) =>
+          ` + ${(s?.Options?.Extras ?? []).find((e) => e.id === id)?.name ?? id}`
+      )
+      .join('')
   const areaNames = (ids) =>
     (s?.Options?.ReadAreas ?? [])
       .filter((a) => (ids ?? []).includes(a.id))
@@ -329,7 +336,7 @@ export const CippClaudeConnectorProcess = ({ tenant }) => {
                 </strong>
                 {`, reading ${areaNames(s.Access.ReadAreas).join(', ') || 'nothing'}`}
                 {(s.Access.People ?? []).length > 0 &&
-                  `. Own level: ${s.Access.People.map((p) => `${p.Upn ?? p.Name} (${levelName(p.Level) ?? 'custom'})`).join(', ')}`}
+                  `. Own level: ${s.Access.People.map((p) => `${p.Upn ?? p.Name} (${levelName(p.Level) ?? 'custom'}${extraNames(p.Extras)})`).join(', ')}`}
               </Tick>
             )}
             <Tick ok={null}>

@@ -5,7 +5,7 @@ function Invoke-ExecChatGPTConnector {
     .ROLE
         Tenant.Application.ReadWrite
     .DESCRIPTION
-        Community Additions > ChatGPT for Microsoft 365 (add-on chatgpt-m365). Action AddApps adds OpenAI's ChatGPT app to the tenant (tenantFilter). Action Apply limits ChatGPT to the chosen Users: through the access group GroupName (default SG-ChatGPT-Users) or, with AssignUsersDirectly, user by user. LockUserConsent also stops users approving apps themselves and turns on admin consent requests. RemoveOtherDirect removes direct assignments for people not in the group. Apply and Action Access (access only) also take ReadAreas (what ChatGPT can read for everyone: mail, calendar, files, teams, meetings, tasks), TenantLevel (access level for everyone: read, drafts, assistant, full) and PeopleLevels (extra access for individual people: [{ User, Level }]). With no admin consent yet, Access gives it for exactly the chosen ReadAreas and TenantLevel (both needed). See Set-CIPPChatGPTConnector and Config/Addons/chatgpt-m365/ChatGPTConnectorAccess.json.
+        Community Additions > ChatGPT for Microsoft 365 (add-on chatgpt-m365). Action AddApps adds OpenAI's ChatGPT app to the tenant (tenantFilter). Action Apply limits ChatGPT to the chosen Users: through the access group GroupName (default SG-ChatGPT-Users) or, with AssignUsersDirectly, user by user. LockUserConsent also stops users approving apps themselves and turns on admin consent requests. RemoveOtherDirect removes direct assignments for people not in the group. Apply and Action Access (access only) also take ReadAreas (what ChatGPT can read for everyone: mail, calendar, files, teams, meetings, tasks), TenantLevel (access level for everyone: read, drafts, assistant, full) and PeopleLevels (extra access for individual people: [{ User, Level, Extras }], where Extras are capability ids such as teams for Post in Teams, allowed from Level 2 up; Level 1 with extras is refused). With no admin consent yet, Access gives it for exactly the chosen ReadAreas and TenantLevel (both needed). See Set-CIPPChatGPTConnector and Config/Addons/chatgpt-m365/ChatGPTConnectorAccess.json.
     #>
     [CmdletBinding()]
     param($Request, $TriggerMetadata)
@@ -37,6 +37,7 @@ function Invoke-ExecChatGPTConnector {
     $Config = Get-CIPPChatGPTConnectorAccessConfig
     $LevelIds = @($Config.levels | ForEach-Object { $_.id })
     $AreaIds = @($Config.readAreas | ForEach-Object { $_.id })
+    $ExtraIds = @($Config.extras | ForEach-Object { $_.id })
     $IsUserKey = { param($V) $V -match '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' -or $V -match '^[^@\s/\\?#]+@[^@\s/\\?#]+$' }
     $AccessArgs = @{}
     if ($null -ne $Body.ReadAreas) {
@@ -52,12 +53,23 @@ function Invoke-ExecChatGPTConnector {
         $AccessArgs.TenantLevel = $TenantLevel
     }
     $People = @(@($Body.PeopleLevels) | Where-Object { $_ } | ForEach-Object {
-            [pscustomobject]@{ User = "$($_.User.value ?? $_.User)".Trim(); Level = "$($_.Level.value ?? $_.Level)" }
+            [pscustomobject]@{
+                User   = "$($_.User.value ?? $_.User)".Trim()
+                Level  = "$($_.Level.value ?? $_.Level)"
+                Extras = @(@($_.Extras) | ForEach-Object { "$($_.value ?? $_)".Trim() } | Where-Object { $_ } | Select-Object -Unique)
+            }
         } | Where-Object { $_.User })
     if ($People.Count -gt 200) { return (& $Respond ([HttpStatusCode]::BadRequest) 'Set extra access for 200 people or fewer at a time.') }
     foreach ($P in $People) {
         if (-not (& $IsUserKey $P.User)) { return (& $Respond ([HttpStatusCode]::BadRequest) "Not a user id or sign-in name: $($P.User)") }
         if ($LevelIds -notcontains $P.Level) { return (& $Respond ([HttpStatusCode]::BadRequest) "Unknown access level for $($P.User): $($P.Level)") }
+        $BadExtras = @($P.Extras | Where-Object { $ExtraIds -notcontains $_ })
+        if ($BadExtras.Count -gt 0) { return (& $Respond ([HttpStatusCode]::BadRequest) "Unknown extra for $($P.User): $($BadExtras -join ', ')") }
+        # Interlock: Level 1 is read only, so it can't have extras.
+        $PLevel = $Config.levels | Where-Object { $_.id -eq $P.Level } | Select-Object -First 1
+        if ($P.Extras.Count -gt 0 -and [int]$PLevel.number -lt [int]$Config.extrasMinLevel) {
+            return (& $Respond ([HttpStatusCode]::BadRequest) "$($P.User): Level $($PLevel.number) is read only, so it can't have extras. Choose Level $($Config.extrasMinLevel) or above.")
+        }
     }
     if ($People.Count -gt 0) { $AccessArgs.PeopleLevels = $People }
     if ($Action -eq 'Access' -and $AccessArgs.Count -eq 0) { return (& $Respond ([HttpStatusCode]::BadRequest) 'Nothing to change: give ReadAreas, TenantLevel or PeopleLevels.') }

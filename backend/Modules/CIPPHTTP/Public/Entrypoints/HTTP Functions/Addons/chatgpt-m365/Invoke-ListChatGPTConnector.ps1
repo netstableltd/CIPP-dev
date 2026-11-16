@@ -5,7 +5,7 @@ function Invoke-ListChatGPTConnector {
     .ROLE
         Tenant.Application.Read
     .DESCRIPTION
-        Community Additions > ChatGPT for Microsoft 365 (add-on chatgpt-m365): how far the tenant (tenantFilter) is through setting up OpenAI's ChatGPT connector. Read-only. Also returns what the tenant already has (Readiness: backup, Entra ID P1, Defender, Business Premium), what ChatGPT can read and change (Access) the options (Options: read areas and access levels) and the uploaded connection guide, if any (Guide). GroupName is the access group to look for (default SG-ChatGPT-Users).
+        Community Additions > ChatGPT for Microsoft 365 (add-on chatgpt-m365): how far the tenant (tenantFilter) is through setting up OpenAI's ChatGPT connector. Read-only. Also returns what the tenant already has (Readiness: backup, Entra ID P1, Defender, Business Premium), what ChatGPT can read and change (Access) the options (Options: read areas, access levels and the extras named people can have on top of their level) and the uploaded connection guide, if any (Guide). GroupName is the access group to look for (default SG-ChatGPT-Users).
     #>
     [CmdletBinding()]
     param($Request, $TriggerMetadata)
@@ -27,7 +27,7 @@ function Invoke-ListChatGPTConnector {
         $Config = Get-CIPPChatGPTConnectorAccessConfig
         $Guide = try { Get-CIPPAddonGuide -AddonId 'chatgpt-m365' -Key 'connection' } catch { $null }
         $Status | Add-Member -NotePropertyName Guide -NotePropertyValue $Guide -Force
-        $Status | Add-Member -NotePropertyName Options -NotePropertyValue ([pscustomobject]@{ ReadAreas = $Config.readAreas; Levels = $Config.levels; WriteScopes = $Config.writeScopes }) -Force
+        $Status | Add-Member -NotePropertyName Options -NotePropertyValue ([pscustomobject]@{ ReadAreas = $Config.readAreas; Levels = $Config.levels; Extras = $Config.extras; ExtrasMinLevel = $Config.extrasMinLevel; WriteScopes = $Config.writeScopes }) -Force
         return ([HttpResponseContext]@{ StatusCode = [HttpStatusCode]::OK; Body = $Status })
     } catch {
         $ErrorMessage = Get-CippException -Exception $_

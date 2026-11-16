@@ -206,6 +206,13 @@ export const CippChatGPTConnectorProcess = ({ tenant }) => {
     const l = levels.find((x) => x.id === id)
     return l ? `Level ${l.number}: ${l.name}` : null
   }
+  const extraNames = (ids) =>
+    (ids ?? [])
+      .map(
+        (id) =>
+          ` + ${(s?.Options?.Extras ?? []).find((e) => e.id === id)?.name ?? id}`
+      )
+      .join('')
   const areaNames = (ids) =>
     (s?.Options?.ReadAreas ?? [])
       .filter((a) => (ids ?? []).includes(a.id))
@@ -312,12 +319,12 @@ export const CippChatGPTConnectorProcess = ({ tenant }) => {
                   {levelName(s.Access.Level) ?? 'a custom set of permissions'}
                 </strong>
                 {`, reading ${areaNames(s.Access.ReadAreas).join(', ') || 'nothing'}`}
-                {(s.Access.People ?? []).filter((p) => !p.SelfApproved)
-                  .length > 0 &&
+                {(s.Access.People ?? []).filter((p) => !p.SelfApproved).length >
+                  0 &&
                   `. Own level: ${s.Access.People.filter((p) => !p.SelfApproved)
                     .map(
                       (p) =>
-                        `${p.Upn ?? p.Name} (${levelName(p.Level) ?? 'custom'})`
+                        `${p.Upn ?? p.Name} (${levelName(p.Level) ?? 'custom'}${extraNames(p.Extras)})`
                     )
                     .join(', ')}`}
               </Tick>
@@ -462,9 +469,9 @@ export const CippChatGPTConnectorProcess = ({ tenant }) => {
             <Box component="ul" sx={{ pl: 2.5, my: 0 }}>
               <Typography component="li" variant="body2">
                 In ChatGPT, as a workspace owner or admin of the customer's
-                Business, Enterprise or Edu workspace: Admin console &gt; Plugins
-                (Apps in older workspaces). Turn on Outlook Email, Outlook Calendar, Teams and
-                SharePoint as wanted.
+                Business, Enterprise or Edu workspace: Admin console &gt;
+                Plugins (Apps in older workspaces). Turn on Outlook Email,
+                Outlook Calendar, Teams and SharePoint as wanted.
               </Typography>
               <Typography component="li" variant="body2">
                 Turn off the actions above the level you chose.{' '}
@@ -476,25 +483,26 @@ export const CippChatGPTConnectorProcess = ({ tenant }) => {
                 ) : (
                   'Choose a level in the step above first.'
                 )}{' '}
-                ChatGPT asks for the permissions of every action that is on;
-                if one isn't granted, people see &quot;Need admin
-                approval&quot;.
+                ChatGPT asks for the permissions of every action that is on; if
+                one isn't granted, people see &quot;Need admin approval&quot;.
               </Typography>
               <Typography component="li" variant="body2">
-                Set the apps&apos; action permission to <em>Allow read
-                actions</em> (or <em>Always ask</em>) so ChatGPT asks before
-                it sends or changes anything.
+                Set the apps&apos; action permission to{' '}
+                <em>Allow read actions</em> (or <em>Always ask</em>) so ChatGPT
+                asks before it sends or changes anything.
               </Typography>
               <Typography component="li" variant="body2">
-                Higher levels for named people need ChatGPT Enterprise or Edu:
-                give them a role that has the extra actions on. On ChatGPT
-                Business, actions are the same for everyone.
+                Higher levels and extras for named people need ChatGPT
+                Enterprise or Edu: give them a role that has the extra actions
+                on (for an extra such as Post in Teams, its actions as well as
+                their level's). On ChatGPT Business, actions are the same for
+                everyone.
               </Typography>
               <Typography component="li" variant="body2">
-                Don&apos;t run ChatGPT&apos;s <em>Review permissions in
-                Microsoft Entra</em> with more actions on than the level
-                allows: it grants every permission those actions need. If
-                someone does, save the step above again.
+                Don&apos;t run ChatGPT&apos;s{' '}
+                <em>Review permissions in Microsoft Entra</em> with more actions
+                on than the level allows: it grants every permission those
+                actions need. If someone does, save the step above again.
               </Typography>
               <Typography component="li" variant="body2">
                 If the tenant uses Conditional Access, include the ChatGPT app
