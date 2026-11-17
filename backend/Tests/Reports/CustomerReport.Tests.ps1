@@ -94,6 +94,10 @@ BeforeAll {
             @{ Domain = 'contoso.onmicrosoft.com'; SPFPassAll = $true; DMARCPresent = $false; DKIMEnabled = $true; MXPassTest = $true }
         )
     }
+    # Secure Score history read from Microsoft 365 when the cache does not cover the period.
+    $script:LiveScores = @()
+    $script:GraphCalls = [System.Collections.Generic.List[string]]::new()
+    function New-GraphGetRequest { param($uri, $tenantid, $noPagination) $script:GraphCalls.Add($uri); $script:LiveScores | ForEach-Object { [pscustomobject]$_ } }
     function New-CIPPDbRequest { param($TenantFilter, $Type, $Fields) if ($script:Db.ContainsKey($Type)) { $script:Db[$Type] | ForEach-Object { [pscustomobject]$_ } } else { @() } }
     $script:Period = Get-CIPPReportPeriod -Period 'LastMonth' -Now $script:Now
 }
@@ -234,6 +238,32 @@ Describe 'Get-CIPPCustomerReportData' {
             $Text | Should -Match 'Scores from 29 September to 30 September'
             $Text | Should -Not -Match '839.9|12 Oct'
         } finally { $script:Db.SecureScore = $script:SavedScores }
+    }
+    It 'reads older Secure Score history from Microsoft 365 when the cache starts after the period' {
+        $Sep = @{ Start = [datetime]::new(2026, 9, 1, 0, 0, 0, [DateTimeKind]::Utc); End = [datetime]::new(2026, 10, 1, 0, 0, 0, [DateTimeKind]::Utc); Key = '2026-09'; Label = 'September 2026'; IsPartial = $false; Monthly = $true }
+        $Saved = $script:Db.SecureScore
+        # The cache holds only recent scores (CIPP keeps 14 days).
+        $script:Db.SecureScore = @(@{ createdDateTime = '2026-11-16T00:00:00Z'; currentScore = 850; maxScore = 1193 })
+        $script:LiveScores = @(
+            @{ createdDateTime = '2026-11-16T00:00:00Z'; currentScore = 850; maxScore = 1193 }
+            @{ createdDateTime = '2026-09-30T00:00:00Z'; currentScore = 720; maxScore = 1193 }
+            @{ createdDateTime = '2026-09-01T00:00:00Z'; currentScore = 700; maxScore = 1193 }
+            @{ createdDateTime = '2026-08-31T00:00:00Z'; currentScore = 690; maxScore = 1193 }
+        )
+        $script:GraphCalls.Clear()
+        try {
+            $S = (Get-CIPPCustomerReportData -TenantFilter 'contoso.com' -Period $Sep -Now ([datetime]::new(2026, 11, 17, 12, 0, 0, [DateTimeKind]::Utc))).M365.SecureScore
+            $GraphCalls[0] | Should -Match 'secureScores\?\$top=79$'
+            $S.Current | Should -Be 720
+            $S.Change | Should -Be 20
+            $S.StartsLate | Should -BeFalse
+            @($S.Trend.label) | Should -Be @('1 Sep', '30 Sep')
+        } finally { $script:Db.SecureScore = $Saved; $script:LiveScores = @() }
+    }
+    It 'does not ask Microsoft 365 when the cache already covers the period' {
+        $script:GraphCalls.Clear()
+        $null = Get-CIPPCustomerReportData -TenantFilter 'contoso.com' -Period $Period -Now $Now
+        $GraphCalls.Count | Should -Be 0
     }
     It 'shows no Secure Score figures from outside the period' {
         $Early = @{ Start = [datetime]::new(2026, 7, 1, 0, 0, 0, [DateTimeKind]::Utc); End = [datetime]::new(2026, 8, 1, 0, 0, 0, [DateTimeKind]::Utc); Key = '2026-07'; Label = 'July 2026'; IsPartial = $false; Monthly = $true }

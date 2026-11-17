@@ -99,8 +99,24 @@ function Get-CIPPCustomerReportData {
 
         # Secure Score from the report period only: the chart, the score shown and the change all come
         # from scores dated inside the period, so a report made later still shows that period.
+        # CIPP's cache only keeps the last 14 daily scores; Microsoft keeps about 90 days. When the cache
+        # does not reach back to the start of the period, read the history from Microsoft 365 as well.
         $SecureScore = $null
-        $AllScores = @(Read-Db 'SecureScore' | ForEach-Object { $At = ConvertTo-Utc $_.createdDateTime; if ($At) { [pscustomobject]@{ At = $At; Row = $_ } } } | Sort-Object At)
+        $ScoreRows = @(Read-Db 'SecureScore')
+        $OldestCached = @($ScoreRows | ForEach-Object { ConvertTo-Utc $_.createdDateTime } | Where-Object { $_ } | Sort-Object | Select-Object -First 1)
+        if (-not $OldestCached -or $OldestCached[0] -gt $Period.Start.AddDays(1)) {
+            $DaysBack = [math]::Min(90, [math]::Max(1, [math]::Ceiling(($Now - $Period.Start).TotalDays) + 1))
+            try {
+                $ScoreRows += @(New-GraphGetRequest -uri "https://graph.microsoft.com/beta/security/secureScores?`$top=$DaysBack" -tenantid $TenantFilter -noPagination $true | Where-Object { $null -ne $_ })
+            } catch {
+                Write-Information "Report data: Secure Score history unavailable for $TenantFilter - $($_.Exception.Message)"
+            }
+        }
+        $Seen = @{}
+        $AllScores = @($ScoreRows | ForEach-Object {
+                $At = ConvertTo-Utc $_.createdDateTime
+                if ($At -and -not $Seen.ContainsKey($At.Ticks)) { $Seen[$At.Ticks] = $true; [pscustomobject]@{ At = $At; Row = $_ } }
+            } | Sort-Object At)
         $Scores = @($AllScores | Where-Object { $_.At -ge $Period.Start -and $_.At -lt $Period.End })
         if ($Scores.Count -gt 0) {
             $First = $Scores[0]
