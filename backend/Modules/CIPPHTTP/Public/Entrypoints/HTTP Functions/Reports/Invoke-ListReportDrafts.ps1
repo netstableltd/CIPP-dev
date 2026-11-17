@@ -13,7 +13,7 @@ function Invoke-ListReportDrafts {
     try {
         $Table = Get-CIPPTable -TableName 'ReportDrafts'
         $Id = "$($Request.Query.Id)"
-        if ($Id -and $Id -notmatch '^[0-9a-fA-F-]{36}_\d{4}-\d{2}$') {
+        if ($Id -and $Id -notmatch '^[0-9a-fA-F-]{36}_(\d{4}-\d{2}|\d{4}-\d{2}-\d{2}_\d{4}-\d{2}-\d{2})$') {
             return ([HttpResponseContext]@{ StatusCode = [HttpStatusCode]::BadRequest; Body = @{ Results = 'Invalid draft id.' } })
         }
         $Filter = if ($Id) { "PartitionKey eq 'Draft' and RowKey eq '$Id'" } else { "PartitionKey eq 'Draft'" }

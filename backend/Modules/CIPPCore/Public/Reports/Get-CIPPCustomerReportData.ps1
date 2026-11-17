@@ -97,26 +97,38 @@ function Get-CIPPCustomerReportData {
             }
         }
 
+        # Secure Score from the report period only: the chart, the score shown and the change all come
+        # from scores dated inside the period, so a report made later still shows that period.
         $SecureScore = $null
-        $Scores = @(Read-Db 'SecureScore' | Sort-Object -Property @{ Expression = { [datetime]$_.createdDateTime } })
+        $AllScores = @(Read-Db 'SecureScore' | ForEach-Object { $At = ConvertTo-Utc $_.createdDateTime; if ($At) { [pscustomobject]@{ At = $At; Row = $_ } } } | Sort-Object At)
+        $Scores = @($AllScores | Where-Object { $_.At -ge $Period.Start -and $_.At -lt $Period.End })
         if ($Scores.Count -gt 0) {
+            $First = $Scores[0]
             $Latest = $Scores[-1]
-            $Cur = [double]($Latest.currentScore ?? 0)
-            $Max = [double]($Latest.maxScore ?? 0)
-            $Baseline = $Scores | Where-Object { (ConvertTo-Utc $_.createdDateTime) -le $Period.Start.AddDays(1) } | Select-Object -Last 1
-            if (-not $Baseline) { $Baseline = $Scores[0] }
-            $Similar = (@($Latest.averageComparativeScores) | Where-Object { $_.basis -eq 'TotalSeats' } | Select-Object -First 1).averageScore
-            $SecureScore = @{
-                Current       = [math]::Round($Cur, 1)
-                Max           = $Max
-                Percent       = $(if ($Max -gt 0) { [math]::Round(($Cur / $Max) * 100) } else { 0 })
-                Change        = [math]::Round($Cur - [double]($Baseline.currentScore ?? $Cur), 1)
-                ChangeSince   = (ConvertTo-Utc $Baseline.createdDateTime)
-                SimilarPercent = $(if ($null -ne $Similar -and $Max -gt 0) { [math]::Round([double]$Similar) } else { $null })
-                Trend         = @($Scores | Select-Object -Last 8 | ForEach-Object {
-                        @{ label = ([datetime]$_.createdDateTime).ToString('d MMM'); value = [math]::Round([double]($_.currentScore ?? 0), 1) }
-                    })
+            $Cur = [double]($Latest.Row.currentScore ?? 0)
+            $Max = [double]($Latest.Row.maxScore ?? 0)
+            $Similar = (@($Latest.Row.averageComparativeScores) | Where-Object { $_.basis -eq 'TotalSeats' } | Select-Object -First 1).averageScore
+            # One point per day (the last score of each day); a long period is thinned to about 31 points.
+            $Daily = @($Scores | Group-Object { $_.At.ToString('yyyy-MM-dd') } | ForEach-Object { $_.Group[-1] } | Sort-Object At)
+            if ($Daily.Count -gt 31) {
+                $Step = [math]::Ceiling($Daily.Count / 31)
+                $Daily = @(for ($i = $Daily.Count - 1; $i -ge 0; $i -= $Step) { $Daily[$i] }) | Sort-Object At
             }
+            $SecureScore = @{
+                Current        = [math]::Round($Cur, 1)
+                Max            = $Max
+                Percent        = $(if ($Max -gt 0) { [math]::Round(($Cur / $Max) * 100) } else { 0 })
+                Change         = [math]::Round($Cur - [double]($First.Row.currentScore ?? $Cur), 1)
+                ChangeSince    = $First.At
+                AsOf           = $Latest.At
+                # True when CIPP holds no score from the start of the period (it only keeps recent history).
+                StartsLate     = ($First.At - $Period.Start).TotalDays -ge 2
+                SimilarPercent = $(if ($null -ne $Similar -and $Max -gt 0) { [math]::Round([double]$Similar) } else { $null })
+                Trend          = @($Daily | ForEach-Object { @{ label = $_.At.ToString('d MMM'); value = [math]::Round([double]($_.Row.currentScore ?? 0), 1) } })
+            }
+        } elseif ($AllScores.Count -gt 0) {
+            # Scores exist, but none from this period.
+            $SecureScore = @{ NoData = $true; EarliestHeld = $AllScores[0].At }
         }
 
         $Licences = @(Read-Db 'LicenseOverview' | Where-Object { [int]$_.TotalLicenses -gt 0 -and [int]$_.TotalLicenses -lt 10000 } |

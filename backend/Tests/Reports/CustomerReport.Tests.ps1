@@ -49,7 +49,11 @@ BeforeAll {
             @{ AccountEnabled = $true; UserType = 'Member'; DisplayName = 'Cat'; UPN = 'cat@contoso.com'; IsAdmin = $false; isLicensed = $true; CoveredByCA = 'Not Enforced'; CoveredBySD = $true; PerUser = 'Disabled'; MFARegistration = $false }
         )
         SecureScore     = @(
+            @{ createdDateTime = '2026-08-31T00:00:00Z'; currentScore = 70; maxScore = 100; averageComparativeScores = @() }
             @{ createdDateTime = '2026-09-01T00:00:00Z'; currentScore = 60; maxScore = 100; averageComparativeScores = @() }
+            @{ createdDateTime = '2026-09-15T09:00:00Z'; currentScore = 54; maxScore = 100; averageComparativeScores = @() }
+            @{ createdDateTime = '2026-09-15T18:00:00Z'; currentScore = 55; maxScore = 100; averageComparativeScores = @() }
+            @{ createdDateTime = '2026-09-30T00:00:00Z'; currentScore = 52; maxScore = 100; averageComparativeScores = @(@{ basis = 'TotalSeats'; averageScore = 45 }) }
             @{ createdDateTime = '2026-10-08T00:00:00Z'; currentScore = 50; maxScore = 100; averageComparativeScores = @(@{ basis = 'TotalSeats'; averageScore = 45 }) }
         )
         LicenseOverview = @(
@@ -198,9 +202,48 @@ Describe 'Get-CIPPCustomerReportData' {
         $Data.M365.Mfa.Unprotected | Should -Be 1
         $Data.M365.Mfa.UnprotectedAdmins | Should -Be @('Admin Ann')
     }
-    It 'measures the Secure Score change against the start of the period' {
-        $Data.M365.SecureScore.Percent | Should -Be 50
-        $Data.M365.SecureScore.Change | Should -Be -10
+    It 'takes every Secure Score figure from inside the report period' {
+        $S = $Data.M365.SecureScore
+        # September: 60 on the 1st to 52 on the 30th; the August and October scores are left out.
+        $S.Current | Should -Be 52
+        $S.Percent | Should -Be 52
+        $S.Change | Should -Be -8
+        $S.ChangeSince | Should -Be ([datetime]::new(2026, 9, 1, 0, 0, 0, [DateTimeKind]::Utc))
+        $S.AsOf | Should -Be ([datetime]::new(2026, 9, 30, 0, 0, 0, [DateTimeKind]::Utc))
+        $S.StartsLate | Should -BeFalse
+        # One point a day (the day's last score), all in September.
+        @($S.Trend.label) | Should -Be @('1 Sep', '15 Sep', '30 Sep')
+        @($S.Trend.value) | Should -Be @(60, 55, 52)
+    }
+    It 'says when Secure Score history only starts part way through the period' {
+        $Late = @{ Start = [datetime]::new(2026, 9, 1, 0, 0, 0, [DateTimeKind]::Utc); End = [datetime]::new(2026, 10, 1, 0, 0, 0, [DateTimeKind]::Utc); Key = '2026-09'; Label = 'September 2026'; IsPartial = $false; Monthly = $true }
+        $script:SavedScores = $script:Db.SecureScore
+        $script:Db.SecureScore = @(
+            @{ createdDateTime = '2026-09-29T00:00:00Z'; currentScore = 715.2; maxScore = 1193 }
+            @{ createdDateTime = '2026-09-30T00:00:00Z'; currentScore = 720; maxScore = 1193 }
+            @{ createdDateTime = '2026-10-12T00:00:00Z'; currentScore = 839.9; maxScore = 1193 }
+        )
+        try {
+            $S = (Get-CIPPCustomerReportData -TenantFilter 'contoso.com' -Period $Late -Now $Now).M365.SecureScore
+            $S.Current | Should -Be 720
+            $S.StartsLate | Should -BeTrue
+            $T = Build-CippCustomerReportTree -Data @{ TenantName = 'X'; Period = $Late; M365 = @{ SecureScore = $S }; Atera = $null } -Findings @() -Sections @('m365-security')
+            $Text = ($T.Blocks | ConvertTo-Json -Depth 10)
+            $Text | Should -Match 'on 30 September was 720 of 1193'
+            $Text | Should -Match 'only available from 29 September'
+            $Text | Should -Match 'Scores from 29 September to 30 September'
+            $Text | Should -Not -Match '839.9|12 Oct'
+        } finally { $script:Db.SecureScore = $script:SavedScores }
+    }
+    It 'shows no Secure Score figures from outside the period' {
+        $Early = @{ Start = [datetime]::new(2026, 7, 1, 0, 0, 0, [DateTimeKind]::Utc); End = [datetime]::new(2026, 8, 1, 0, 0, 0, [DateTimeKind]::Utc); Key = '2026-07'; Label = 'July 2026'; IsPartial = $false; Monthly = $true }
+        $S = (Get-CIPPCustomerReportData -TenantFilter 'contoso.com' -Period $Early -Now $Now).M365.SecureScore
+        $S.NoData | Should -BeTrue
+        $T = Build-CippCustomerReportTree -Data @{ TenantName = 'X'; Period = $Early; M365 = @{ SecureScore = $S }; Atera = $null } -Findings @() -Sections @('summary', 'm365-security')
+        $Text = ($T.Blocks | ConvertTo-Json -Depth 10)
+        $Text | Should -Match 'do not have Secure Score figures for July 2026'
+        @($T.Blocks | Where-Object { $_.type -eq 'scorecard' } | ForEach-Object { $_.stats.label }) | Should -Not -Contain 'Microsoft Secure Score'
+        @($T.Blocks | Where-Object { $_.type -eq 'chart' }).Count | Should -Be 0
     }
     It 'classifies devices' {
         $Data.Atera.Devices.Total | Should -Be 3

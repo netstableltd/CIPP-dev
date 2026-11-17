@@ -70,7 +70,7 @@ function Build-CippCustomerReportTree {
         }
 
         $Stats = [System.Collections.Generic.List[object]]::new()
-        if ($M -and $M.SecureScore) { $Stats.Add(@{ value = "$($M.SecureScore.Percent)%"; label = 'Microsoft Secure Score'; colour = $(if ($M.SecureScore.Percent -lt 40) { $warnC }) }) }
+        if ($M -and $M.SecureScore -and -not $M.SecureScore.NoData) { $Stats.Add(@{ value = "$($M.SecureScore.Percent)%"; label = 'Microsoft Secure Score'; colour = $(if ($M.SecureScore.Percent -lt 40) { $warnC }) }) }
         if ($M -and $M.Mfa -and $M.Mfa.Users -gt 0) {
             $MfaPct = [math]::Round(($M.Mfa.Protected / $M.Mfa.Users) * 100)
             $Stats.Add(@{ value = "$MfaPct%"; label = 'Accounts protected by MFA'; colour = $(if ($MfaPct -lt 100) { $warnC }) })
@@ -93,15 +93,24 @@ function Build-CippCustomerReportTree {
         'm365-security' = {
         if ($M -and ($M.SecureScore -or $M.Mfa)) {
             $blocks.Add((New-CippReportPage -Title 'Microsoft 365 Security' -Subtitle 'How well your accounts and data are protected'))
-            if ($M.SecureScore) {
+            $About = "Secure Score is Microsoft's own measure of how many of its recommended security settings are in place. It is a guide rather than a target: some recommendations do not suit every business."
+            if ($M.SecureScore -and $M.SecureScore.NoData) {
+                $blocks.Add((New-CippReportHeading -Title 'Microsoft Secure Score'))
+                $blocks.Add((New-CippReportParagraph -Text "$About We do not have Secure Score figures for $PeriodLabel, so it is not shown this $PeriodWord."))
+            } elseif ($M.SecureScore) {
+                # Every figure here comes from scores dated inside the report period.
                 $S = $M.SecureScore
+                $DayName = { param($d) ([datetime]$d).ToString('d MMMM', [cultureinfo]::GetCultureInfo('en-GB')) }
                 $blocks.Add((New-CippReportHeading -Title 'Microsoft Secure Score'))
                 $Compare = if ($null -ne $S.SimilarPercent) { " Organisations of a similar size average $($S.SimilarPercent)%." } else { '' }
-                $Since = if ($S.ChangeSince) { " since $($S.ChangeSince.ToString('d MMMM'))" } else { '' }
-                $Move = if ($S.Change -gt 0) { ", up $($S.Change) points$Since" } elseif ($S.Change -lt 0) { ", down $([math]::Abs($S.Change)) points$Since" } else { '' }
-                $blocks.Add((New-CippReportParagraph -Text "Secure Score is Microsoft's own measure of how many of its recommended security settings are in place. It is a guide rather than a target: some recommendations do not suit every business. Your score is currently $($S.Current) of $($S.Max) ($($S.Percent)%)$Move.$Compare"))
+                $Since = if ($S.ChangeSince) { " since $(& $DayName $S.ChangeSince)" } else { '' }
+                $Move = if ($S.Change -gt 0) { ", up $($S.Change) points$Since" } elseif ($S.Change -lt 0) { ", down $([math]::Abs($S.Change)) points$Since" } elseif ($S.ChangeSince -and $S.AsOf -and $S.ChangeSince -ne $S.AsOf) { ", unchanged$Since" } else { '' }
+                $When = if ($S.AsOf) { "on $(& $DayName $S.AsOf) was" } else { 'is' }
+                $Late = if ($S.StartsLate -and $S.ChangeSince) { " Figures are only available from $(& $DayName $S.ChangeSince)." } else { '' }
+                $blocks.Add((New-CippReportParagraph -Text "$About Your score $When $($S.Current) of $($S.Max) ($($S.Percent)%)$Move.$Compare$Late"))
                 if (@($S.Trend).Count -gt 1) {
-                    $blocks.Add((New-CippReportChart -Kind trend -Title 'Secure Score' -Max ([double]$S.Max) -Caption 'Daily scores, last two weeks' -Data @($S.Trend)))
+                    $Caption = "Scores from $(& $DayName $S.ChangeSince) to $(& $DayName $S.AsOf)"
+                    $blocks.Add((New-CippReportChart -Kind trend -Title 'Secure Score' -Max ([double]$S.Max) -Caption $Caption -Data @($S.Trend)))
                 }
             }
             if ($M.Mfa) {

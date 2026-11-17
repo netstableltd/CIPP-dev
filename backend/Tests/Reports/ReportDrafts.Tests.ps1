@@ -218,6 +218,16 @@ Describe 'Invoke-ListReportDrafts' {
         $One.Overrides.Note | Should -Be 'Hello'
         @($One.Sections) | Should -Be @('summary')
     }
+    It 'opens a draft for custom dates' {
+        $RangeId = '11111111-1111-1111-1111-111111111111_2026-10-01_2026-11-17'
+        Mock Get-CIPPAzDataTableEntity { $Row = New-DraftRow 'Draft'; $Row.RowKey = $RangeId; $Row }
+        $Req = [pscustomobject]@{ Params = @{ CIPPEndpoint = 'ListReportDrafts' }; Headers = @{}; Query = @{ Id = $RangeId } }
+        $r = Invoke-ListReportDrafts -Request $Req
+        $r.StatusCode | Should -Be 200
+        $r.Body.Overrides.Note | Should -Be 'Hello'
+        $Req.Query = @{ Id = '11111111-1111-1111-1111-111111111111_2026-10-01_x' }
+        (Invoke-ListReportDrafts -Request $Req).StatusCode | Should -Be 400
+    }
 }
 
 Describe 'Resolve-CIPPReportPeriodRequest' {
