@@ -80,7 +80,12 @@ BeforeAll {
                 $M = & $Mbx; if (-not $M) { throw "The operation couldn't be performed because object '$($P.Identity)' couldn't be found." }; return $M
             }
             'Get-Recipient' { $R = & $script:Recipient $P.Identity; if (-not $R) { throw "couldn't be found" }; return $R }
-            'New-Mailbox' { return (& $script:AddMailbox $P.PrimarySmtpAddress $P.DisplayName) }
+            'Get-AcceptedDomain' { return @([pscustomobject]@{ DomainName = 'contoso.com'; Default = $true }, [pscustomobject]@{ DomainName = 'fabrikam.com'; Default = $false }) }
+            'New-Mailbox' {
+                # Like Exchange: the mailbox also gets <alias>@<default domain>, which must be free.
+                if ((& $script:Recipient "$($P.Alias)@contoso.com") -and $P.PrimarySmtpAddress -ne "$($P.Alias)@contoso.com") { throw "The proxy address ""SMTP:$($P.Alias)@contoso.com"" is already being used by the proxy addresses or LegacyExchangeDN. Please choose another proxy address." }
+                return (& $script:AddMailbox $P.PrimarySmtpAddress $P.DisplayName)
+            }
             'Set-Mailbox' {
                 $M = & $Mbx
                 foreach ($K in $P.Keys) {
@@ -360,6 +365,26 @@ Describe 'Shared mailbox add-on' {
             $J2 | Should -Match 'on behalf of'
             $J2 | Should -Match 'automatic signature isn'
         }
+        It 'summary PDF: a step-by-step classic Outlook page when it is added as its own account' {
+            & $script:AddMailbox 'info@contoso.com' | Out-Null
+            $Choices = @{ grantVia = 'people'; send = 'sendAs'; outlook = 'account'; sentItems = 'shared'; signature = 'manual' }
+            $null = Set-CIPPSharedMailbox -TenantFilter 'contoso.com' -Identity 'info@contoso.com' -People 'jane@contoso.com' -Answers $Choices
+            $S = Get-CIPPSharedMailboxStatus -TenantFilter 'contoso.com' -Identity 'info@contoso.com'
+            $Tree = Build-CippSharedMailboxSummaryTree -TenantName 'Contoso Ltd' -Status $S -Answers $Choices
+            $J = & $script:Text $Tree
+            $J | Should -Match 'Setting it up in classic Outlook'
+            $J | Should -Match 'Type info@contoso.com and click Connect'
+            $J | Should -Match 'your own work email address and password'
+            $J | Should -Match 'Download email for the past'
+            $J | Should -Match 'E-mail account to info@contoso.com'
+            # Sent from its own account, so it is in the shared Sent Items, not "also in your own".
+            $J | Should -Match 'saved in the shared mailbox''s Sent Items'
+            $J | Should -Not -Match 'You keep a copy in your own Sent Items'
+            $Tree.Variables.covermeta | Should -Match 'classic Outlook'
+            # The automatic way gets no classic set-up page.
+            $Auto = & $script:Text (Build-CippSharedMailboxSummaryTree -TenantName 'Contoso Ltd' -Status $S -Answers @{ outlook = 'automap' })
+            $Auto | Should -Not -Match 'Setting it up in classic Outlook'
+        }
         It 'summary PDF: flags a mailbox nobody can use yet and a missing licence' {
             & $script:AddMailbox 'info@contoso.com' | Out-Null
             $S = Get-CIPPSharedMailboxStatus -TenantFilter 'contoso.com' -Identity 'info@contoso.com'
@@ -391,6 +416,21 @@ Describe 'Shared mailbox add-on' {
         ) {
             (Invoke-ExecSharedMailboxSetup -Request (& $script:Request $Body)).StatusCode | Should -Be 400
             $script:T.Calls.Cmdlet | Should -Not -Contain 'New-Mailbox'
+        }
+        It 'creates a mailbox on a second domain when the same name is already used on the main domain' {
+            # Someone else already has info@ on the main (default) domain.
+            $script:T.Users['info@contoso.com'] = [pscustomobject]@{ DisplayName = 'Reception'; PrimarySmtpAddress = 'reception@contoso.com'; RecipientTypeDetails = 'UserMailbox' }
+            $R = Set-CIPPSharedMailbox -TenantFilter 'contoso.com' -New @{ DisplayName = 'Fabrikam Info'; Address = 'info@fabrikam.com' } -Answers @{}
+            $Made = @($script:T.Calls | Where-Object Cmdlet -EQ 'New-Mailbox')[0].Params
+            $Made.Alias | Should -Be 'info-fabrikam'
+            $Made.Name | Should -Be 'info-fabrikam'
+            $Made.PrimarySmtpAddress | Should -Be 'info@fabrikam.com'
+            @($R.Steps | Where-Object { $_.Status -eq 'Error' }) | Should -BeNullOrEmpty
+            ($R.Steps | Where-Object { $_.Message -match 'alias is info-fabrikam' }) | Should -Not -BeNullOrEmpty
+        }
+        It 'keeps the plain alias when it is free' {
+            $null = Set-CIPPSharedMailbox -TenantFilter 'contoso.com' -New @{ DisplayName = 'Fabrikam Sales'; Address = 'sales@fabrikam.com' } -Answers @{}
+            @($script:T.Calls | Where-Object Cmdlet -EQ 'New-Mailbox')[0].Params.Alias | Should -Be 'sales'
         }
         It 'creates a mailbox from the page''s request and returns the steps and status' {
             $R = Invoke-ExecSharedMailboxSetup -Request (& $script:Request @{

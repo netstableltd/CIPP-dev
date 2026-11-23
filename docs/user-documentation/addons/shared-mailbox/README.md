@@ -31,6 +31,8 @@ The questions, options and wording live in `backend/Config/Addons/shared-mailbox
 
 Choose **New mailbox** (name, address, domain and any other addresses it receives email for) or **Existing mailbox**. An existing mailbox shows how it is set up now, and its current settings and people are filled in as the starting point. Whether automapping is on can't be read from Exchange.
 
+A new mailbox on a second domain can use a name that is already taken on the main domain (info@ on both, say). Exchange also gives every mailbox an address on the main domain, so CIPP then gives it an alias that includes its domain (for example info-seconddomain) and says so in the results.
+
 ## 3. The customer's choices
 
 Pick the people who need access and record the customer's answers. Our recommendations are selected to start with, and the chosen option's pros and cons are shown under each question. Some choices need more details: the access group's name, the signature (HTML), or turning on the archive.
@@ -51,5 +53,6 @@ The "ready" PDF reads the mailbox from the tenant and has:
 * how it is set up;
 * anything not finished, for example nobody with access yet or a licence still needed;
 * a guide for the team matched to their choices: adding the mailbox (classic Outlook, new Outlook and the web, phones), sending from it (including picking the From address), the signature, and working together in it.
+* when it is added to Outlook as a separate account: a page with step-by-step classic Outlook set-up (adding the account, sending from it, its signature, keeping less on the computer, removing it).
 
 **Step-by-step guide**: upload your own Word guide with screenshots, for example sending as the shared address in Outlook. It is kept in this CIPP instance (not in the code) and added to the end of every customer's "ready" PDF. Use the switch to leave it out.

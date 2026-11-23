@@ -39,6 +39,8 @@ function Build-CippSharedMailboxSummaryTree {
     $S = $Status
     $Address = $S.Address
     $HasGuide = $Guide -and @($Guide.Blocks).Count -gt 0
+    # Added to classic Outlook as its own account: the PDF gets a step-by-step page for it.
+    $Separate = $A.outlook -eq 'account'
     $blocks = [System.Collections.Generic.List[object]]::new()
     $Open = [System.Collections.Generic.List[string]]::new()
 
@@ -60,7 +62,7 @@ function Build-CippSharedMailboxSummaryTree {
         @{ what = 'Address'; how = (@($Address) + @($S.Aliases | Where-Object { $_ -ne $Address }) -join ', ') }
         @{ what = 'Who has access'; how = $Who }
         @{ what = 'Sending'; how = $Sending }
-        @{ what = 'Sent emails'; how = $(if ($S.MessageCopySentAs) { 'Copied to the shared mailbox''s Sent Items (and kept in the sender''s own)' } else { 'Kept only in the sender''s own Sent Items' }) }
+        @{ what = 'Sent emails'; how = $(if ($Separate) { if ($S.MessageCopySentAs) { 'Kept in the shared mailbox''s Sent Items, including emails sent from it on the web or a phone' } else { 'Kept in the shared mailbox''s Sent Items when sent from its account in Outlook; on the web or a phone, only in the sender''s own Sent Items' } } elseif ($S.MessageCopySentAs) { 'Copied to the shared mailbox''s Sent Items (and kept in the sender''s own)' } else { 'Kept only in the sender''s own Sent Items' }) }
         @{ what = 'In Outlook'; how = (& $Label 'outlook' $A.outlook) }
         @{ what = 'Signature'; how = (& $Label 'signature' $A.signature) }
         @{ what = 'Address book'; how = $(if ($S.Hidden) { 'Hidden' } else { 'Shown' }) }
@@ -84,8 +86,8 @@ function Build-CippSharedMailboxSummaryTree {
     $Steps = [System.Collections.Generic.List[object]]::new()
     if ($AutoAppears) {
         $Steps.Add(@{ label = 'Classic Outlook (Windows)'; text = "Nothing to do: $($S.DisplayName) appears in the folder list below your own mailbox. If it isn't there after an hour, close Outlook and open it again." })
-    } elseif ($A.outlook -eq 'account') {
-        $Steps.Add(@{ label = 'Classic Outlook (Windows)'; text = "Add it as a second account: File > Add Account, type $Address, and if asked to sign in use your own work email and password. Close and reopen Outlook. It then shows as its own mailbox, with its own Inbox and Sent Items." })
+    } elseif ($Separate) {
+        $Steps.Add(@{ label = 'Classic Outlook (Windows)'; text = "Add it as a second account. The steps are on the next page, Setting it up in classic Outlook." })
     } else {
         $Steps.Add(@{ label = 'Classic Outlook (Windows)'; text = "File > Account Settings > Account Settings, double-click your own account, then More Settings > Advanced > Add, type $Address and press OK on each window. Or add it as a second account: File > Add Account, type $Address, and sign in with your own work account." })
     }
@@ -97,15 +99,20 @@ function Build-CippSharedMailboxSummaryTree {
     if ($A.send -ne 'none') {
         $SendItems = [System.Collections.Generic.List[object]]::new()
         $SendItems.Add(@{ label = 'Replying'; text = 'Replies to emails in the shared mailbox usually go from the shared address automatically. Check the From line before sending.' })
-        if ($A.outlook -eq 'account') {
-            $SendItems.Add(@{ label = 'New emails'; text = 'Start the email from inside the shared mailbox''s account and it goes from the shared address.' })
+        if ($Separate) {
+            $SendItems.Add(@{ label = 'New emails in classic Outlook'; text = 'Start the email from inside the shared mailbox''s account and it goes from the shared address (see Setting it up in classic Outlook).' })
+            $SendItems.Add(@{ label = 'New Outlook and the web'; text = "Click From at the top of the email and choose $Address." })
         } else {
             $SendItems.Add(@{ label = 'New emails in classic Outlook'; text = "A new email starts from your own address. Show the From button once (Options > From), then click From and choose $Address; the first time choose Other email address and type it. Outlook remembers it after that." })
             $SendItems.Add(@{ label = 'New Outlook and the web'; text = "Click From at the top of the email and choose $Address." })
         }
         $SendItems.Add(@{ label = 'On a phone'; text = 'Write the email from the shared mailbox''s account in the Outlook app.' })
         if ($A.send -eq 'sendOnBehalf') { $SendItems.Add(@{ label = 'What people see'; text = "Emails show as ""Your name on behalf of $($S.DisplayName)""." }) }
-        $SendItems.Add(@{ label = 'Sent emails'; text = $(if ($S.MessageCopySentAs) { 'A copy goes in the shared mailbox''s Sent Items, so everyone can see what has been sent. You keep a copy in your own Sent Items too.' } else { 'Sent emails stay in your own Sent Items only.' }) })
+        $SentText = if ($Separate) {
+            if ($S.MessageCopySentAs) { 'Emails sent from the shared mailbox go in its Sent Items, so everyone can see what has been sent. That includes emails sent from it on the web or a phone.' }
+            else { 'Emails sent from the shared mailbox''s account in classic Outlook go in its Sent Items. Emails sent from the shared address on the web or a phone stay in your own Sent Items only.' }
+        } elseif ($S.MessageCopySentAs) { 'A copy goes in the shared mailbox''s Sent Items, so everyone can see what has been sent. You keep a copy in your own Sent Items too.' } else { 'Sent emails stay in your own Sent Items only.' }
+        $SendItems.Add(@{ label = 'Sent emails'; text = $SentText })
         $blocks.Add((New-CippReportBullets -Title 'Sending from it' -Items @($SendItems)))
         if ($HasGuide) { $blocks.Add((New-CippReportNote -Text 'The step-by-step guide at the end of this document shows sending from the shared address, with pictures.')) }
 
@@ -113,11 +120,44 @@ function Build-CippSharedMailboxSummaryTree {
             'rule' { 'The signature is added automatically to every email sent from the shared address after you press Send. You won''t see it while writing, so don''t add it yourself.' }
             'tool' { 'Your signature service adds the shared mailbox''s signature when you send from the shared address.' }
             default {
-                if ($A.outlook -eq 'account') { 'In classic Outlook, set the shared signature for the shared mailbox''s account: File > Options > Mail > Signatures, choose the shared mailbox under E-mail account, and pick the signature for new messages and replies.' }
+                if ($Separate) { 'In classic Outlook, set the shared signature as the shared mailbox account''s own signature (steps under Setting it up in classic Outlook) and it is added every time. In new Outlook, save it as a second signature (Settings > Account > Signatures) and pick it when sending from the shared address.' }
                 else { 'Save the shared signature as a second signature (File > Options > Mail > Signatures > New in classic Outlook; Settings > Account > Signatures in new Outlook), and pick it from Signature when sending from the shared address.' }
             }
         }
         $blocks.Add((New-CippReportInfoBox -Title 'Signature' -Content $Sig))
+    }
+
+    # ------------------------------------------------------------------ Classic Outlook, as its own account
+    if ($Separate) {
+        $blocks.Add((New-CippReportPage -Title 'Setting it up in classic Outlook' -Subtitle "Adding $Address as its own account"))
+        $blocks.Add((New-CippReportParagraph -Text 'Each person does this once on each computer, in classic Outlook for Windows. You sign in as yourself: the shared mailbox has no password of its own.'))
+        $blocks.Add((New-CippReportBullets -Title 'Add the mailbox' -Items @(
+                    @{ label = 'Step 1'; text = 'Open Outlook and click File > Add Account.' }
+                    @{ label = 'Step 2'; text = "Type $Address and click Connect." }
+                    @{ label = 'Step 3'; text = 'When a Microsoft sign-in window opens, sign in with your own work email address and password. If it shows the shared address, change it to your own.' }
+                    @{ label = 'Step 4'; text = 'When Outlook says the account has been added, untick "Set up Outlook Mobile on my phone, too" and click Done.' }
+                    @{ label = 'Step 5'; text = "Close Outlook and open it again. $($S.DisplayName) now shows in the folder list as its own mailbox, with its own Inbox and Sent Items. The first time, it can take a few minutes to fill." }
+                )))
+        if ($A.send -ne 'none') {
+            $ClassicSend = [System.Collections.Generic.List[object]]::new()
+            $ClassicSend.Add(@{ label = 'New emails'; text = "Click the shared mailbox's Inbox first, then New Email. Check the From line shows $Address; if it doesn't, click From and choose it." })
+            $ClassicSend.Add(@{ label = 'Replies'; text = 'Reply from inside the shared mailbox and the reply goes from the shared address.' })
+            $ClassicSend.Add(@{ label = 'Sent emails'; text = "Emails sent this way are saved in the shared mailbox's Sent Items, where everyone with access can see them." })
+            $blocks.Add((New-CippReportBullets -Title 'Sending from it' -Items @($ClassicSend)))
+            if ($A.signature -notin @('rule', 'tool')) {
+                $blocks.Add((New-CippReportBullets -Title 'Its signature' -Items @(
+                            @{ label = 'Step 1'; text = 'Click File > Options > Mail > Signatures.' }
+                            @{ label = 'Step 2'; text = 'Click New, name it (for example the mailbox''s name), and paste in the shared signature we gave you.' }
+                            @{ label = 'Step 3'; text = "Under Choose default signature, set E-mail account to $Address, and choose the new signature for both New messages and Replies/forwards. Click OK." }
+                        )))
+            }
+        }
+        $blocks.Add((New-CippReportBullets -Title 'Good to know' -Items @(
+                    @{ label = 'Showing twice'; text = 'If the mailbox also appears below your own mailbox, it is there twice. Tell us and we will remove the extra one.' }
+                    @{ label = 'A large mailbox'; text = 'To keep less on your computer: File > Account Settings > Account Settings, double-click the shared mailbox, and move the "Download email for the past" slider (for example to one year). Older email stays available from the server.' }
+                    @{ label = 'Removing it'; text = 'File > Account Settings > Account Settings, click the shared mailbox, then Remove.' }
+                    @{ label = 'New Outlook'; text = 'These steps are for classic Outlook. In new Outlook, use Shared with me in the folder list instead.' }
+                )))
     }
 
     # ------------------------------------------------------------------ Working together
@@ -136,7 +176,7 @@ function Build-CippSharedMailboxSummaryTree {
             coverlabel         = 'Shared mailbox'
             covertenant        = $TenantName
             coversubtitle      = "$($S.DisplayName) ($Address) is ready."
-            covermeta          = "How it is set up $([char]0x00B7) adding it to Outlook $([char]0x00B7) sending from it"
+            covermeta          = "How it is set up $([char]0x00B7) adding it to $(if ($Separate) { 'classic ' })Outlook $([char]0x00B7) sending from it"
             covermetanote      = 'For you and your team'
             coverfooternote    = "Prepared for $TenantName"
             coverfallbackimage = '/reportImages/city.jpg'

@@ -84,9 +84,24 @@ function Set-CIPPSharedMailbox {
             $Identity = $Address
         } else {
             try {
-                $LocalPart = ($Address -split '@')[0]
-                $Created = & $Exo 'New-Mailbox' @{ Shared = $true; Name = $LocalPart; Alias = ($LocalPart -replace '[^A-Za-z0-9._-]', ''); DisplayName = "$($New.DisplayName)".Trim(); PrimarySmtpAddress = $Address }
+                $LocalPart, $MailDomain = $Address -split '@', 2
+                # Exchange also gives every new mailbox <alias>@<default domain>. On a second domain that
+                # address may already belong to someone else (info@ on the main domain, say), which stops
+                # the mailbox being created; then use an alias that also names the domain.
+                $DefaultDomain = try { "$((@(& $Exo 'Get-AcceptedDomain' @{}) | Where-Object { $_.Default -eq $true } | Select-Object -First 1).DomainName)".ToLowerInvariant() } catch { '' }
+                $Taken = { param($Id) [bool]$(try { & $Exo 'Get-Recipient' @{ Identity = $Id } | Select-Object -First 1 } catch { $null }) }
+                $Base = ($LocalPart -replace '[^A-Za-z0-9._-]', '')
+                $DomainLabel = (($MailDomain -split '\.')[0] -replace '[^A-Za-z0-9-]', '')
+                $MailAlias = $Base
+                if ($DefaultDomain -and $DefaultDomain -ne $MailDomain) {
+                    foreach ($Try in @($Base, "$Base-$DomainLabel") + @(2..9 | ForEach-Object { "$Base-$DomainLabel$_" })) {
+                        $Try = $Try.Substring(0, [math]::Min(64, $Try.Length))
+                        if (-not (& $Taken $Try) -and -not (& $Taken "$Try@$DefaultDomain")) { $MailAlias = $Try; break }
+                    }
+                }
+                $Created = & $Exo 'New-Mailbox' @{ Shared = $true; Name = $MailAlias; Alias = $MailAlias; DisplayName = "$($New.DisplayName)".Trim(); PrimarySmtpAddress = $Address }
                 & $Add 'Mailbox' 'Success' "Created the shared mailbox $($New.DisplayName) ($Address)."
+                if ($MailAlias -ne $Base) { & $Add 'Mailbox' 'Info' "Its alias is $MailAlias, because $Base@$DefaultDomain is already used by someone else." }
                 $Identity = $Address
                 # A new mailbox takes a little while to be usable everywhere.
                 for ($i = 0; $i -lt 8 -and -not $Mailbox; $i++) {
