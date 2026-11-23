@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "shared-mailbox",
   "name": "Shared mailbox",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Sets up a shared mailbox the way the customer chooses: a PDF of the choices (access, sending, Outlook, sent items, signature, address book, who can email it, size) with what each means and our recommendation, then creates or updates the mailbox with all of them, and a PDF for the team on adding and using it.",
   "author": "Netstable",
   "category": "Standard process",

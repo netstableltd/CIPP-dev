@@ -68,7 +68,23 @@ function Set-CIPPSharedMailbox {
         if ($Status -ne 'Info') { Write-LogMessage -headers $Headers -API $APIName -tenant $TenantFilter -message "$($Step): $Message" -Sev $Sev }
     }
     $Err = { param($E) (Get-CippException -Exception $E).NormalizedError }
-    $Exo = { param($Cmdlet, $Params, $Anchor) if ($Anchor) { New-ExoRequest -tenantid $TenantFilter -cmdlet $Cmdlet -cmdParams $Params -Anchor $Anchor } else { New-ExoRequest -tenantid $TenantFilter -cmdlet $Cmdlet -cmdParams $Params } }
+    # A mailbox created moments ago isn't on every Exchange server yet, so a change can be refused with
+    # "couldn't be found" even after it has been read. Once it has been created here, such a refusal is
+    # tried again for up to about a minute.
+    $JustCreated = $false
+    $NotYet = 'couldn''t be found|ManagementObjectNotFound|object .* not found'
+    $Exo = {
+        param($Cmdlet, $Params, $Anchor)
+        for ($Try = 1; ; $Try++) {
+            try {
+                if ($Anchor) { return (New-ExoRequest -tenantid $TenantFilter -cmdlet $Cmdlet -cmdParams $Params -Anchor $Anchor) }
+                return (New-ExoRequest -tenantid $TenantFilter -cmdlet $Cmdlet -cmdParams $Params)
+            } catch {
+                if (-not $JustCreated -or $Try -ge 7 -or "$($_.Exception.Message)" -notmatch $NotYet) { throw }
+                Start-Sleep -Seconds 10
+            }
+        }
+    }
 
     # ------------------------------------------------------------------ The mailbox
     $Mailbox = $null
@@ -109,6 +125,7 @@ function Set-CIPPSharedMailbox {
                     $Mailbox = try { & $Exo 'Get-Mailbox' @{ Identity = $Address } | Select-Object -First 1 } catch { $null }
                 }
                 if (-not $Mailbox -and $Created) { $Mailbox = $Created }
+                $JustCreated = $true
             } catch {
                 & $Add 'Mailbox' 'Error' "Couldn't create $($Address): $(& $Err $_)"
                 return [pscustomobject]@{ Address = $Address; Steps = @($Steps) }
@@ -203,7 +220,11 @@ function Set-CIPPSharedMailbox {
     $Holds = { param($List, [string]$Key) [bool](@($List) | Where-Object { @($_.Keys) -contains $Key -or "$($_.Address)".ToLowerInvariant() -eq $Key }) }
     $Perm = {
         param($Level, $Action, $Who, $AutoMap = $true)
-        $R = Set-CIPPMailboxPermission -UserId $Address -AccessUser $Who -PermissionLevel $Level -Action $Action -AutoMap $AutoMap -TenantFilter $TenantFilter -APIName $APIName -Headers $Headers
+        for ($Try = 1; ; $Try++) {
+            $R = Set-CIPPMailboxPermission -UserId $Address -AccessUser $Who -PermissionLevel $Level -Action $Action -AutoMap $AutoMap -TenantFilter $TenantFilter -APIName $APIName -Headers $Headers
+            if (-not $JustCreated -or $Try -ge 7 -or "$R" -notmatch '^Failed' -or "$R" -notmatch $NotYet) { break }
+            Start-Sleep -Seconds 10
+        }
         $Label = @{ FullAccess = 'Full Access'; SendAs = 'Send As'; SendOnBehalf = 'Send on behalf' }[$Level]
         if ("$R" -match '^Failed') { & $Add $Label 'Error' "$R" } else { & $Add $Label 'Success' "$(if ($Action -eq 'Add') { 'Gave' } else { 'Removed' }) $Label $(if ($Action -eq 'Add') { 'to' } else { 'from' }) $Who$(if ($Level -eq 'FullAccess' -and $Action -eq 'Add') { if ($AutoMap) { ', shown in Outlook automatically' } else { ', not added to Outlook automatically' } })." }
     }

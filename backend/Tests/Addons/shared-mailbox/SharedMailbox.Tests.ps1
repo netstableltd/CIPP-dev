@@ -87,6 +87,8 @@ BeforeAll {
                 return (& $script:AddMailbox $P.PrimarySmtpAddress $P.DisplayName)
             }
             'Set-Mailbox' {
+                # A just-created mailbox that this Exchange server doesn't know about yet.
+                if ($script:T.NotYet -gt 0) { $script:T.NotYet--; throw "The operation couldn't be performed because object '$($P.Identity)' couldn't be found on 'LO0P265A03DC002.GBRP265A003.PROD.OUTLOOK.COM'." }
                 $M = & $Mbx
                 foreach ($K in $P.Keys) {
                     switch ($K) {
@@ -427,6 +429,19 @@ Describe 'Shared mailbox add-on' {
             $Made.PrimarySmtpAddress | Should -Be 'info@fabrikam.com'
             @($R.Steps | Where-Object { $_.Status -eq 'Error' }) | Should -BeNullOrEmpty
             ($R.Steps | Where-Object { $_.Message -match 'alias is info-fabrikam' }) | Should -Not -BeNullOrEmpty
+        }
+        It 'waits for a just-created mailbox to reach every Exchange server before changing it' {
+            $script:T.NotYet = 2
+            $R = Set-CIPPSharedMailbox -TenantFilter 'contoso.com' -New @{ DisplayName = 'Info'; Address = 'info@contoso.com' } -Answers @{}
+            @($R.Steps | Where-Object { $_.Status -eq 'Error' }) | Should -BeNullOrEmpty
+            $script:T.Mailboxes['info@contoso.com'].MessageCopyForSentAsEnabled | Should -BeTrue
+            @($script:T.Calls | Where-Object Cmdlet -EQ 'Set-Mailbox').Count | Should -BeGreaterOrEqual 3
+        }
+        It 'does not retry a mailbox that was not just created' {
+            & $script:AddMailbox 'info@contoso.com' | Out-Null
+            $script:T.NotYet = 1
+            $R = Set-CIPPSharedMailbox -TenantFilter 'contoso.com' -Identity 'info@contoso.com' -Answers @{}
+            ($R.Steps | Where-Object { $_.Step -eq 'Settings' -and $_.Status -eq 'Error' }) | Should -Not -BeNullOrEmpty
         }
         It 'keeps the plain alias when it is free' {
             $null = Set-CIPPSharedMailbox -TenantFilter 'contoso.com' -New @{ DisplayName = 'Fabrikam Sales'; Address = 'sales@fabrikam.com' } -Answers @{}
