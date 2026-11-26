@@ -41495,7 +41495,7 @@
         "tags": [
           "Addons > shared-mailbox"
         ],
-        "description": "Community Additions > Shared mailbox (add-on shared-mailbox): the \"your shared mailbox is ready\" PDF for a shared mailbox (Identity, its address) in the tenant (tenantFilter): how it is set up, read from the tenant, anything not finished, and a guide for the team on adding it to Outlook, sending from it and working together, matched to the choices made (Answers, as for ExecSharedMailboxSetup). The uploaded step-by-step guide is added at the end unless IncludeGuide is false. Optional ContactName and PreparedBy. Returns application/pdf with the CIPP branding.",
+        "description": "Community Additions > Shared mailbox (add-on shared-mailbox): the \"your shared mailbox is ready\" PDF for a shared mailbox (Identity, its address) in the tenant (tenantFilter): how it is set up, read from the tenant, anything not finished, and a guide for the team on adding it to Outlook, sending from it and working together, matched to the choices made (Answers, as for ExecSharedMailboxSetup). The uploaded step-by-step guide is added at the end unless IncludeGuide is false, and, when the mailbox is added to Outlook as a separate account, the uploaded separate-account guide unless IncludeAccountGuide is false. Optional ContactName and PreparedBy. Returns application/pdf with the CIPP branding.",
         "requestBody": {
           "required": true,
           "content": {
@@ -41510,6 +41510,9 @@
                     "type": "string"
                   },
                   "Identity": {
+                    "type": "string"
+                  },
+                  "IncludeAccountGuide": {
                     "type": "string"
                   },
                   "IncludeGuide": {

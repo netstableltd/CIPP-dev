@@ -500,6 +500,21 @@ Describe 'Shared mailbox add-on' {
             $null = Invoke-ExecSharedMailboxSummaryPdf -Request (& $script:Request @{ tenantFilter = 'contoso.com'; Identity = 'info@contoso.com' } 'ExecSharedMailboxSummaryPdf')
             ($script:Pdf.Blocks | ConvertTo-Json -Depth 12) | Should -Match 'Steps from our own guide'
         }
+        It 'adds the separate-account guide only when the mailbox is added to Outlook as its own account' {
+            $R = Invoke-ExecAddonGuide -Request (& $script:Request @{ AddonId = 'shared-mailbox'; Key = 'separate-account'; Action = 'Upload'; FileName = 'Separate account.docx'; Data = [Convert]::ToBase64String((& $script:Docx)) } 'ExecAddonGuide')
+            $R.StatusCode | Should -Be 200
+            & $script:AddMailbox 'info@contoso.com' | Out-Null
+            $null = Invoke-ExecSharedMailboxSummaryPdf -Request (& $script:Request @{ tenantFilter = 'contoso.com'; Identity = 'info@contoso.com'; Answers = @{ outlook = 'account' } } 'ExecSharedMailboxSummaryPdf')
+            $J = $script:Pdf.Blocks | ConvertTo-Json -Depth 12
+            $J | Should -Match 'Steps from our own guide'
+            $J | Should -Match 'shows these steps with pictures'
+            $script:Pdf = $null
+            $null = Invoke-ExecSharedMailboxSummaryPdf -Request (& $script:Request @{ tenantFilter = 'contoso.com'; Identity = 'info@contoso.com'; Answers = @{ outlook = 'automap' } } 'ExecSharedMailboxSummaryPdf')
+            ($script:Pdf.Blocks | ConvertTo-Json -Depth 12) | Should -Not -Match 'Steps from our own guide'
+            $script:Pdf = $null
+            $null = Invoke-ExecSharedMailboxSummaryPdf -Request (& $script:Request @{ tenantFilter = 'contoso.com'; Identity = 'info@contoso.com'; Answers = @{ outlook = 'account' }; IncludeAccountGuide = $false } 'ExecSharedMailboxSummaryPdf')
+            ($script:Pdf.Blocks | ConvertTo-Json -Depth 12) | Should -Not -Match 'Steps from our own guide'
+        }
         It 'leaves the guide out when asked' {
             $null = Invoke-ExecAddonGuide -Request (& $script:Request @{ AddonId = 'shared-mailbox'; Key = 'sending'; Action = 'Upload'; FileName = 'g.docx'; Data = [Convert]::ToBase64String((& $script:Docx)) } 'ExecAddonGuide')
             & $script:AddMailbox 'info@contoso.com' | Out-Null

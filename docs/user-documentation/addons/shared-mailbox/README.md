@@ -56,3 +56,7 @@ The "ready" PDF reads the mailbox from the tenant and has:
 * when it is added to Outlook as a separate account: a page with step-by-step classic Outlook set-up (adding the account, sending from it, its signature, keeping less on the computer, removing it).
 
 **Step-by-step guide**: upload your own Word guide with screenshots, for example sending as the shared address in Outlook. It is kept in this CIPP instance (not in the code) and added to the end of every customer's "ready" PDF. Use the switch to leave it out.
+
+**Guide: adding it as a separate account**: a second Word guide, for adding the mailbox to classic Outlook as its own account. It is added to the end of the "ready" PDF only when the customer chose "As a separate account in Outlook", and the classic Outlook page points to it. Use its switch to leave it out.
+
+A guide's first line is its title, unless it is a single word (for example "File" above a screenshot); then the guide is shown under the name above.

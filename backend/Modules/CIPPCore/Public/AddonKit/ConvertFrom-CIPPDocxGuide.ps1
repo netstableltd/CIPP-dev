@@ -9,7 +9,8 @@ function ConvertFrom-CIPPDocxGuide {
         stored in the instance rather than the code. Handles what such guides use:
 
         - The opening lines: a short all-capitals label is dropped, the next line is the title and the
-          one after it (if short) the subtitle; the PDF shows them as the page title.
+          one after it (if short) the subtitle; the PDF shows them as the page title. A one-word first
+          line (unless styled as a title) is content, and the guide has no title of its own.
         - Headings (Heading/Title styles, or a short all-bold line) and numbered steps ("1  Open
           Settings") become section headings.
         - Paragraphs keep bold and italic. Bulleted and numbered lists become bullet lists.
@@ -152,8 +153,10 @@ function ConvertFrom-CIPPDocxGuide {
             # Opening lines: label (all capitals), title, subtitle.
             if ($Opening -and $Info.Images.Count -eq 0 -and -not $Info.List) {
                 if (-not $Title -and $Info.Plain.Length -le 40 -and $Info.Plain -cmatch '^[^a-z]*[A-Z][^a-z]*$') { continue }
-                if (-not $Title) { $Title = $Info.Plain; continue }
-                if (-not $Subtitle -and $Info.Plain.Length -le 200 -and $Info.Style -notmatch '^Heading') { $Subtitle = $Info.Plain; $Opening = $false; continue }
+                if (-not $Title) {
+                    # A one-word opening line ("File", above a screenshot) is the first step, not a title.
+                    if (@($Info.Plain.Trim() -split '\s+').Count -ge 2 -or $Info.Style -match '^(Title|Subtitle|Heading)') { $Title = $Info.Plain; continue }
+                } elseif (-not $Subtitle -and $Info.Plain.Length -le 200 -and $Info.Style -notmatch '^Heading') { $Subtitle = $Info.Plain; $Opening = $false; continue }
             }
             $Opening = $false
 

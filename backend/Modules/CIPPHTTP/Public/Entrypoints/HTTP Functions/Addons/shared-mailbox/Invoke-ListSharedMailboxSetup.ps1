@@ -19,6 +19,8 @@ function Invoke-ListSharedMailboxSetup {
         $Body = [ordered]@{
             Options = Get-CIPPSharedMailboxOptions
             Guide   = $(try { Get-CIPPAddonGuide -AddonId 'shared-mailbox' -Key 'sending' } catch { $null })
+            # Only added to the PDF when the mailbox is added to Outlook as a separate account.
+            AccountGuide = $(try { Get-CIPPAddonGuide -AddonId 'shared-mailbox' -Key 'separate-account' } catch { $null })
         }
         if ($Identity) { $Body.Status = Get-CIPPSharedMailboxStatus -TenantFilter $TenantFilter -Identity $Identity }
         else { $Body.Mailboxes = @(Get-CIPPSharedMailboxList -TenantFilter $TenantFilter) }

@@ -694,6 +694,13 @@ Describe 'Connection guide' {
         @($G.Blocks[6].images).Count | Should -Be 2
     }
 
+    It 'keeps a one-word first line ("File" above a screenshot) as a step, not the title' {
+        $G = ConvertFrom-CIPPDocxGuide -Bytes (& $script:NewDocx ((& $P 'File'), $Img, (& $P 'Add shared mailbox address.'), $Img -join ''))
+        $G.Title | Should -Be 'Guide'
+        @($G.Blocks | ForEach-Object { $_.type }) | Should -Be @('blank', 'image', 'blank', 'image')
+        $G.Blocks[0].content | Should -Be '<p>File</p>'
+    }
+
     It 'refuses a file that is not a Word document' {
         { ConvertFrom-CIPPDocxGuide -Bytes ([Text.Encoding]::UTF8.GetBytes('not a zip')) } | Should -Throw '*not a Word document*'
     }

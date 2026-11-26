@@ -5,7 +5,7 @@ function Invoke-ExecSharedMailboxSummaryPdf {
     .ROLE
         Exchange.Mailbox.Read
     .DESCRIPTION
-        Community Additions > Shared mailbox (add-on shared-mailbox): the "your shared mailbox is ready" PDF for a shared mailbox (Identity, its address) in the tenant (tenantFilter): how it is set up, read from the tenant, anything not finished, and a guide for the team on adding it to Outlook, sending from it and working together, matched to the choices made (Answers, as for ExecSharedMailboxSetup). The uploaded step-by-step guide is added at the end unless IncludeGuide is false. Optional ContactName and PreparedBy. Returns application/pdf with the CIPP branding.
+        Community Additions > Shared mailbox (add-on shared-mailbox): the "your shared mailbox is ready" PDF for a shared mailbox (Identity, its address) in the tenant (tenantFilter): how it is set up, read from the tenant, anything not finished, and a guide for the team on adding it to Outlook, sending from it and working together, matched to the choices made (Answers, as for ExecSharedMailboxSetup). The uploaded step-by-step guide is added at the end unless IncludeGuide is false, and, when the mailbox is added to Outlook as a separate account, the uploaded separate-account guide unless IncludeAccountGuide is false. Optional ContactName and PreparedBy. Returns application/pdf with the CIPP branding.
     #>
     [CmdletBinding()]
     param($Request, $TriggerMetadata)
@@ -29,8 +29,14 @@ function Invoke-ExecSharedMailboxSummaryPdf {
             $Stored = Get-CIPPAddonGuide -AddonId 'shared-mailbox' -Key 'sending' -IncludeFile
             if ($Stored) { try { $Guide = ConvertFrom-CIPPDocxGuide -Bytes $Stored.Bytes } catch { Write-Information "The sending guide couldn't be read: $($_.Exception.Message)" } }
         }
+        # The separate-account guide only applies when the mailbox is added to Outlook as its own account.
+        $AccountGuide = $null
+        if ($Answers.outlook -eq 'account' -and "$($B.IncludeAccountGuide)" -ne 'false') {
+            $Stored = Get-CIPPAddonGuide -AddonId 'shared-mailbox' -Key 'separate-account' -IncludeFile
+            if ($Stored) { try { $AccountGuide = ConvertFrom-CIPPDocxGuide -Bytes $Stored.Bytes } catch { Write-Information "The separate-account guide couldn't be read: $($_.Exception.Message)" } }
+        }
         $TenantName = Get-CippReportTenantName -TenantFilter $TenantFilter
-        $Tree = Build-CippSharedMailboxSummaryTree -TenantName $TenantName -Status $Status -Answers $Answers -ContactName $ContactName -PreparedBy $PreparedBy -Guide $Guide
+        $Tree = Build-CippSharedMailboxSummaryTree -TenantName $TenantName -Status $Status -Answers $Answers -ContactName $ContactName -PreparedBy $PreparedBy -Guide $Guide -AccountGuide $AccountGuide
         $Zone = try { [TimeZoneInfo]::FindSystemTimeZoneById([string]$env:CIPP_TIMEZONE) } catch { [TimeZoneInfo]::Utc }
         $GeneratedOn = [TimeZoneInfo]::ConvertTime([DateTimeOffset]::UtcNow, $Zone).ToString('d MMMM yyyy', [cultureinfo]::GetCultureInfo('en-GB'))
         $Bytes = ConvertTo-CippReportPdf -Blocks $Tree.Blocks -Variables $Tree.Variables -TenantName $TenantName -TenantFilter $TenantFilter -ReportName 'Shared mailbox' -GeneratedOn $GeneratedOn

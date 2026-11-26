@@ -16,6 +16,10 @@ function Build-CippSharedMailboxSummaryTree {
     .PARAMETER Guide
         Optional output of ConvertFrom-CIPPDocxGuide: the MSP's own step-by-step guide, added at the end.
 
+    .PARAMETER AccountGuide
+        Optional output of ConvertFrom-CIPPDocxGuide: the MSP's own guide to adding the mailbox to classic
+        Outlook as a separate account. Added at the end only when that is how it appears in Outlook.
+
     .OUTPUTS
         @{ Blocks; Variables }
 
@@ -29,7 +33,8 @@ function Build-CippSharedMailboxSummaryTree {
         $Answers,
         [string]$ContactName,
         [string]$PreparedBy,
-        $Guide
+        $Guide,
+        $AccountGuide
     )
 
     $Options = Get-CIPPSharedMailboxOptions
@@ -41,6 +46,7 @@ function Build-CippSharedMailboxSummaryTree {
     $HasGuide = $Guide -and @($Guide.Blocks).Count -gt 0
     # Added to classic Outlook as its own account: the PDF gets a step-by-step page for it.
     $Separate = $A.outlook -eq 'account'
+    $HasAccountGuide = $Separate -and $AccountGuide -and @($AccountGuide.Blocks).Count -gt 0
     $blocks = [System.Collections.Generic.List[object]]::new()
     $Open = [System.Collections.Generic.List[string]]::new()
 
@@ -138,6 +144,7 @@ function Build-CippSharedMailboxSummaryTree {
                     @{ label = 'Step 4'; text = 'When Outlook says the account has been added, untick "Set up Outlook Mobile on my phone, too" and click Done.' }
                     @{ label = 'Step 5'; text = "Close Outlook and open it again. $($S.DisplayName) now shows in the folder list as its own mailbox, with its own Inbox and Sent Items. The first time, it can take a few minutes to fill." }
                 )))
+        if ($HasAccountGuide) { $blocks.Add((New-CippReportNote -Text 'The guide at the end of this document shows these steps with pictures.')) }
         if ($A.send -ne 'none') {
             $ClassicSend = [System.Collections.Generic.List[object]]::new()
             $ClassicSend.Add(@{ label = 'New emails'; text = "Click the shared mailbox's Inbox first, then New Email. Check the From line shows $Address; if it doesn't, click From and choose it." })
@@ -165,8 +172,12 @@ function Build-CippSharedMailboxSummaryTree {
     $blocks.Add((New-CippReportNote -Text 'To give someone access, take it away, or change any of these settings, just ask us.'))
     if ($PreparedBy) { $blocks.Add((New-CippReportParagraph -Html "<p>Kind regards,<br/>$(& $enc $PreparedBy)</p>")) }
 
+    if ($HasAccountGuide) {
+        $blocks.Add((New-CippReportPage -Title $(if ($AccountGuide.Title -and $AccountGuide.Title -ne 'Guide') { $AccountGuide.Title } else { 'Adding it as a separate account in classic Outlook' }) -Subtitle $AccountGuide.Subtitle))
+        foreach ($B in @($AccountGuide.Blocks)) { $blocks.Add($B) }
+    }
     if ($HasGuide) {
-        $blocks.Add((New-CippReportPage -Title $(if ($Guide.Title) { $Guide.Title } else { 'Sending from a shared mailbox' }) -Subtitle $Guide.Subtitle))
+        $blocks.Add((New-CippReportPage -Title $(if ($Guide.Title -and $Guide.Title -ne 'Guide') { $Guide.Title } else { 'Sending from a shared mailbox' }) -Subtitle $Guide.Subtitle))
         foreach ($B in @($Guide.Blocks)) { $blocks.Add($B) }
     }
 

@@ -178,6 +178,7 @@ const SharedMailboxSteps = ({ tenant, setup }) => {
   })
   const values = useWatch({ control: formControl.control })
   const [includeGuide, setIncludeGuide] = useState(true)
+  const [includeAccountGuide, setIncludeAccountGuide] = useState(true)
   const [askedFor, setAskedFor] = useState('')
   const [doneAddress, setDoneAddress] = useState(null)
   const prefilledFor = useRef(null)
@@ -471,6 +472,7 @@ const SharedMailboxSteps = ({ tenant, setup }) => {
               Identity: reportAddress,
               Answers: values.answers,
               IncludeGuide: includeGuide,
+              IncludeAccountGuide: includeAccountGuide,
             }}
             title={`Ready: ${reportAddress}`}
             description="Read from the tenant when it is made, so it shows the mailbox as it is now."
@@ -485,6 +487,17 @@ const SharedMailboxSteps = ({ tenant, setup }) => {
               include={includeGuide}
               onIncludeChange={setIncludeGuide}
               includeLabel="Add the guide to the end of the PDF"
+              relatedQueryKeys={[`SharedMailboxSetup-${tenant}*`]}
+            />
+            <CippAddonGuideUpload
+              addonId="shared-mailbox"
+              guideKey="separate-account"
+              title="Guide: adding it as a separate account"
+              description="Your own guide with screenshots (a Word document) for adding the mailbox to classic Outlook as a separate account. It is kept in this CIPP instance and added to the end of the PDF only when the mailbox appears in Outlook as a separate account."
+              guide={setup.AccountGuide}
+              include={includeAccountGuide}
+              onIncludeChange={setIncludeAccountGuide}
+              includeLabel="Add this guide to the end of the PDF (separate account only)"
               relatedQueryKeys={[`SharedMailboxSetup-${tenant}*`]}
             />
           </CippAddonPdfCard>

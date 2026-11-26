@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "shared-mailbox",
   "name": "Shared mailbox",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Sets up a shared mailbox the way the customer chooses: a PDF of the choices (access, sending, Outlook, sent items, signature, address book, who can email it, size) with what each means and our recommendation, then creates or updates the mailbox with all of them, and a PDF for the team on adding and using it.",
   "author": "Netstable",
   "category": "Standard process",
@@ -35,6 +35,11 @@
       "key": "sending",
       "title": "Sending from the shared mailbox",
       "what": "Your own step-by-step guide with screenshots (a Word document), added to the end of the \"your shared mailbox is ready\" PDF."
+    },
+    {
+      "key": "separate-account",
+      "title": "Adding it as a separate account in classic Outlook",
+      "what": "Your own step-by-step guide with screenshots (a Word document), added to the end of the \"your shared mailbox is ready\" PDF when the mailbox is added to Outlook as a separate account."
     }
   ],
   "dependsOn": {
