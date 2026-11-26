@@ -441,11 +441,36 @@ Describe 'Access levels and read areas' {
         (& $script:Scopes (& $script:UserGrant 'u-jo')) | Should -Not -Contain 'ChatMessage.Send'
     }
 
-    It 'refuses extras on Level 1, which is read only (interlock)' {
+    It 'refuses a change Claude cannot read for that person (interlock)' {
         New-FakeTenant -GroupExists -ReadOnlyConsent
-        $R = Set-CIPPClaudeConnector -TenantFilter 'contoso.com' -Action Access -PeopleLevels @(@{ User = 'jo@contoso.com'; Level = 'read'; Extras = @('teams') })
+        $R = Set-CIPPClaudeConnector -TenantFilter 'contoso.com' -Action Access -ReadAreas 'mail', 'files' -TenantLevel 'read' -PeopleLevels @(@{ User = 'jo@contoso.com'; Level = 'read'; Extras = @('teams') })
         & $script:UserGrant 'u-jo' | Should -BeNullOrEmpty
-        ($R | Where-Object Status -EQ 'Error').Message | Should -Match 'read only'
+        ($R | Where-Object Status -EQ 'Error').Message | Should -Match 'Post in Teams needs Claude to be able to read Teams'
+    }
+
+    It 'gives one person files read and write without email (per-person read areas)' {
+        New-FakeTenant -GroupExists -ReadOnlyConsent
+        # Everyone: files only. Rob: everything at Level 3. Libby: files plus Edit files, nothing else.
+        $null = Set-CIPPClaudeConnector -TenantFilter 'contoso.com' -Action Access -ReadAreas 'files' -TenantLevel 'read' -PeopleLevels @(
+            @{ User = 'jo@contoso.com'; Level = 'read'; Extras = @('files'); ReadAreas = @() }
+            @{ User = 'sam@contoso.com'; Level = 'assistant'; Extras = @(); ReadAreas = @('mail', 'calendar', 'teams', 'meetings') }
+        )
+        $T = & $script:Scopes (& $script:TenantGrant)
+        $T | Should -Not -Contain 'Mail.Read'
+        $T | Should -Contain 'Files.Read.All'
+        (& $script:Scopes (& $script:UserGrant 'u-jo')) | Should -Be @('Files.ReadWrite.All')
+        $Sam = & $script:Scopes (& $script:UserGrant 'u-sam')
+        $Sam | Should -Contain 'Mail.Read'
+        $Sam | Should -Contain 'Mail.Send'
+        $Sam | Should -Contain 'Chat.Read'
+        $S = Get-CIPPClaudeConnectorStatus -TenantFilter 'contoso.com'
+        $Jo = $S.Access.People | Where-Object UserId -EQ 'u-jo'
+        @($Jo.ReadAreas) | Should -Be @('files')
+        @($Jo.Extras) | Should -Be @('files')
+        ($S.Access.People | Where-Object UserId -EQ 'u-sam').Level | Should -Be 'assistant'
+        # Taking an area away from a person removes it from their grant.
+        $null = Set-CIPPClaudeConnector -TenantFilter 'contoso.com' -Action Access -PeopleLevels @(@{ User = 'sam@contoso.com'; Level = 'read'; Extras = @(); ReadAreas = @('mail') })
+        (& $script:Scopes (& $script:UserGrant 'u-sam')) | Should -Not -Contain 'Chat.Read'
     }
 
     It 'moving a person down to Level 1 removes their extras too' {
@@ -573,11 +598,14 @@ Describe 'Invoke-ExecClaudeConnector access options' {
     It 'rejects a bad person' {
         (Invoke-ExecClaudeConnector -Request @{ Body = @{ tenantFilter = 'contoso.com'; Action = 'Access'; PeopleLevels = @(@{ User = '../x'; Level = 'read' }) }; Headers = @{}; Params = @{} }).StatusCode | Should -Be 400
     }
-    It 'rejects an unknown extra, and extras on Level 1 (interlock)' {
+    It 'rejects an unknown extra or read area, and a change without its read area (interlock)' {
         (Invoke-ExecClaudeConnector -Request @{ Body = @{ tenantFilter = 'contoso.com'; Action = 'Access'; PeopleLevels = @(@{ User = 'jo@contoso.com'; Level = 'assistant'; Extras = @('admin') }) }; Headers = @{}; Params = @{} }).StatusCode | Should -Be 400
-        $R = Invoke-ExecClaudeConnector -Request @{ Body = @{ tenantFilter = 'contoso.com'; Action = 'Access'; PeopleLevels = @(@{ User = 'jo@contoso.com'; Level = 'read'; Extras = @('teams') }) }; Headers = @{}; Params = @{} }
+        (Invoke-ExecClaudeConnector -Request @{ Body = @{ tenantFilter = 'contoso.com'; Action = 'Access'; PeopleLevels = @(@{ User = 'jo@contoso.com'; Level = 'read'; ReadAreas = @('x') }) }; Headers = @{}; Params = @{} }).StatusCode | Should -Be 400
+        $R = Invoke-ExecClaudeConnector -Request @{ Body = @{ tenantFilter = 'contoso.com'; Action = 'Access'; ReadAreas = @('files'); TenantLevel = 'read'; PeopleLevels = @(@{ User = 'jo@contoso.com'; Level = 'read'; Extras = @('send') }) }; Headers = @{}; Params = @{} }
         $R.StatusCode | Should -Be 400
-        "$($R.Body.Results)" | Should -Match 'read only'
+        "$($R.Body.Results)" | Should -Match 'Send email needs email'
+        $R = Invoke-ExecClaudeConnector -Request @{ Body = @{ tenantFilter = 'contoso.com'; Action = 'Access'; ReadAreas = @('files'); TenantLevel = 'read'; PeopleLevels = @(@{ User = 'jo@contoso.com'; Level = 'read'; Extras = @('files') }) }; Headers = @{}; Params = @{} }
+        $R.StatusCode | Should -Be 200
     }
     It 'takes picker values and sets access' {
         $R = Invoke-ExecClaudeConnector -Request @{ Body = @{ tenantFilter = 'contoso.com'; Action = 'Access'; TenantLevel = @{ value = 'read' }; PeopleLevels = @(@{ User = @{ value = 'jo@contoso.com' }; Level = @{ value = 'drafts' } }) }; Headers = @{}; Params = @{} }

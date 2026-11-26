@@ -46,23 +46,28 @@ Always kept, whatever the level: `openid`, `profile`, `email`, `offline_access`,
 
 The levels, their wording in the PDF and their permissions are in `backend/Config/Addons/claude-m365/ClaudeConnectorAccess.json`. Claude can only ever do what the person using it could do themselves; Claude can read shared mailboxes but can't change them at any level.
 
-## Extras for named people
+## Person by person
 
-A named person on **Level 2 or above** can also have **extras** on top of their level, without moving them up a level. For example, someone on Level 3 who wants Claude to post in Teams gets **Level 3 + Post in Teams**, rather than Level 4, which would also let Claude edit and delete files.
+Below everyone's settings, a **permissions table** sets what Claude can read and change for each named person, one row each, so access can be different for everyone. For example: a director on Level 3 with email, calendar and Teams; a manager with files read and write and no email at all; and everyone else on files read only.
 
-| Extra | Claude can also | Graph permissions |
+| Column | Claude can | Graph permissions |
 | --- | --- | --- |
+| Read: Email, Calendar, Files, Teams, Meetings | Read that area for the person | The read area's permissions (see Access levels) |
+| Draft and tidy email | Write drafts; move, label and delete email in their own mailbox | `Mail.ReadWrite` |
 | Send email | Send and forward email as the person | `Mail.Send` |
 | Manage calendar | Create, accept and change meetings, set out-of-office replies and mail rules | `Calendars.ReadWrite`, `MailboxSettings.ReadWrite` |
 | Edit files | Create, edit, move and delete OneDrive and SharePoint files the person can edit | `Files.ReadWrite.All` |
 | Post in Teams | Post in Teams chats and channels, and start new chats, as the person | `ChatMessage.Send`, `ChannelMessage.Send`, `Chat.Create` |
 
-* **Interlock: no extras on Level 1.** Level 1 promises the customer that Claude can't change anything, and every extra changes something. On Level 1 the extras show greyed out; the API refuses Level 1 with extras; and moving someone down to Level 1 removes their extras.
-* Only extras the person's level doesn't already include are offered (Level 3 already sends email, so it only offers Edit files and Post in Teams).
-* Extras are for named people only; everyone's level is always a plain level.
-* There's no way to limit Teams posting to particular teams or channels: Microsoft's permission covers everywhere the person can post. Claude desktop asks the person to approve each message before it is sent.
+* **Interlock: Claude can only change what it can read for that person.** A change stays greyed out until its read is ticked (Send email needs Email, Edit files needs Files, Post in Teams needs Teams). Unticking a read unticks its changes, and the API refuses a change without its read.
+* What everyone has is ticked and greyed out on each row: a person can't have less than everyone. So to give some people no email, switch email off for everyone and tick it for the people who should have it.
+* **Fill as** fills a row from a level (Level 3 = all reads, draft, send and calendar). **Add everyone who can use Claude** adds a row for each person in step 3.
+* People not in the table get everyone's access. Removing a row removes that person's own access.
+* Each person's own grant holds exactly their row, minus what everyone has, so it is enforced by Microsoft 365. Tested in November 2026: a person with files and no email connects without an admin approval prompt, and Claude can't reach email through Microsoft 365 for them.
+* **Claude's other tools aren't covered.** The browser extension, computer use and files on the PC work as the person, with their own sign-ins, so they can reach email in Outlook on the web even when this table gives no email. Turn them off in the customer's Claude organisation settings, and block the extension on managed computers.
+* There's no way to limit Teams posting to particular teams or channels: Microsoft's permission covers everywhere the person can post.
 
-The extras, their wording and their permissions are in `ClaudeConnectorAccess.json` (`extras`, `extrasMinLevel`).
+The changes, their wording, their permissions and the read area each needs are in `ClaudeConnectorAccess.json` (`extras`, with `needs`).
 
 ## Current setup
 
@@ -86,7 +91,7 @@ The top of the page shows where the tenant is: whether each app is there, has ad
 4. **Choose what Claude can read and change.** **Save access** sets, on the *M365 MCP Server for Claude* app's Microsoft Graph permissions:
    * **What Claude can read, for everyone**: email, calendar, OneDrive and SharePoint files, Teams chats and channels, Teams meetings. Switching one off removes its read permissions for everyone.
    * **Access level for everyone**: the write permissions of everyone are set to exactly the chosen level's.
-   * **Higher levels and extras for named people**: each person gets their own grant with only the permissions their level and extras add on top of everyone's. Tick extras under the person's level; on Level 1 they are greyed out (see [Extras for named people](#extras-for-named-people)). Removing a person from the list, or choosing a level no higher than everyone's, removes their grant. A person also needs to be one of the people who can use Claude (step 3).
+   * **Person by person**: the permissions table sets what Claude can read and change for each named person; each gets their own grant with exactly their row minus what everyone has (see [Person by person](#person-by-person)). A person also needs to be one of the people who can use Claude (step 3).
 
    Microsoft's consent page approves every permission Anthropic's app asks for, including the write ones, so straight after step 2 everyone has Level 4. The page warns about this and starts the choice at Level 1. **If anyone approves the consent page again, save this step again.** A write permission that also reads (for example `Mail.ReadWrite`) lets Claude read that area for the person even if the area is switched off; the results say so.
 5. **Finish in Claude** (by hand):
@@ -131,7 +136,7 @@ Sources: Anthropic's [Connect to Microsoft 365](https://claude.com/docs/third-pa
 | Endpoint | Method | Parameters |
 | --- | --- | --- |
 | `ListClaudeConnector` | GET | `tenantFilter`, `GroupName` (optional) |
-| `ExecClaudeConnector` | POST | `tenantFilter`, `Action` (`AddApps`, `Apply` or `Access`), `Users` (user ids or sign-in names), `GroupName`, `AssignUsersDirectly`, `LockUserConsent`, `RemoveOtherDirect`; for `Apply` and `Access`: `ReadAreas` (`mail`, `calendar`, `files`, `teams`, `meetings`), `TenantLevel` (`read`, `drafts`, `assistant`, `full`), `PeopleLevels` (`[{ User, Level, Extras }]`; `Extras` are `send`, `calendar`, `files`, `teams`, from Level 2 up: Level 1 with extras is refused with 400) |
+| `ExecClaudeConnector` | POST | `tenantFilter`, `Action` (`AddApps`, `Apply` or `Access`), `Users` (user ids or sign-in names), `GroupName`, `AssignUsersDirectly`, `LockUserConsent`, `RemoveOtherDirect`; for `Apply` and `Access`: `ReadAreas` (`mail`, `calendar`, `files`, `teams`, `meetings`), `TenantLevel` (`read`, `drafts`, `assistant`, `full`), `PeopleLevels` (`[{ User, Level, Extras, ReadAreas }]`: `Extras` are what Claude can change (`drafts`, `send`, `calendar`, `files`, `teams`) and `ReadAreas` the areas it can read for that person as well as everyone's; a change without its read area is refused with 400) |
 | `ExecClaudeConnectorCustomerPdf` | POST | `tenantFilter`, `ContactName`, `PreparedBy` (both optional). Returns `application/pdf`. |
 | `ExecClaudeConnectorSummaryPdf` | POST | `tenantFilter`, `GroupName`, `ContactName`, `PreparedBy`, `IncludeGuide` (all but `tenantFilter` optional). Returns `application/pdf`. |
 | `ExecClaudeConnectorGuide` | POST | `Action` (`Upload` or `Remove`); for `Upload`: `FileName` (.docx) and `Data` (base64 or a data URL, up to 10 MB). |

@@ -76,14 +76,21 @@ function Build-CippClaudeConnectorSummaryTree {
             # Extras on top of their level, for example Post in Teams.
             $X = if ($OwnP -and $L) { @(& $ExtrasOf $OwnP.Extras) } else { @() }
             $Upn = if ($P.Upn) { $P.Upn } elseif ($Own.ContainsKey($P.Id)) { $Own[$P.Id].Upn } else { $null }
+            # What Claude can read and change for them: their own areas (or everyone's), and every change
+            # their level and extras add up to.
+            $AreaIds = if ($OwnP -and $null -ne $OwnP.ReadAreas) { @($OwnP.ReadAreas) } else { @($Access.ReadAreas) }
+            $Have = @(@($L.scopes) + @($X | ForEach-Object { $_.scopes }))
+            $Changes = @($Config.extras | Where-Object { $E = $_; @($E.scopes).Count -gt 0 -and -not (@($E.scopes) | Where-Object { $Have -notcontains $_ }) })
             @{
                 person = if ($Upn) { "$($P.Name) ($Upn)" } else { "$($P.Name)" }
+                own    = [bool]$OwnP
                 level  = "$(& $LevelName $L)$(@($X | ForEach-Object { " + $($_.name)" }) -join '')"
-                can    = if ($L) { (@($L.summary) + @($X | ForEach-Object { "Also: $($_.summary)" })) -join ' ' } else { 'A custom set of permissions; ask us for the detail.' }
-                tone   = if (-not $L) { 'warn' } elseif ($L.number -ge 3 -or $X.Count -gt 0) { 'warn' } else { 'pass' }
+                reads  = if ($L) { $(if ($AreaIds.Count) { ((@($Config.readAreas | Where-Object { $AreaIds -contains $_.id } | ForEach-Object { $_.noun })) -join ', ') } else { 'Nothing' }) } else { 'A custom set of permissions; ask us for the detail.' }
+                can    = if (-not $L) { '' } elseif ($Changes.Count) { (@($Changes | ForEach-Object { $_.name }) -join ', ') } else { 'Nothing: read only' }
+                tone   = if (-not $L) { 'warn' } elseif ($Changes.Count -gt 0) { 'warn' } else { 'pass' }
             }
         })
-    $Higher = @($Rows | Where-Object { $_.level -ne (& $LevelName $Everyone) }).Count
+    $Higher = @($Rows | Where-Object { $_.own }).Count
 
     $AsOf = if ($GeneratedOn) { " as of $GeneratedOn" } else { '' }
     $blocks.Add((New-CippReportPage -Title "What we've set up" -Subtitle "Claude for Microsoft 365 at $TenantName$AsOf"))
@@ -92,7 +99,7 @@ function Build-CippClaudeConnectorSummaryTree {
     $blocks.Add((New-CippReportStatRow -Stats @(
                 @{ value = "$($Rows.Count)"; label = 'People who can use Claude' }
                 @{ value = $(if ($Everyone) { "Level $($Everyone.number)" } else { 'Custom' }); label = $(if ($Everyone) { "Everyone: $($Everyone.name)" } else { 'Level for everyone' }) }
-                @{ value = "$Higher"; label = 'People with a higher level' }
+                @{ value = "$Higher"; label = 'People with their own access' }
             )))
 
     # Anything not finished goes first, so it isn't missed.
@@ -105,9 +112,9 @@ function Build-CippClaudeConnectorSummaryTree {
     }
 
     $blocks.Add((New-CippReportTable -Title 'Who can use Claude' -Columns @(
-                @{ header = 'Person'; key = 'person'; width = 2.4; bold = $true }
-                @{ header = 'Level'; key = 'level'; width = 1.8; toneField = 'tone' }
-                @{ header = 'Claude can'; key = 'can'; width = 3.2 }
+                @{ header = 'Person'; key = 'person'; width = 2.2; bold = $true }
+                @{ header = 'Claude can read'; key = 'reads'; width = 2.6 }
+                @{ header = 'Claude can change'; key = 'can'; width = 2.6; toneField = 'tone' }
             ) -Rows $Rows -Limit 100 -EmptyText 'Nobody can use Claude yet.'))
     $blocks.Add((New-CippReportNote -Text 'Claude only ever sees and does what the person using it could see and do themselves. Everyone else in the business is blocked from connecting it.'))
 

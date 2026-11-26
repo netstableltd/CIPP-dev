@@ -119,6 +119,7 @@ function Get-CIPPClaudeConnectorStatus {
                         WriteScopes = @($Own.WriteScopes)
                         Level       = $Summary.Level
                         Extras      = @($Summary.Extras)
+                        ReadAreas   = @($Summary.ReadAreas)
                     }
                 })
         } catch { $Access.Error = & $ErrorText $_ }

@@ -5,7 +5,7 @@ function Invoke-ExecClaudeConnector {
     .ROLE
         Tenant.Application.ReadWrite
     .DESCRIPTION
-        Community Additions > Claude for Microsoft 365 (add-on claude-m365). Action AddApps adds Anthropic's two Claude apps to the tenant (tenantFilter). Action Apply (after a Global Administrator has approved Microsoft's consent page for both) limits Claude to the chosen Users: through the access group GroupName (default SG-Claude-Users) or, with AssignUsersDirectly, user by user. LockUserConsent also stops users approving apps themselves and turns on admin consent requests. RemoveOtherDirect removes direct assignments for people not in the group. Apply and Action Access (access only) also take ReadAreas (what Claude can read for everyone: mail, calendar, files, teams, meetings), TenantLevel (access level for everyone: read, drafts, assistant, full) and PeopleLevels (extra access for individual people: [{ User, Level, Extras }], where Extras are capability ids such as teams for Post in Teams, allowed from Level 2 up; Level 1 with extras is refused). See Set-CIPPClaudeConnector and Config/Addons/claude-m365/ClaudeConnectorAccess.json.
+        Community Additions > Claude for Microsoft 365 (add-on claude-m365). Action AddApps adds Anthropic's two Claude apps to the tenant (tenantFilter). Action Apply (after a Global Administrator has approved Microsoft's consent page for both) limits Claude to the chosen Users: through the access group GroupName (default SG-Claude-Users) or, with AssignUsersDirectly, user by user. LockUserConsent also stops users approving apps themselves and turns on admin consent requests. RemoveOtherDirect removes direct assignments for people not in the group. Apply and Action Access (access only) also take ReadAreas (what Claude can read for everyone: mail, calendar, files, teams, meetings), TenantLevel (access level for everyone: read, drafts, assistant, full) and PeopleLevels (access for individual people: [{ User, Level, Extras, ReadAreas }], where Extras are what Claude can change (drafts, send, calendar, files, teams) and ReadAreas are extra areas it can read for that person; each extra needs its read area, for example Edit files needs files). See Set-CIPPClaudeConnector and Config/Addons/claude-m365/ClaudeConnectorAccess.json.
     #>
     [CmdletBinding()]
     param($Request, $TriggerMetadata)
@@ -53,11 +53,13 @@ function Invoke-ExecClaudeConnector {
         $AccessArgs.TenantLevel = $TenantLevel
     }
     $People = @(@($Body.PeopleLevels) | Where-Object { $_ } | ForEach-Object {
-            [pscustomobject]@{
+            $E = [pscustomobject]@{
                 User   = "$($_.User.value ?? $_.User)".Trim()
                 Level  = "$($_.Level.value ?? $_.Level)"
                 Extras = @(@($_.Extras) | ForEach-Object { "$($_.value ?? $_)".Trim() } | Where-Object { $_ } | Select-Object -Unique)
             }
+            if ($null -ne $_.ReadAreas) { $E | Add-Member -NotePropertyName ReadAreas -NotePropertyValue @(@($_.ReadAreas) | ForEach-Object { "$($_.value ?? $_)".Trim() } | Where-Object { $_ } | Select-Object -Unique) }
+            $E
         } | Where-Object { $_.User })
     if ($People.Count -gt 200) { return (& $Respond ([HttpStatusCode]::BadRequest) 'Set extra access for 200 people or fewer at a time.') }
     foreach ($P in $People) {
@@ -65,10 +67,15 @@ function Invoke-ExecClaudeConnector {
         if ($LevelIds -notcontains $P.Level) { return (& $Respond ([HttpStatusCode]::BadRequest) "Unknown access level for $($P.User): $($P.Level)") }
         $BadExtras = @($P.Extras | Where-Object { $ExtraIds -notcontains $_ })
         if ($BadExtras.Count -gt 0) { return (& $Respond ([HttpStatusCode]::BadRequest) "Unknown extra for $($P.User): $($BadExtras -join ', ')") }
-        # Interlock: Level 1 is read only, so it can't have extras.
-        $PLevel = $Config.levels | Where-Object { $_.id -eq $P.Level } | Select-Object -First 1
-        if ($P.Extras.Count -gt 0 -and [int]$PLevel.number -lt [int]$Config.extrasMinLevel) {
-            return (& $Respond ([HttpStatusCode]::BadRequest) "$($P.User): Level $($PLevel.number) is read only, so it can't have extras. Choose Level $($Config.extrasMinLevel) or above.")
+        $BadAreas = @($P.ReadAreas | Where-Object { $_ -and $AreaIds -notcontains $_ })
+        if ($BadAreas.Count -gt 0) { return (& $Respond ([HttpStatusCode]::BadRequest) "Unknown read area for $($P.User): $($BadAreas -join ', ')") }
+        # Interlock: an extra needs its read area, either for everyone (ReadAreas) or for the person.
+        if ($null -ne $AccessArgs.ReadAreas) {
+            $CanRead = @(@($AccessArgs.ReadAreas) + @($P.ReadAreas))
+            $Blocked = @($Config.extras | Where-Object { $P.Extras -contains $_.id -and $_.needs -and $CanRead -notcontains $_.needs })
+            if ($Blocked.Count -gt 0) {
+                return (& $Respond ([HttpStatusCode]::BadRequest) "$($P.User): $(@($Blocked | ForEach-Object { "$($_.name) needs $(($Config.readAreas | Where-Object id -EQ $_.needs).noun) to be readable" }) -join '; ').")
+            }
         }
     }
     if ($People.Count -gt 0) { $AccessArgs.PeopleLevels = $People }

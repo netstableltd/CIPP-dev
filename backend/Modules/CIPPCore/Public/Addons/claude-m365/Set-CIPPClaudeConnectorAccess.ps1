@@ -13,11 +13,15 @@ function Set-CIPPClaudeConnectorAccess {
                         added back. Omit to leave as is.
         -TenantLevel    Access level for everyone (read, drafts, assistant, full). The tenant-wide grant's
                         write scopes are set to exactly that level's. Omit to leave as is.
-        -PeopleLevels   @(@{ User = id or sign-in name; Level = level id; Extras = @(extra ids) }, ...). Each
-                        person gets a per-user grant with the write scopes their level and extras add on top of
-                        everyone's level; if that adds nothing their per-user grant is removed. Extras (for
-                        example Post in Teams) need Level extrasMinLevel or above: Level 1 promises read only,
-                        so Level 1 with extras is refused for that person. People not listed are left as they are.
+        -PeopleLevels   @(@{ User = id or sign-in name; Level = level id; Extras = @(extra ids);
+                        ReadAreas = @(area ids) }, ...). Each person gets a per-user grant with what their
+                        level, extras and own read areas add on top of everyone's; if that adds nothing their
+                        per-user grant is removed. ReadAreas (optional) are areas Claude can read for that
+                        person as well as everyone's: when given, the person's grant is set to exactly this,
+                        otherwise read scopes already in it are kept. Interlock: each extra needs the area it
+                        works on (needs in the config) to be readable for that person, so for example Edit
+                        files needs files and Send email needs email; otherwise that person is refused.
+                        People not listed are left as they are.
 
         Microsoft's admin consent page approves every permission Anthropic's app asks for, including the
         write ones, so re-running consent undoes a lower level. Run this again afterwards.
@@ -153,19 +157,28 @@ function Set-CIPPClaudeConnectorAccess {
         $ExtraDefs = @($Config.extras | Where-Object { $ExtraIds -contains $_.id })
         $Unknown = @($ExtraIds | Where-Object { @($Config.extras | ForEach-Object { $_.id }) -notcontains $_ })
         if ($Unknown.Count -gt 0) { & $Add 'Warning' "$($Key): skipped unknown extras: $($Unknown -join ', ')." }
+        # Their own read areas, as well as everyone's (only when given: older callers don't send them).
+        $HasOwnAreas = $null -ne $P.PSObject.Properties['ReadAreas'] -or ($P -is [hashtable] -and $P.ContainsKey('ReadAreas'))
+        $OwnAreaIds = @(@($P.ReadAreas) | ForEach-Object { "$($_.value ?? $_)".Trim() } | Where-Object { $_ } | Select-Object -Unique)
+        $OwnAreas = @($Config.readAreas | Where-Object { $OwnAreaIds -contains $_.id })
         try {
             $U = New-GraphGetRequest -uri "$Graph/users/$([System.Uri]::EscapeDataString($Key))?`$select=id,userPrincipalName,displayName" -tenantid $TenantFilter -noPagination $true | Select-Object -First 1
         } catch { $U = $null }
         if (-not $U.id) { & $Add 'Warning' "User not found, skipped: $Key"; continue }
         $Who = $U.userPrincipalName
 
-        # Interlock: Level 1 is read only, so it can't have extras.
-        if ($ExtraDefs.Count -gt 0 -and [int]$Level.number -lt [int]$Config.extrasMinLevel) {
-            & $Add 'Error' "$($Who): Level $($Level.number) is read only, so extras ($(@($ExtraDefs | ForEach-Object { $_.name }) -join ', ')) can't be added. Choose Level $($Config.extrasMinLevel) or above."
+        # Interlock: Claude can only change what it can read for this person (everyone's areas or their own).
+        $CanRead = @(@($TenantSummary.ReadAreas) + @($OwnAreas | ForEach-Object { $_.id }) | Select-Object -Unique)
+        $Blocked = @($ExtraDefs | Where-Object { $_.needs -and $CanRead -notcontains $_.needs })
+        if ($Blocked.Count -gt 0) {
+            $Why = @($Blocked | ForEach-Object { "$($_.name) needs Claude to be able to read $($AreaNoun[$_.needs])" }) -join '; '
+            & $Add 'Error' "$($Who): not changed. $Why for them."
             continue
         }
-        $Label = "Level $($Level.number): $($Level.name)$(@($ExtraDefs | ForEach-Object { " + $($_.name)" }) -join '')"
-        $Want = @(@($Level.scopes) + @($ExtraDefs | ForEach-Object { $_.scopes }) | Where-Object { $_ } | Select-Object -Unique)
+        $Label = if ($OwnAreas.Count -gt 0 -or ($ExtraDefs.Count -gt 0 -and [int]$Level.number -eq 1)) {
+            "reading $((@($Config.readAreas | Where-Object { $CanRead -contains $_.id } | ForEach-Object { $_.noun })) -join ', ')$(if ($ExtraDefs.Count -gt 0) { "; can $((@($ExtraDefs | ForEach-Object { $_.name.ToLower() })) -join ', ')" } else { ', read only' })"
+        } else { "Level $($Level.number): $($Level.name)$(@($ExtraDefs | ForEach-Object { " + $($_.name)" }) -join '')" }
+        $Want = @(@($Level.scopes) + @($ExtraDefs | ForEach-Object { $_.scopes }) + @($OwnAreas | ForEach-Object { $_.scopes }) | Where-Object { $_ } | Select-Object -Unique)
         $Extra = @($Want | Where-Object { $NewScopes -notcontains $_ })
         $Existing = $Grants | Where-Object { $_.consentType -eq 'Principal' -and $_.principalId -eq $U.id } | Select-Object -First 1
         try {
@@ -179,8 +192,9 @@ function Set-CIPPClaudeConnectorAccess {
                 $Higher = @($TenantSummary.WriteScopes | Where-Object { $Want -notcontains $_ })
                 if ($Higher.Count -gt 0) { & $Add 'Info' "$($Who): everyone already has more than $Label, and one person can't have less than everyone." }
             } else {
-                # Keep any read scopes a person's grant already had; replace its write scopes.
-                $Keep = if ($Existing) { @(& $Split $Existing.scope | Where-Object { $Config.writeScopes -notcontains $_ }) } else { @() }
+                # Own read areas given: the grant is exactly what's wanted. Otherwise keep any read scopes it
+                # already had and replace its write scopes.
+                $Keep = if ($Existing -and -not $HasOwnAreas) { @(& $Split $Existing.scope | Where-Object { $Config.writeScopes -notcontains $_ }) } else { @() }
                 $Scope = (@($Keep) + $Extra | Select-Object -Unique) -join ' '
                 if ($Existing) {
                     $OldText = (@(& $Split $Existing.scope) | Sort-Object) -join ' '
@@ -198,7 +212,7 @@ function Set-CIPPClaudeConnectorAccess {
                 }
                 foreach ($S in $Extra) {
                     $Area = $WriteReads[$S]
-                    if ($Area -and $TenantSummary.ReadAreas -notcontains $Area) { & $Add 'Warning' "$($Who): $S also lets Claude read their $($AreaNoun[$Area]), even though that reading is off for everyone." }
+                    if ($Area -and $CanRead -notcontains $Area) { & $Add 'Warning' "$($Who): $S also lets Claude read their $($AreaNoun[$Area]), even though that reading is off for them." }
                 }
             }
         } catch { & $Add 'Error' "$($Who): couldn't set $($Label): $(& $ErrorText $_)" }

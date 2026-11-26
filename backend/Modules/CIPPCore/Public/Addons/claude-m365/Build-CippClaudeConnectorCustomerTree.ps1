@@ -123,8 +123,8 @@ function Build-CippClaudeConnectorCustomerTree {
                 @{ label = 'What Claude can read'; text = "Any of these can be switched off for everyone: $((@($Config.readAreas | ForEach-Object { $_.noun }) -join ', '))." }
             )))
     if (@($Config.extras).Count -gt 0) {
-        $blocks.Add((New-CippReportHeading -Title 'Extras for named people'))
-        $blocks.Add((New-CippReportParagraph -Text "A named person on Level $($Config.extrasMinLevel) or above can also have one or more of these on top of their level, without moving them to a higher level: for example Level 3 with Post in Teams. Level 1 stays read only, so it can't have extras."))
+        $blocks.Add((New-CippReportHeading -Title 'Access person by person'))
+        $blocks.Add((New-CippReportParagraph -Text "Access can also be set person by person: what Claude can read for each person, and which of these it can change, without moving them to a higher level. For example Level 3 with Post in Teams, or files read and write with no email at all. Claude can only change something it can read for that person."))
         $blocks.Add((New-CippReportTable -Columns @(
                     @{ header = 'Extra'; key = 'name'; width = 2.0; bold = $true }
                     @{ header = 'Claude can also'; key = 'summary'; width = 4.8 }
