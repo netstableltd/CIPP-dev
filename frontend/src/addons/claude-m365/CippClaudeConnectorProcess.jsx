@@ -463,6 +463,10 @@ export const CippClaudeConnectorProcess = ({ tenant }) => {
                 multiple={true}
                 showRefresh={true}
               />
+              <Typography variant="caption" color="text.secondary">
+                Exactly these people can use Claude: anyone you remove here is
+                taken out of the access group when you apply.
+              </Typography>
               <CippFormComponent
                 type="textField"
                 name="groupName"

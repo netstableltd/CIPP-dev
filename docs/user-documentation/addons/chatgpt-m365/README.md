@@ -69,7 +69,7 @@ The top of the page shows:
 ## Steps
 
 1. **Add the ChatGPT app.** Adds the app to the tenant if it isn't there. This gives it no access.
-2. **Choose who can use ChatGPT.** As for Claude: an access group (default `SG-ChatGPT-Users`), or people assigned directly for tenants without Entra ID P1. Then **Assignment required**, and optionally stopping users from approving apps themselves (with admin consent requests reviewed by Global Administrators). This step doesn't need consent first.
+2. **Choose who can use ChatGPT.** As for Claude: an access group (default `SG-ChatGPT-Users`), or people assigned directly for tenants without Entra ID P1. Anyone not ticked is removed, so only the chosen people can use it. Then **Assignment required**, and optionally stopping users from approving apps themselves (with admin consent requests reviewed by Global Administrators). This step doesn't need consent first.
 3. **Choose what ChatGPT can read and change.**
    * **No consent yet:** **Give consent for this access** creates the tenant-wide grant with the permissions that are always kept, the chosen read areas and the level for everyone.
    * **Consent already there** (for example someone approved it in ChatGPT, which usually gives everything): **Save access** sets it to exactly the chosen level.

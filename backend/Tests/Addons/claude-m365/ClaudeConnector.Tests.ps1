@@ -111,6 +111,7 @@ BeforeAll {
         switch -Regex ($uri) {
             'servicePrincipals$' { $id = "sp-new-$($B.appId.Substring(0,4))"; $script:T.Sps[$B.appId] = [pscustomobject]@{ id = $id; appId = $B.appId; appRoleAssignmentRequired = $false }; $script:T.Assign[$id] = [System.Collections.Generic.List[object]]::new(); return }
             'groups$' { $g = [pscustomobject]@{ id = 'g-new'; displayName = $B.displayName }; $script:T.Groups[$B.displayName] = $g; $script:T.Members['g-new'] = [System.Collections.Generic.List[string]]::new(); return $g }
+            'groups/([^/]+)/members/([^/]+)/\$ref' { [void]$script:T.Members[$Matches[1]].Remove($Matches[2]); return }
             'groups/([^/]+)/members/\$ref' { $script:T.Members[$Matches[1]].Add(($B.'@odata.id' -split '/')[-1]); return }
             'servicePrincipals/([^/]+)/appRoleAssignedTo$' {
                 if ($script:FailAssign) { throw 'Request_BadRequest' }
@@ -180,6 +181,22 @@ Describe 'Set-CIPPClaudeConnector -Action Apply' {
         # Group is a security group, not mail-enabled.
         $GroupCall = $script:Calls | Where-Object { $_ -like 'POST /groups {*' }
         ($GroupCall -replace '^POST /groups ', '' | ConvertFrom-Json).securityEnabled | Should -BeTrue
+    }
+
+    It 'takes people who were unticked out of the group, so the group is exactly the chosen people' {
+        New-FakeTenant -GroupExists
+        @($script:T.Members['g-claude']) | Should -Contain 'u-jo'
+        $R = Set-CIPPClaudeConnector -TenantFilter 'contoso.com' -Action Apply -Users 'sam@contoso.com'
+        @($script:T.Members['g-claude']) | Should -Be @('u-sam')
+        (($R | Where-Object Step -EQ 'Group').Message -join ' ') | Should -Match 'Removed jo@contoso.com from the group'
+    }
+
+    It 'in direct mode, removes direct assignments for people who were unticked' {
+        New-FakeTenant -GroupExists
+        $script:T.Assign['sp-client'].Add([pscustomobject]@{ id = 'd-jo'; principalId = 'u-jo'; principalType = 'User'; principalDisplayName = 'Jo' })
+        $R = Set-CIPPClaudeConnector -TenantFilter 'contoso.com' -Action Apply -Users 'sam@contoso.com' -AssignUsersDirectly
+        $script:T.Assign['sp-client'].id | Should -Not -Contain 'd-jo'
+        (($R | Where-Object Step -EQ 'Tidy up').Message -join ' ') | Should -Match "removed Jo, who wasn't chosen"
     }
 
     It 'reuses an existing group and only adds new members; is a no-op when run again' {

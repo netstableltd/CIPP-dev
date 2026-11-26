@@ -18,8 +18,11 @@ function Set-CIPPChatGPTConnector {
 
         Action Apply (needs the app in the tenant; consent is not needed first)
           2. Finds the listed users.
-          3. Group mode (default): creates or reuses the access group and adds the users.
-             Direct mode (-AssignUsersDirectly, for tenants without Entra ID P1): skips the group.
+          3. Group mode (default): creates or reuses the access group, adds the users and removes any
+             user member who isn't one of them, so the group is exactly the chosen people (groups
+             nested inside it are reported, not removed).
+             Direct mode (-AssignUsersDirectly, for tenants without Entra ID P1): skips the group; step 5
+             removes direct assignments for anyone who isn't one of the users.
           4. Assigns the group (or each user) to the app, then turns on "Assignment required". The
              order matters: turning it on first would lock everyone out if an assignment failed.
           5. Group mode: removes direct user assignments that the group now covers. Other direct assignments
@@ -157,7 +160,23 @@ function Set-CIPPChatGPTConnector {
                 $null = New-GraphPOSTRequest -uri "$Graph/groups/$($Group.id)/members/`$ref" -tenantid $TenantFilter -type POST -body $Body -contentType 'application/json'
                 & $Add 'Group' 'Success' "Added $($U.userPrincipalName) to the group."
             }
-            $GroupMemberIds = @($Existing) + @($UserObjs | ForEach-Object { $_.id }) | Select-Object -Unique
+            # Exactly the chosen people: anyone in the group who wasn't chosen (unticked) is taken out.
+            $Chosen = @($UserObjs | ForEach-Object { $_.id })
+            $Members = @(New-GraphGetRequest -uri "$Graph/groups/$($Group.id)/members?`$select=id,displayName,userPrincipalName&`$top=999" -tenantid $TenantFilter)
+            foreach ($M in $Members) {
+                if (-not $M.id -or $Chosen -contains $M.id) { continue }
+                $Who = if ($M.userPrincipalName) { $M.userPrincipalName } elseif ($M.displayName) { $M.displayName } else { $M.id }
+                $Type = "$($M.'@odata.type')"
+                if ($Type -and $Type -ne '#microsoft.graph.user') {
+                    & $Add 'Group' 'Warning' "$Who is a group or other object inside '$GroupName', so its members can still use ChatGPT. Left in place: remove it from the group if they shouldn't."
+                    continue
+                }
+                try {
+                    $null = New-GraphPOSTRequest -uri "$Graph/groups/$($Group.id)/members/$($M.id)/`$ref" -tenantid $TenantFilter -type DELETE -body '' -contentType 'application/json'
+                    & $Add 'Group' 'Success' "Removed $Who from the group, so they can no longer use ChatGPT."
+                } catch { & $Add 'Group' 'Error' "Couldn't remove $Who from the group, so they can still use ChatGPT: $(& $ErrorText $_)" }
+            }
+            $GroupMemberIds = @($Chosen)
         } catch {
             & $Add 'Group' 'Error' "Couldn't set up group '$GroupName': $(& $ErrorText $_)"
             return $Results
@@ -221,6 +240,23 @@ function Set-CIPPChatGPTConnector {
                 } else {
                     & $Add 'Tidy up' 'Warning' "$($App.Name): $($A.principalDisplayName) is assigned directly but isn't in '$GroupName', so can still use ChatGPT. Left in place."
                 }
+            }
+        }
+    }
+
+    # ------------------------------------------------------------------ 5. direct mode: only the chosen people
+    if ($AssignUsersDirectly) {
+        $Chosen = @($UserObjs | ForEach-Object { $_.id })
+        foreach ($App in $Apps) {
+            $Sp = $Sps[$App.Key]
+            try {
+                $Direct = @(New-GraphGetRequest -uri "$Graph/servicePrincipals/$($Sp.id)/appRoleAssignedTo?`$top=999" -tenantid $TenantFilter | Where-Object { $_.principalType -eq 'User' })
+            } catch { & $Add 'Tidy up' 'Warning' "$($App.Name): couldn't check who is assigned: $(& $ErrorText $_)"; continue }
+            foreach ($A in @($Direct | Where-Object { $Chosen -notcontains $_.principalId })) {
+                try {
+                    $null = New-GraphPOSTRequest -uri "$Graph/servicePrincipals/$($Sp.id)/appRoleAssignedTo/$($A.id)" -tenantid $TenantFilter -type DELETE -body '' -contentType 'application/json'
+                    & $Add 'Tidy up' 'Success' "$($App.Name): removed $($A.principalDisplayName), who wasn't chosen, so they can no longer use ChatGPT."
+                } catch { & $Add 'Tidy up' 'Error' "$($App.Name): couldn't remove $($A.principalDisplayName), so they can still use ChatGPT: $(& $ErrorText $_)" }
             }
         }
     }

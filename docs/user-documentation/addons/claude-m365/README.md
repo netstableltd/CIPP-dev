@@ -73,11 +73,11 @@ The top of the page shows where the tenant is: whether each app is there, has ad
 1. **Add the Claude apps.** Adds the two apps to the tenant if they aren't there. Both must exist before Microsoft's consent page will work for the client app.
 2. **Approve Microsoft's consent page.** Each button opens Microsoft's admin consent page in a pop-up. Sign in as a **Global Administrator of the customer's tenant** and accept, for the client and then the server. CIPP can't do this step for you: the permissions are Anthropic's, and the consent page grants exactly what the app asks for. The page checks every few seconds and ticks each app off once Microsoft has recorded the consent.
 3. **Choose who can use Claude.** Pick the people, then **Apply**. CIPP:
-   * creates the access group (default `SG-Claude-Users`, a security group) or reuses it, and adds the people;
+   * creates the access group (default `SG-Claude-Users`, a security group) or reuses it, adds the people, and **removes anyone who isn't ticked**, so the group is exactly the people chosen. A group nested inside it is reported, not removed. People removed can't start a new Claude connection straight away; one already connected can carry on for up to about an hour until Microsoft's sign-in expires;
    * assigns the group to both apps, then turns on **Assignment required** on both. If an assignment fails, Assignment required is left as it was so nobody is locked out;
    * removes direct assignments for people who are now in the group. Anyone else assigned directly is reported and left in place, unless **Remove anyone assigned directly who isn't in the group** is on.
 
-   Assigning a group to an app needs **Entra ID P1** (Business Premium includes it). For a tenant without it, the page switches on **Assign people directly**, which assigns each person to both apps instead of using a group.
+   Assigning a group to an app needs **Entra ID P1** (Business Premium includes it). For a tenant without it, the page switches on **Assign people directly**, which assigns each person to both apps instead of using a group, and removes anyone assigned directly who isn't ticked.
 
    With **Also stop users approving apps themselves** on (the default), CIPP also:
    * removes users' permission to consent to apps themselves. If CIPP's *Require admin consent for applications* standard already manages this, it is left alone. Apps people approved before are not removed (Entra > Enterprise apps > Permissions);
